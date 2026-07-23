@@ -207,40 +207,6 @@
 
     </div>
 
-    <!-- Activity Feed / Details Grid -->
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-md space-y-4">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-4">
-        <div class="space-y-1">
-          <h2 class="text-base font-bold tracking-tight">Recent Activities</h2>
-          <p class="text-xs text-slate-400">Individual sessions within the selected period</p>
-        </div>
-        <span id="activeCountBadge" class="text-xs bg-slate-950 border border-slate-800 px-3 py-1 rounded-full font-medium text-slate-300">
-          0 activities found
-        </span>
-      </div>
-
-      <!-- Table Wrapper -->
-      <div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950">
-        <table class="w-full text-left border-collapse text-sm">
-          <thead>
-            <tr class="border-b border-slate-800 bg-slate-900/40 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-              <th class="px-5 py-3">Date</th>
-              <th class="px-5 py-3">Sport</th>
-              <th class="px-5 py-3">Activity Name</th>
-              <th class="px-5 py-3 text-right">Distance</th>
-              <th class="px-5 py-3 text-right">Duration</th>
-            </tr>
-          </thead>
-          <tbody id="activityTableBody" class="divide-y divide-slate-900/50">
-            <!-- Populated via javascript -->
-            <tr>
-              <td colspan="5" class="px-5 py-8 text-center text-slate-500 italic">No data loaded yet.</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
   </main>
 
   <footer class="border-t border-slate-900 bg-slate-950/70 py-3 px-6 text-center text-[11px] text-slate-500 shrink-0">
@@ -601,9 +567,6 @@
       document.getElementById('splitPctBike').textContent = `${bikePct}%`;
       document.getElementById('splitPctSwim').textContent = `${swimPct}%`;
 
-      // Update Recent Activity List
-      updateActivityTable(filteredActivities);
-
       // Build Chart
       buildTrainingChart(weeksList);
     }
@@ -739,71 +702,6 @@
           }
         }
       });
-    }
-
-    // Populate Activity Table in UI
-    function updateActivityTable(activities) {
-      const tbody = document.getElementById('activityTableBody');
-      const badge = document.getElementById('activeCountBadge');
-      
-      // Filter based on selected sport category in chart view
-      const displayActivities = activities.filter(act => {
-        return selectedSportFilter === 'All' || act.sport === selectedSportFilter;
-      });
-
-      // Sort descending (latest sessions first)
-      const list = [...displayActivities].sort((a,b) => b.date - a.date);
-      
-      badge.textContent = `${list.length} activities in view`;
-
-      if (list.length === 0) {
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="5" class="px-5 py-8 text-center text-slate-500 italic">
-              No sessions found matching current filters.
-            </td>
-          </tr>`;
-        return;
-      }
-
-      // Limit table to showing the most recent 50 sessions for high performance
-      const maxRows = 50;
-      const rowsToShow = list.slice(0, maxRows);
-
-      let html = '';
-      rowsToShow.forEach(act => {
-        const formattedDate = act.date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-        
-        let sportBadgeColor = 'bg-slate-800 text-slate-400 border-slate-700';
-        if (act.sport === 'Run') sportBadgeColor = 'bg-red-500/10 text-[#EF4444] border-red-500/20';
-        else if (act.sport === 'Bike') sportBadgeColor = 'bg-teal-500/10 text-[#14B8A6] border-teal-500/20';
-        else if (act.sport === 'Swim') sportBadgeColor = 'bg-cyan-500/10 text-[#06B6D4] border-cyan-500/20';
-
-        html += `
-          <tr class="hover:bg-slate-900/40 transition">
-            <td class="px-5 py-3.5 whitespace-nowrap text-slate-400 font-mono text-xs">${formattedDate}</td>
-            <td class="px-5 py-3.5 whitespace-nowrap">
-              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border ${sportBadgeColor}">
-                ${act.sport || act.sportRaw || 'Other'}
-              </span>
-            </td>
-            <td class="px-5 py-3.5 font-medium text-slate-200 max-w-[240px] truncate" title="${act.name}">${act.name}</td>
-            <td class="px-5 py-3.5 text-right font-mono font-semibold text-slate-300">${act.distance.toFixed(2)} km</td>
-            <td class="px-5 py-3.5 text-right font-mono text-slate-400">${formatDuration(act.duration)}</td>
-          </tr>
-        `;
-      });
-
-      if (list.length > maxRows) {
-        html += `
-          <tr>
-            <td colspan="5" class="px-5 py-3 text-center text-xs text-slate-500 bg-slate-950/20 font-medium">
-              Showing latest ${maxRows} of ${list.length} activities in view.
-            </td>
-          </tr>`;
-      }
-
-      tbody.innerHTML = html;
     }
 
     // UI Interactive helpers for filters

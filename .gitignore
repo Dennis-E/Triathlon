@@ -1,0 +1,18 @@
+# Private/User data (ignore any new uploads/exports in Data/)
+Data/**/*
+
+# But do not ignore the example data if needed (optional)
+!Data/Dennis/export_39173135/
+!Data/Dennis/export_39173135/**/*
+
+# OS/IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Package manager/build outputs (if any are added later)
+node_modules/
+dist/
+build/
+.env
+*.log

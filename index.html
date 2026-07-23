@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Youth Training Dashboard - MVP</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- PapaParse for CSV parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.344.0/dist/umd/lucide.min.js"></script>
+  <style>
+    /* Custom scrollbar for modern feel */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #1e293b;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #64748b;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-full flex flex-col font-sans antialiased">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur px-6 py-4 flex items-center justify-between shrink-0">
+    <div class="flex items-center space-x-3">
+      <div class="bg-indigo-600 p-2 rounded-lg text-white">
+        <i data-lucide="activity" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <h1 class="font-bold text-lg leading-tight tracking-tight">Triathlon Training Dashboard</h1>
+        <p class="text-xs text-slate-400">Youth Endurance Performance Analytics</p>
+      </div>
+    </div>
+    <div class="flex items-center space-x-4">
+      <div id="statusBadge" class="flex items-center space-x-2 text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 rounded-full">
+        <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+        <span id="statusText">Loading local CSV...</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Error / CORS Warning Alert -->
+  <div id="corsWarning" class="hidden shrink-0 mx-6 mt-6 bg-slate-900 border border-amber-500/30 rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div class="flex items-start space-x-3">
+      <div class="p-2 rounded-lg bg-amber-500/10 text-amber-400 shrink-0">
+        <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <h3 class="font-semibold text-amber-400">Local File Access Notice (CORS)</h3>
+        <p class="text-sm text-slate-300 mt-1 max-w-3xl">
+          Browsers restrict direct loading of local files via <code>file://</code> protocol. To automate loading, run this dashboard using a local server (e.g., the <strong>VS Code Live Server</strong> extension, or command <code>python -m http.server</code>).
+        </p>
+        <p class="text-sm text-slate-400 mt-2">
+          <strong>Alternatively:</strong> Select your local CSV file from your file system directly. No server needed.
+        </p>
+      </div>
+    </div>
+    <div class="shrink-0 flex items-center">
+      <label for="manualCsvFile" class="bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-medium text-sm px-4 py-2 rounded-lg cursor-pointer transition flex items-center space-x-2 shadow-lg shadow-indigo-600/20">
+        <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+        <span>Select activities.csv</span>
+      </label>
+      <input type="file" id="manualCsvFile" accept=".csv" class="hidden">
+    </div>
+  </div>
+
+  <!-- Dashboard Grid -->
+  <main class="flex-1 overflow-y-auto p-6 space-y-6">
+
+    <!-- Summary Metrics Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      
+      <!-- Total KM Card -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 flex items-center justify-between shadow-sm">
+        <div class="space-y-1">
+          <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Volume</p>
+          <div class="flex items-baseline space-x-1">
+            <span id="cardTotalKm" class="text-3xl font-bold tracking-tight">0.0</span>
+            <span class="text-sm text-slate-400 font-medium">km</span>
+          </div>
+        </div>
+        <div class="bg-indigo-500/10 text-indigo-400 p-3 rounded-xl border border-indigo-500/10">
+          <i data-lucide="trending-up" class="w-6 h-6"></i>
+        </div>
+      </div>
+
+      <!-- Weekly Avg Card -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 flex items-center justify-between shadow-sm">
+        <div class="space-y-1">
+          <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Weekly Average</p>
+          <div class="flex items-baseline space-x-1">
+            <span id="cardAvgKm" class="text-3xl font-bold tracking-tight">0.0</span>
+            <span class="text-sm text-slate-400 font-medium">km/wk</span>
+          </div>
+        </div>
+        <div class="bg-emerald-500/10 text-emerald-400 p-3 rounded-xl border border-emerald-500/10">
+          <i data-lucide="calendar" class="w-6 h-6"></i>
+        </div>
+      </div>
+
+      <!-- Sport Split Percentage Card -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between shadow-sm h-full">
+        <div class="flex items-center justify-between w-full">
+          <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Sport Distribution</p>
+          <span class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">by km</span>
+        </div>
+        <div class="space-y-2 mt-3">
+          <div class="flex justify-between text-xs text-slate-400">
+            <span class="flex items-center"><span class="w-2.5 h-2.5 rounded bg-[#EF4444] mr-1.5 inline-block"></span>Run</span>
+            <span class="flex items-center"><span class="w-2.5 h-2.5 rounded bg-[#14B8A6] mr-1.5 inline-block"></span>Bike</span>
+            <span class="flex items-center"><span class="w-2.5 h-2.5 rounded bg-[#06B6D4] mr-1.5 inline-block"></span>Swim</span>
+          </div>
+          <!-- Stacked progress bar -->
+          <div class="w-full h-3 bg-slate-800 rounded-full overflow-hidden flex">
+            <div id="splitBarRun" class="h-full bg-[#EF4444] transition-all duration-500" style="width: 0%"></div>
+            <div id="splitBarBike" class="h-full bg-[#14B8A6] transition-all duration-500" style="width: 0%"></div>
+            <div id="splitBarSwim" class="h-full bg-[#06B6D4] transition-all duration-500" style="width: 0%"></div>
+          </div>
+          <div class="flex justify-between text-[11px] font-medium mt-1">
+            <span id="splitPctRun" class="text-[#EF4444]">0%</span>
+            <span id="splitPctBike" class="text-[#14B8A6]">0%</span>
+            <span id="splitPctSwim" class="text-[#06B6D4]">0%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Max Week Card -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 flex items-center justify-between shadow-sm">
+        <div class="space-y-1">
+          <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Peak Week</p>
+          <div class="flex items-baseline space-x-1">
+            <span id="cardPeakKm" class="text-3xl font-bold tracking-tight">0.0</span>
+            <span class="text-sm text-slate-400 font-medium">km</span>
+          </div>
+        </div>
+        <div class="bg-amber-500/10 text-amber-400 p-3 rounded-xl border border-amber-500/10">
+          <i data-lucide="crown" class="w-6 h-6"></i>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Main Chart Card -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-md flex flex-col space-y-6">
+      
+      <!-- Chart Controls Header -->
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+        <div class="space-y-1">
+          <h2 class="text-lg font-bold tracking-tight">Weekly Training Volume</h2>
+          <p class="text-xs text-slate-400">Aggregated mileage per sport category</p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-4">
+          <!-- Sport Filter Selector -->
+          <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+            <button onclick="setSportFilter('All')" id="sportBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">
+              All Sports
+            </button>
+            <button onclick="setSportFilter('Run')" id="sportBtnRun" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
+              Run
+            </button>
+            <button onclick="setSportFilter('Bike')" id="sportBtnBike" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
+              Bike
+            </button>
+            <button onclick="setSportFilter('Swim')" id="sportBtnSwim" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
+              Swim
+            </button>
+          </div>
+
+          <!-- Timeframe Selector -->
+          <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+            <button onclick="setTimeframeFilter(12)" id="timeBtn12" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
+              12 Wks
+            </button>
+            <button onclick="setTimeframeFilter(26)" id="timeBtn26" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
+              6 Mos
+            </button>
+            <button onclick="setTimeframeFilter(52)" id="timeBtn52" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-slate-850 border border-slate-800 text-indigo-400">
+              1 Year
+            </button>
+            <button onclick="setTimeframeFilter(104)" id="timeBtn104" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
+              2 Years
+            </button>
+            <button onclick="setTimeframeFilter('all')" id="timeBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
+              All
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chart Canvas Wrapper -->
+      <div class="relative w-full h-[360px] md:h-[420px]">
+        <canvas id="trainingChart"></canvas>
+      </div>
+
+    </div>
+
+    <!-- Activity Feed / Details Grid -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-md space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div class="space-y-1">
+          <h2 class="text-base font-bold tracking-tight">Recent Activities</h2>
+          <p class="text-xs text-slate-400">Individual sessions within the selected period</p>
+        </div>
+        <span id="activeCountBadge" class="text-xs bg-slate-950 border border-slate-800 px-3 py-1 rounded-full font-medium text-slate-300">
+          0 activities found
+        </span>
+      </div>
+
+      <!-- Table Wrapper -->
+      <div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950">
+        <table class="w-full text-left border-collapse text-sm">
+          <thead>
+            <tr class="border-b border-slate-800 bg-slate-900/40 text-slate-400 text-xs font-semibold uppercase tracking-wider">
+              <th class="px-5 py-3">Date</th>
+              <th class="px-5 py-3">Sport</th>
+              <th class="px-5 py-3">Activity Name</th>
+              <th class="px-5 py-3 text-right">Distance</th>
+              <th class="px-5 py-3 text-right">Duration</th>
+            </tr>
+          </thead>
+          <tbody id="activityTableBody" class="divide-y divide-slate-900/50">
+            <!-- Populated via javascript -->
+            <tr>
+              <td colspan="5" class="px-5 py-8 text-center text-slate-500 italic">No data loaded yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="border-t border-slate-900 bg-slate-950/70 py-3 px-6 text-center text-[11px] text-slate-500 shrink-0">
+    Youth Training Dashboard MVP • Local Offline Processing (No internet transmission of your personal files)
+  </footer>
+
+  <script>
+    // Lucide Icons init
+    lucide.createIcons();
+
+    // Configuration / State
+    let rawCsvData = [];
+    let processedActivities = [];
+    let selectedSportFilter = 'All'; // 'All', 'Run', 'Bike', 'Swim'
+    let selectedTimeframeWeeks = 52; // 12, 26, 52, 104, 'all'
+    let chartInstance = null;
+
+    // Standard Sport Categorization
+    const SPORT_MAP = {
+      'lauf': 'Run', 'laufen': 'Run', 'run': 'Run', 'running': 'Run', 'virtueller lauf': 'Run',
+      'radfahrt': 'Bike', 'virtuelle radfahrt': 'Bike', 'radfahren': 'Bike', 'ride': 'Bike', 'virtualride': 'Bike', 'biking': 'Bike', 'cycling': 'Bike',
+      'schwimmen': 'Swim', 'swim': 'Swim', 'swimming': 'Swim'
+    };
+
+    function parseGermanDate(dateStr) {
+      if (!dateStr) return null;
+      // standard german exported date is e.g. "19.07.2026, 14:52:02" or sometimes without time
+      const parts = dateStr.split(',');
+      if (!parts[0]) return null;
+      const dmy = parts[0].trim().split('.');
+      if (dmy.length !== 3) return null;
+      const day = parseInt(dmy[0], 10);
+      const month = parseInt(dmy[1], 10) - 1; // 0-indexed
+      const year = parseInt(dmy[2], 10);
+      
+      const parsedDate = new Date(year, month, day);
+      return isNaN(parsedDate.getTime()) ? null : parsedDate;
+    }
+
+    // Helper to get Monday of a date's week
+    function getMonday(date) {
+      const d = new Date(date);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+      const monday = new Date(d.setDate(diff));
+      monday.setHours(0, 0, 0, 0);
+      return monday;
+    }
+
+    // Helper to format Date as 'YYYY-MM-DD'
+    function formatDateIso(date) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    // Helper to format Date for Chart Label (e.g. "13 Jul '26")
+    function formatDateLabel(date) {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const m = months[date.getMonth()];
+      const y = String(date.getFullYear()).slice(-2);
+      return `${date.getDate()} ${m} '${y}`;
+    }
+
+    // Format seconds to human readable (e.g., "1h 45m")
+    function formatDuration(seconds) {
+      if (!seconds || isNaN(seconds)) return '--';
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      if (h > 0) {
+        return `${h}h ${m}m`;
+      }
+      return `${m}m`;
+    }
+
+    // Main local loader
+    async function loadLocalCsv() {
+      const path = './Data/Dennis/export_39173135/activities.csv';
+      try {
+        const response = await fetch(path);
+        if (!response.ok) {
+          throw new Error(`Failed to load: ${response.statusText}`);
+        }
+        const text = await response.text();
+        parseCsvText(text);
+      } catch (err) {
+        console.warn("Could not load CSV automatically (CORS or direct file protocol). Showing Manual Selector.", err);
+        showCorsWarning();
+      }
+    }
+
+    // Show warning panel if automated loading fails
+    function showCorsWarning() {
+      document.getElementById('corsWarning').classList.remove('hidden');
+      updateStatusBadge('offline', 'Awaiting local file selection');
+    }
+
+    // Update status bar UI
+    function updateStatusBadge(state, text) {
+      const badge = document.getElementById('statusBadge');
+      const statusText = document.getElementById('statusText');
+      statusText.textContent = text;
+      
+      badge.className = "flex items-center space-x-2 text-xs px-2.5 py-1 rounded-full border ";
+      if (state === 'success') {
+        badge.classList.add('bg-emerald-500/10', 'text-emerald-400', 'border-emerald-500/20');
+        badge.querySelector('span').className = "w-2 h-2 rounded-full bg-emerald-400";
+      } else if (state === 'offline') {
+        badge.classList.add('bg-amber-500/10', 'text-amber-400', 'border-amber-500/20');
+        badge.querySelector('span').className = "w-2 h-2 rounded-full bg-amber-400 animate-pulse";
+      } else {
+        badge.classList.add('bg-red-500/10', 'text-red-400', 'border-red-500/20');
+        badge.querySelector('span').className = "w-2 h-2 rounded-full bg-red-400";
+      }
+    }
+
+    // Listen for manual file uploads
+    document.getElementById('manualCsvFile').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      updateStatusBadge('offline', 'Parsing uploaded file...');
+      
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        parseCsvText(evt.target.result);
+        // Hide warning since file is successfully loaded
+        document.getElementById('corsWarning').classList.add('hidden');
+      };
+      reader.readAsText(file);
+    });
+
+    // Parse raw CSV text using PapaParse
+    function parseCsvText(csvText) {
+      Papa.parse(csvText, {
+        header: false, // We'll process indexes manually to avoid header collisions
+        skipEmptyLines: true,
+        complete: function(results) {
+          if (results.data.length < 2) {
+            updateStatusBadge('error', 'CSV is empty or invalid');
+            return;
+          }
+          rawCsvData = results.data;
+          processData();
+        },
+        error: function(err) {
+          updateStatusBadge('error', 'CSV parsing failed');
+          console.error("Csv parsing error", err);
+        }
+      });
+    }
+
+    // Map CSV rows to objects
+    function processData() {
+      const headers = rawCsvData[0];
+      
+      // Dynamic column resolution
+      const dateIdx = headers.indexOf('Aktivitätsdatum');
+      const sportIdx = headers.indexOf('Aktivitätsart');
+      const nameIdx = headers.indexOf('Name der Aktivität');
+      const durationIdx = headers.indexOf('Bewegungszeit'); // Moving time is better than elapsed time
+
+      // Find 'Distanz' columns (index 17 is usually the dot-formatted meters)
+      const distIndices = [];
+      headers.forEach((h, i) => {
+        if (h === 'Distanz') distIndices.push(i);
+      });
+      // Standardize to the second 'Distanz' column (meters) if present, else fallback
+      const distIdx = distIndices.length > 1 ? distIndices[1] : (distIndices[0] || -1);
+
+      if (dateIdx === -1 || sportIdx === -1) {
+        updateStatusBadge('error', 'Could not locate core columns');
+        return;
+      }
+
+      processedActivities = [];
+
+      for (let i = 1; i < rawCsvData.length; i++) {
+        const row = rawCsvData[i];
+        if (row.length <= Math.max(dateIdx, sportIdx)) continue;
+
+        const rawDate = row[dateIdx];
+        const date = parseGermanDate(rawDate);
+        if (!date) continue; // Invalid date
+
+        const rawSport = row[sportIdx] || '';
+        const sportCategory = SPORT_MAP[rawSport.toLowerCase().trim()];
+        
+        // If not swimming, running, or cycling, keep it but category is null (for stats comparison/lists if needed)
+        // For MVP stacking we only include Run, Bike, Swim
+
+        // Raw distance is in meters in index 17
+        let distKm = 0;
+        if (distIdx !== -1) {
+          let rawDist = row[distIdx];
+          if (rawDist) {
+            // Check if string contains comma (German style) or dot
+            if (typeof rawDist === 'string') {
+              rawDist = rawDist.replace(',', '.');
+            }
+            const numericDist = parseFloat(rawDist);
+            if (!isNaN(numericDist)) {
+              // If we are using the 2nd Distanz column, it is in meters
+              if (distIdx === distIndices[1]) {
+                distKm = numericDist / 1000;
+              } else {
+                // If 1st column, it is already in km
+                distKm = numericDist;
+              }
+            }
+          }
+        }
+
+        let durationSeconds = 0;
+        if (durationIdx !== -1) {
+          const rawDuration = parseFloat(row[durationIdx]);
+          if (!isNaN(rawDuration)) {
+            durationSeconds = rawDuration;
+          }
+        }
+
+        const name = row[nameIdx] || 'Activity';
+
+        processedActivities.push({
+          id: row[0],
+          date: date,
+          monday: getMonday(date),
+          sportRaw: rawSport,
+          sport: sportCategory, // 'Run', 'Bike', 'Swim' or null
+          distance: distKm,
+          duration: durationSeconds,
+          name: name
+        });
+      }
+
+      // Sort chronological ascending for line/bar charts
+      processedActivities.sort((a, b) => a.date - b.date);
+
+      updateStatusBadge('success', `Parsed ${processedActivities.length} activities`);
+      
+      // Set the timeframe buttons layout on initial load
+      setBtnActive('timeBtn52');
+      setBtnActive('sportBtnAll');
+      
+      renderDashboard();
+    }
+
+    // Filter and aggregate data based on selections, then render
+    function renderDashboard() {
+      if (processedActivities.length === 0) return;
+
+      // Find maximum Monday in dataset as ending point
+      const maxDate = new Date(Math.max(...processedActivities.map(a => a.date)));
+      const lastMonday = getMonday(maxDate);
+
+      // Generate sequence of weeks depending on timeframe selection
+      let numberOfWeeks = 52;
+      if (typeof selectedTimeframeWeeks === 'number') {
+        numberOfWeeks = selectedTimeframeWeeks;
+      } else {
+        // 'all' time: find earliest Monday
+        const minDate = new Date(Math.min(...processedActivities.map(a => a.date)));
+        const firstMonday = getMonday(minDate);
+        const diffMs = lastMonday - firstMonday;
+        numberOfWeeks = Math.max(1, Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000)) + 1);
+      }
+
+      // Generate the chronological array of weeks
+      const weeksList = [];
+      for (let i = numberOfWeeks - 1; i >= 0; i--) {
+        const monday = new Date(lastMonday);
+        monday.setDate(lastMonday.getDate() - (i * 7));
+        weeksList.push({
+          date: monday,
+          formattedLabel: formatDateLabel(monday),
+          isoKey: formatDateIso(monday),
+          Run: 0,
+          Bike: 0,
+          Swim: 0
+        });
+      }
+
+      const activeWeeksKeys = new Set(weeksList.map(w => w.isoKey));
+      const minWeekKey = weeksList[0].isoKey;
+      const maxWeekKey = weeksList[weeksList.length - 1].isoKey;
+
+      // Filter activities inside this timeframe
+      const filteredActivities = processedActivities.filter(act => {
+        const key = formatDateIso(act.monday);
+        return activeWeeksKeys.has(key);
+      });
+
+      // Sum distances per sport per week
+      filteredActivities.forEach(act => {
+        if (!act.sport) return; // Skip unsupported activities for chart volume
+        
+        const weekKey = formatDateIso(act.monday);
+        const weekObj = weeksList.find(w => w.isoKey === weekKey);
+        if (weekObj) {
+          weekObj[act.sport] += act.distance;
+        }
+      });
+
+      // Compute Dashboard Stats (Cards)
+      let totalKm = 0;
+      let totalRun = 0;
+      let totalBike = 0;
+      let totalSwim = 0;
+      let peakKm = 0;
+      let uniqueTrainingDays = new Set();
+
+      filteredActivities.forEach(act => {
+        // Accumulate raw sport metrics
+        if (act.sport === 'Run') totalRun += act.distance;
+        else if (act.sport === 'Bike') totalBike += act.distance;
+        else if (act.sport === 'Swim') totalSwim += act.distance;
+
+        // If filtering by specific sport, check matching
+        if (selectedSportFilter === 'All' || act.sport === selectedSportFilter) {
+          totalKm += act.distance;
+          uniqueTrainingDays.add(formatDateIso(act.date));
+        }
+      });
+
+      // Calculate peaks and counts based on chart datasets
+      weeksList.forEach(w => {
+        let weeklyVolume = 0;
+        if (selectedSportFilter === 'All') {
+          weeklyVolume = w.Run + w.Bike + w.Swim;
+        } else {
+          weeklyVolume = w[selectedSportFilter] || 0;
+        }
+        if (weeklyVolume > peakKm) {
+          peakKm = weeklyVolume;
+        }
+      });
+
+      // Calculate averages
+      const avgKmPerWeek = numberOfWeeks > 0 ? (totalKm / numberOfWeeks) : 0;
+
+      // Update Card UI
+      document.getElementById('cardTotalKm').textContent = totalKm.toFixed(1);
+      document.getElementById('cardAvgKm').textContent = avgKmPerWeek.toFixed(1);
+      document.getElementById('cardPeakKm').textContent = peakKm.toFixed(1);
+
+      // Sport Distribution Pill split
+      const totalAllSports = totalRun + totalBike + totalSwim;
+      const runPct = totalAllSports > 0 ? Math.round((totalRun / totalAllSports) * 100) : 0;
+      const bikePct = totalAllSports > 0 ? Math.round((totalBike / totalAllSports) * 100) : 0;
+      const swimPct = totalAllSports > 0 ? Math.round((totalSwim / totalAllSports) * 100) : 0;
+
+      document.getElementById('splitBarRun').style.width = `${runPct}%`;
+      document.getElementById('splitBarBike').style.width = `${bikePct}%`;
+      document.getElementById('splitBarSwim').style.width = `${swimPct}%`;
+
+      document.getElementById('splitPctRun').textContent = `${runPct}%`;
+      document.getElementById('splitPctBike').textContent = `${bikePct}%`;
+      document.getElementById('splitPctSwim').textContent = `${swimPct}%`;
+
+      // Update Recent Activity List
+      updateActivityTable(filteredActivities);
+
+      // Build Chart
+      buildTrainingChart(weeksList);
+    }
+
+    // Build the Chart.js visual representation
+    function buildTrainingChart(weeksList) {
+      const ctx = document.getElementById('trainingChart').getContext('2d');
+      
+      const labels = weeksList.map(w => w.formattedLabel);
+      
+      // Chart datasets depending on sport selection
+      let datasets = [];
+
+      if (selectedSportFilter === 'All' || selectedSportFilter === 'Run') {
+        datasets.push({
+          label: 'Running',
+          data: weeksList.map(w => w.Run),
+          backgroundColor: '#EF4444', // Red-500
+          hoverBackgroundColor: '#F87171',
+          borderRadius: selectedSportFilter === 'Run' ? 4 : 0,
+          stack: 'trainingStack'
+        });
+      }
+      if (selectedSportFilter === 'All' || selectedSportFilter === 'Bike') {
+        datasets.push({
+          label: 'Cycling',
+          data: weeksList.map(w => w.Bike),
+          backgroundColor: '#14B8A6', // Teal-500
+          hoverBackgroundColor: '#2DD4BF',
+          borderRadius: selectedSportFilter === 'Bike' ? 4 : 0,
+          stack: 'trainingStack'
+        });
+      }
+      if (selectedSportFilter === 'All' || selectedSportFilter === 'Swim') {
+        datasets.push({
+          label: 'Swimming',
+          data: weeksList.map(w => w.Swim),
+          backgroundColor: '#06B6D4', // Cyan-500
+          hoverBackgroundColor: '#22D3EE',
+          borderRadius: 4, // always top layer gets rounded corners
+          stack: 'trainingStack'
+        });
+      }
+
+      // If chart already exists, destroy it before recreating
+      if (chartInstance) {
+        chartInstance.destroy();
+      }
+
+      chartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: selectedSportFilter === 'All', // Only show legend if multiple stacked
+              position: 'top',
+              labels: {
+                color: '#94A3B8',
+                font: { size: 11, weight: '500' },
+                boxWidth: 12,
+                usePointStyle: true,
+                pointStyle: 'circle'
+              }
+            },
+            tooltip: {
+              backgroundColor: '#0F172A',
+              titleColor: '#F8FAFC',
+              bodyColor: '#94A3B8',
+              borderColor: '#334155',
+              borderWidth: 1,
+              padding: 12,
+              cornerRadius: 8,
+              boxPadding: 6,
+              callbacks: {
+                label: function(context) {
+                  let label = context.dataset.label || '';
+                  if (label) {
+                    label += ': ';
+                  }
+                  if (context.parsed.y !== null) {
+                    label += context.parsed.y.toFixed(1) + ' km';
+                  }
+                  return label;
+                },
+                afterTitle: function(items) {
+                  return 'Monday Start';
+                },
+                footer: function(items) {
+                  if (selectedSportFilter !== 'All') return '';
+                  let sum = 0;
+                  items.forEach(function(item) {
+                    sum += item.parsed.y;
+                  });
+                  return 'Weekly Total: ' + sum.toFixed(1) + ' km';
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              stacked: true,
+              grid: {
+                display: false
+              },
+              ticks: {
+                color: '#64748B',
+                font: { size: 10 },
+                maxRotation: 45,
+                minRotation: 0,
+                autoSkip: true,
+                maxTicksLimit: window.innerWidth < 640 ? 8 : 16
+              }
+            },
+            y: {
+              stacked: true,
+              grid: {
+                color: '#1E293B'
+              },
+              ticks: {
+                color: '#64748B',
+                font: { size: 10 },
+                callback: function(value) {
+                  return value + ' km';
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // Populate Activity Table in UI
+    function updateActivityTable(activities) {
+      const tbody = document.getElementById('activityTableBody');
+      const badge = document.getElementById('activeCountBadge');
+      
+      // Filter based on selected sport category in chart view
+      const displayActivities = activities.filter(act => {
+        return selectedSportFilter === 'All' || act.sport === selectedSportFilter;
+      });
+
+      // Sort descending (latest sessions first)
+      const list = [...displayActivities].sort((a,b) => b.date - a.date);
+      
+      badge.textContent = `${list.length} activities in view`;
+
+      if (list.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5" class="px-5 py-8 text-center text-slate-500 italic">
+              No sessions found matching current filters.
+            </td>
+          </tr>`;
+        return;
+      }
+
+      // Limit table to showing the most recent 50 sessions for high performance
+      const maxRows = 50;
+      const rowsToShow = list.slice(0, maxRows);
+
+      let html = '';
+      rowsToShow.forEach(act => {
+        const formattedDate = act.date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        
+        let sportBadgeColor = 'bg-slate-800 text-slate-400 border-slate-700';
+        if (act.sport === 'Run') sportBadgeColor = 'bg-red-500/10 text-[#EF4444] border-red-500/20';
+        else if (act.sport === 'Bike') sportBadgeColor = 'bg-teal-500/10 text-[#14B8A6] border-teal-500/20';
+        else if (act.sport === 'Swim') sportBadgeColor = 'bg-cyan-500/10 text-[#06B6D4] border-cyan-500/20';
+
+        html += `
+          <tr class="hover:bg-slate-900/40 transition">
+            <td class="px-5 py-3.5 whitespace-nowrap text-slate-400 font-mono text-xs">${formattedDate}</td>
+            <td class="px-5 py-3.5 whitespace-nowrap">
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border ${sportBadgeColor}">
+                ${act.sport || act.sportRaw || 'Other'}
+              </span>
+            </td>
+            <td class="px-5 py-3.5 font-medium text-slate-200 max-w-[240px] truncate" title="${act.name}">${act.name}</td>
+            <td class="px-5 py-3.5 text-right font-mono font-semibold text-slate-300">${act.distance.toFixed(2)} km</td>
+            <td class="px-5 py-3.5 text-right font-mono text-slate-400">${formatDuration(act.duration)}</td>
+          </tr>
+        `;
+      });
+
+      if (list.length > maxRows) {
+        html += `
+          <tr>
+            <td colspan="5" class="px-5 py-3 text-center text-xs text-slate-500 bg-slate-950/20 font-medium">
+              Showing latest ${maxRows} of ${list.length} activities in view.
+            </td>
+          </tr>`;
+      }
+
+      tbody.innerHTML = html;
+    }
+
+    // UI Interactive helpers for filters
+    function setSportFilter(sport) {
+      selectedSportFilter = sport;
+      
+      // Update Buttons State
+      document.querySelectorAll('[id^="sportBtn"]').forEach(btn => {
+        btn.className = "px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200";
+      });
+      setBtnActive(`sportBtn${sport}`);
+      
+      renderDashboard();
+    }
+
+    function setTimeframeFilter(weeks) {
+      selectedTimeframeWeeks = weeks;
+
+      // Update Buttons State
+      document.querySelectorAll('[id^="timeBtn"]').forEach(btn => {
+        btn.className = "px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200";
+      });
+      setBtnActive(`timeBtn${weeks}`);
+
+      renderDashboard();
+    }
+
+    function setBtnActive(btnId) {
+      const btn = document.getElementById(btnId);
+      if (btn) {
+        btn.className = "px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25";
+      }
+    }
+
+    // Window size listener to adapt chart autoSkip nicely
+    window.addEventListener('resize', () => {
+      if (chartInstance) {
+        chartInstance.options.scales.x.ticks.maxTicksLimit = window.innerWidth < 640 ? 8 : 16;
+        chartInstance.update();
+      }
+    });
+
+    // Start loading local CSV on page load
+    loadLocalCsv();
+  </script>
+</body>
+</html>

@@ -158,11 +158,27 @@
       <!-- Chart Controls Header -->
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
         <div class="space-y-1">
-          <h2 class="text-lg font-bold tracking-tight">Weekly Training Volume</h2>
-          <p class="text-xs text-slate-400">Aggregated mileage per sport category</p>
+          <h2 class="text-lg font-bold tracking-tight">Training Volume</h2>
+          <p class="text-xs text-slate-400" id="volumeDescription">Aggregated mileage per sport category</p>
         </div>
-
+ 
         <div class="flex flex-wrap items-center gap-4">
+          <!-- Aggregation Level Selector -->
+          <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+            <button onclick="setAggregationLevel('daily')" id="aggBtnDaily" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
+              Daily
+            </button>
+            <button onclick="setAggregationLevel('weekly')" id="aggBtnWeekly" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">
+              Weekly
+            </button>
+            <button onclick="setAggregationLevel('monthly')" id="aggBtnMonthly" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
+              Monthly
+            </button>
+            <button onclick="setAggregationLevel('yearly')" id="aggBtnYearly" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
+              Yearly
+            </button>
+          </div>
+
           <!-- Sport Filter Selector -->
           <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
             <button onclick="setSportFilter('All')" id="sportBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">
@@ -178,7 +194,7 @@
               Swim
             </button>
           </div>
-
+ 
           <!-- Timeframe Selector -->
           <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
             <button onclick="setTimeframeFilter(12)" id="timeBtn12" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
@@ -222,6 +238,7 @@
     let processedActivities = [];
     let selectedSportFilter = 'All'; // 'All', 'Run', 'Bike', 'Swim'
     let selectedTimeframeWeeks = 52; // 12, 26, 52, 104, 'all'
+    let selectedAggregationLevel = 'weekly'; // 'daily', 'weekly', 'monthly', 'yearly'
     let chartInstance = null;
 
     // Standard Sport Categorization
@@ -455,10 +472,153 @@
       renderDashboard();
     }
 
-    // Filter and aggregate data based on selections, then render
-    function renderDashboard() {
-      if (processedActivities.length === 0) return;
+    // Helper to derive a date range from the selected timeframe (always using weeks as horizon)
+    function getTimeframeRange() {
+      const maxDate = new Date(Math.max(...processedActivities.map(a => a.date)));
+      const overallMinDate = new Date(Math.min(...processedActivities.map(a => a.date)));
 
+      if (typeof selectedTimeframeWeeks === 'number') {
+        const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+        const proposedMin = new Date(maxDate.getTime() - selectedTimeframeWeeks * msPerWeek);
+        const minDate = proposedMin < overallMinDate ? overallMinDate : proposedMin;
+        return { minDate, maxDate };
+      }
+
+      // 'all' timeframe → full dataset range
+      return { minDate: overallMinDate, maxDate };
+    }
+
+    // Helper function to get aggregation based on selected level
+    function getAggregatedData() {
+      if (selectedAggregationLevel === 'daily') {
+        return aggregateActivitiesByDay();
+      } else if (selectedAggregationLevel === 'monthly') {
+        return aggregateActivitiesByMonth();
+      } else if (selectedAggregationLevel === 'yearly') {
+        return aggregateActivitiesByYear();
+      } else {
+        return aggregateActivitiesByWeek();
+      }
+    }
+
+    // Aggregate by day (respecting timeframe)
+    function aggregateActivitiesByDay() {
+      const { minDate, maxDate } = getTimeframeRange();
+
+      const lastDay = new Date(maxDate);
+      lastDay.setHours(0, 0, 0, 0);
+
+      const firstDay = new Date(minDate);
+      firstDay.setHours(0, 0, 0, 0);
+
+      const daysList = [];
+      const current = new Date(firstDay);
+      while (current <= lastDay) {
+        daysList.push({
+          date: new Date(current),
+          formattedLabel: formatDateLabel(current),
+          isoKey: formatDateIso(current),
+          Run: 0,
+          Bike: 0,
+          Swim: 0
+        });
+        current.setDate(current.getDate() + 1);
+      }
+
+      const activeDaysKeys = new Set(daysList.map(d => d.isoKey));
+      const filteredActivities = processedActivities.filter(act => {
+        const key = formatDateIso(act.date);
+        return activeDaysKeys.has(key);
+      });
+
+      filteredActivities.forEach(act => {
+        if (!act.sport) return;
+        const dayKey = formatDateIso(act.date);
+        const dayObj = daysList.find(d => d.isoKey === dayKey);
+        if (dayObj) {
+          dayObj[act.sport] += act.distance;
+        }
+      });
+
+      return { aggregatedList: daysList, filteredActivities };
+    }
+
+    // Aggregate by month (respecting timeframe)
+    function aggregateActivitiesByMonth() {
+      const { minDate, maxDate } = getTimeframeRange();
+
+      const monthsList = [];
+      const current = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      
+      while (current <= maxDate) {
+        const monthKey = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`;
+        const monthLabel = `${monthNames[current.getMonth()]} '${String(current.getFullYear()).slice(-2)}`;
+        
+        monthsList.push({
+          date: new Date(current),
+          formattedLabel: monthLabel,
+          isoKey: monthKey,
+          Run: 0,
+          Bike: 0,
+          Swim: 0
+        });
+        
+        current.setMonth(current.getMonth() + 1);
+      }
+
+      const filteredActivities = processedActivities.slice();
+      
+      filteredActivities.forEach(act => {
+        if (!act.sport) return;
+        const monthKey = `${act.date.getFullYear()}-${String(act.date.getMonth() + 1).padStart(2, '0')}`;
+        const monthObj = monthsList.find(m => m.isoKey === monthKey);
+        if (monthObj) {
+          monthObj[act.sport] += act.distance;
+        }
+      });
+
+      return { aggregatedList: monthsList, filteredActivities };
+    }
+
+    // Aggregate by year (respecting timeframe)
+    function aggregateActivitiesByYear() {
+      const { minDate, maxDate } = getTimeframeRange();
+
+      const yearsList = [];
+      let currentYear = minDate.getFullYear();
+      const maxYear = maxDate.getFullYear();
+
+      while (currentYear <= maxYear) {
+        const isoKey = String(currentYear);
+        const label = String(currentYear);
+        yearsList.push({
+          date: new Date(currentYear, 0, 1),
+          formattedLabel: label,
+          isoKey,
+          Run: 0,
+          Bike: 0,
+          Swim: 0
+        });
+        currentYear++;
+      }
+
+      const filteredActivities = processedActivities.slice();
+
+      filteredActivities.forEach(act => {
+        if (!act.sport) return;
+        const yearKey = String(act.date.getFullYear());
+        const yearObj = yearsList.find(y => y.isoKey === yearKey);
+        if (yearObj) {
+          yearObj[act.sport] += act.distance;
+        }
+      });
+
+      return { aggregatedList: yearsList, filteredActivities };
+    }
+
+    // Aggregate by week (existing logic, adapted into helper)
+    function aggregateActivitiesByWeek() {
       // Find maximum Monday in dataset as ending point
       const maxDate = new Date(Math.max(...processedActivities.map(a => a.date)));
       const lastMonday = getMonday(maxDate);
@@ -491,8 +651,6 @@
       }
 
       const activeWeeksKeys = new Set(weeksList.map(w => w.isoKey));
-      const minWeekKey = weeksList[0].isoKey;
-      const maxWeekKey = weeksList[weeksList.length - 1].isoKey;
 
       // Filter activities inside this timeframe
       const filteredActivities = processedActivities.filter(act => {
@@ -510,6 +668,15 @@
           weekObj[act.sport] += act.distance;
         }
       });
+
+      return { aggregatedList: weeksList, filteredActivities };
+    }
+
+    // Filter and aggregate data based on selections, then render
+    function renderDashboard() {
+      if (processedActivities.length === 0) return;
+
+      const { aggregatedList: aggregatedList, filteredActivities } = getAggregatedData();
 
       // Compute Dashboard Stats (Cards)
       let totalKm = 0;
@@ -533,20 +700,31 @@
       });
 
       // Calculate peaks and counts based on chart datasets
-      weeksList.forEach(w => {
-        let weeklyVolume = 0;
+      aggregatedList.forEach(bucket => {
+        let volume = 0;
         if (selectedSportFilter === 'All') {
-          weeklyVolume = w.Run + w.Bike + w.Swim;
+          volume = bucket.Run + bucket.Bike + bucket.Swim;
         } else {
-          weeklyVolume = w[selectedSportFilter] || 0;
+          volume = bucket[selectedSportFilter] || 0;
         }
-        if (weeklyVolume > peakKm) {
-          peakKm = weeklyVolume;
+        if (volume > peakKm) {
+          peakKm = volume;
         }
       });
 
-      // Calculate averages
-      const avgKmPerWeek = numberOfWeeks > 0 ? (totalKm / numberOfWeeks) : 0;
+      // Calculate averages (interpret timeframe value when weekly)
+      let divisor = 1;
+      if (selectedAggregationLevel === 'weekly' && typeof selectedTimeframeWeeks === 'number') {
+        divisor = selectedTimeframeWeeks;
+      } else if (selectedAggregationLevel === 'daily') {
+        divisor = aggregatedList.length || 1;
+      } else if (selectedAggregationLevel === 'monthly') {
+        divisor = aggregatedList.length || 1;
+      } else if (selectedAggregationLevel === 'yearly') {
+        divisor = aggregatedList.length || 1;
+      }
+
+      const avgKmPerWeek = divisor > 0 ? (totalKm / divisor) : 0;
 
       // Update Card UI
       document.getElementById('cardTotalKm').textContent = totalKm.toFixed(1);
@@ -568,7 +746,7 @@
       document.getElementById('splitPctSwim').textContent = `${swimPct}%`;
 
       // Build Chart
-      buildTrainingChart(weeksList);
+      buildTrainingChart(aggregatedList);
     }
 
     // Build the Chart.js visual representation
@@ -657,16 +835,13 @@
                   }
                   return label;
                 },
-                afterTitle: function(items) {
-                  return 'Monday Start';
-                },
                 footer: function(items) {
                   if (selectedSportFilter !== 'All') return '';
                   let sum = 0;
                   items.forEach(function(item) {
                     sum += item.parsed.y;
                   });
-                  return 'Weekly Total: ' + sum.toFixed(1) + ' km';
+                  return 'Total: ' + sum.toFixed(1) + ' km';
                 }
               }
             }
@@ -725,6 +900,32 @@
         btn.className = "px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200";
       });
       setBtnActive(`timeBtn${weeks}`);
+
+      renderDashboard();
+    }
+
+    // Aggregation level toggle
+    function setAggregationLevel(level) {
+      selectedAggregationLevel = level;
+
+      // Update Buttons State
+      document.querySelectorAll('[id^="aggBtn"]').forEach(btn => {
+        btn.className = "px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200";
+      });
+      const btnId = `aggBtn${level.charAt(0).toUpperCase() + level.slice(1)}`;
+      setBtnActive(btnId);
+
+      // Update description based on level
+      const descriptions = {
+        daily: 'Daily training activity volume',
+        weekly: 'Aggregated mileage per sport category',
+        monthly: 'Monthly training summary',
+        yearly: 'Yearly training summary'
+      };
+      const descEl = document.getElementById('volumeDescription');
+      if (descEl && descriptions[level]) {
+        descEl.textContent = descriptions[level];
+      }
 
       renderDashboard();
     }

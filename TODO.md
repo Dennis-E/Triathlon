@@ -2,29 +2,31 @@
 
 ## Visualization Enhancements
 
-### 1. Aggregation Level Toggle (Daily / Weekly / Monthly)
-**Status:** ⏳ Pending  
+### 1. Aggregation Level Toggle (Daily / Weekly / Monthly / Yearly)
+**Status:** ✅ Implemented (first iteration)  
 **Priority:** High  
-**Description:** Add a toggle control to switch between daily, weekly, and monthly aggregation levels for the training volume chart.
+**Description:** Add a toggle control to switch between daily, weekly, monthly, and yearly aggregation levels for the training volume chart.
 
 **Requirements:**
 - Add toggle buttons/dropdown next to timeframe selector
 - Allow user to switch between:
-  - **Daily**: Show individual activity days
-  - **Weekly**: Current default (Monday-based weeks)
-  - **Monthly**: Group activities by calendar month
+  - **Daily**: Show individual activity days respecting timeframe
+  - **Weekly**: Monday-based weeks respecting timeframe
+  - **Monthly**: Group activities by calendar month respecting timeframe
+  - **Yearly**: Group activities by calendar year respecting timeframe
 - Update chart aggregation logic to recalculate based on selected level
-- Preserve selected sport filter when changing aggregation level
+- Preserve selected sport filter and timeframe filter when changing aggregation level
 - Chart should refresh automatically when toggling
 
-**Files to modify:**
-- `index.html` - Add toggle UI
-- `dashboard-utils.js` - Add aggregation functions for daily/monthly
+**Files modified:**
+- `index.html` - Added aggregation toggle UI; implemented `aggregateActivitiesByDay`, `aggregateActivitiesByMonth`, `aggregateActivitiesByYear`, `aggregateActivitiesByWeek`, `getAggregatedData`, and `getTimeframeRange`; wired cards and chart to generic aggregated buckets.
+- `dashboard-utils.js` - Weekly aggregation and metrics already covered by tests (no change needed for toggle itself).
 
-**Test requirements:**
-- Unit tests for `aggregateByDay()` function
-- Unit tests for `aggregateByMonth()` function
-- Integration test verifying toggle updates chart
+**Test status / follow-ups:**
+- [ ] Unit tests for daily aggregation helper (`aggregateActivitiesByDay` or mirrored utility)
+- [ ] Unit tests for monthly aggregation helper (`aggregateActivitiesByMonth`)
+- [ ] Unit tests for yearly aggregation helper (`aggregateActivitiesByYear`)
+- [ ] Integration test verifying aggregation toggle + timeframe filter combination updates chart and cards coherently
 
 ---
 
@@ -105,7 +107,7 @@ pace = duration / 60 / distance  // minutes per km
 
 | Feature | Status | Priority | Effort |
 |---------|--------|----------|--------|
-| Aggregation Toggle (Daily/Weekly/Monthly) | ⏳ Pending | High | Medium |
+| Aggregation Toggle (Daily/Weekly/Monthly/Yearly) | ✅ Implemented (tests pending) | High | Medium |
 | Tab System | ⏳ Pending | High | Medium |
 | Scatter Plot (Distance vs Speed) | ⏳ Pending | High | Medium-High |
 

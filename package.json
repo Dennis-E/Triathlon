@@ -1,0 +1,29 @@
+{
+  "name": "tri",
+  "version": "1.0.0",
+  "description": "A web-based application where youth athletes can upload their Strava data export and explore visualizations of their long-term training effort. The focus is on endurance sports (running, cycling, swimming, etc.) and on building healthy, sustainable training habits, not on social or commercial aspects of Strava.",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest --passWithNoTests",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "prepare": "husky install"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TriAnalytica/Triathlon.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/TriAnalytica/Triathlon/issues"
+  },
+  "homepage": "https://github.com/TriAnalytica/Triathlon#readme",
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "husky": "^9.1.7",
+    "jest": "^30.4.2"
+  }
+}

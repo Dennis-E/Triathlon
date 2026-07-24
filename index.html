@@ -143,51 +143,52 @@
         </div>
       </div>
 
-      <!-- In-Chart Volume KPI Blocks -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="bg-slate-950 border border-slate-800 rounded-xl p-5 flex items-center justify-between shadow-sm">
+      <div class="flex flex-col lg:flex-row gap-4 lg:items-stretch">
+        <!-- In-Chart Volume KPI Blocks -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-1 gap-3 lg:w-56 shrink-0">
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between shadow-sm">
           <div class="space-y-1">
             <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Volume</p>
             <div class="flex items-baseline space-x-1">
-              <span id="cardTotalKm" class="text-3xl font-bold tracking-tight">0.0</span>
-              <span class="text-sm text-slate-400 font-medium">km</span>
+              <span id="cardTotalKm" class="text-xl font-bold tracking-tight">0.0</span>
+              <span class="text-[11px] text-slate-400 font-medium">km</span>
             </div>
           </div>
-          <div class="bg-indigo-500/10 text-indigo-400 p-3 rounded-xl border border-indigo-500/10">
-            <i data-lucide="trending-up" class="w-6 h-6"></i>
+          <div class="bg-indigo-500/10 text-indigo-400 p-2 rounded-lg border border-indigo-500/10">
+            <i data-lucide="trending-up" class="w-4 h-4"></i>
           </div>
         </div>
 
-        <div class="bg-slate-950 border border-slate-800 rounded-xl p-5 flex items-center justify-between shadow-sm">
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between shadow-sm">
           <div class="space-y-1">
             <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Weekly Average</p>
             <div class="flex items-baseline space-x-1">
-              <span id="cardAvgKm" class="text-3xl font-bold tracking-tight">0.0</span>
-              <span class="text-sm text-slate-400 font-medium">km/wk</span>
+              <span id="cardAvgKm" class="text-xl font-bold tracking-tight">0.0</span>
+              <span class="text-[11px] text-slate-400 font-medium">km/wk</span>
             </div>
           </div>
-          <div class="bg-emerald-500/10 text-emerald-400 p-3 rounded-xl border border-emerald-500/10">
-            <i data-lucide="calendar" class="w-6 h-6"></i>
+          <div class="bg-emerald-500/10 text-emerald-400 p-2 rounded-lg border border-emerald-500/10">
+            <i data-lucide="calendar" class="w-4 h-4"></i>
           </div>
         </div>
 
-        <div class="bg-slate-950 border border-slate-800 rounded-xl p-5 flex flex-col justify-between shadow-sm h-full">
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between shadow-sm h-full">
           <div class="flex items-center justify-between w-full">
-            <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Sport Distribution</p>
+            <p class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Sport Distribution</p>
             <span class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">by km</span>
           </div>
-          <div class="space-y-2 mt-3">
-            <div class="flex justify-between text-xs text-slate-400">
+          <div class="space-y-1.5 mt-2.5">
+            <div class="flex justify-between text-[10px] text-slate-400">
               <span class="flex items-center"><span class="w-2.5 h-2.5 rounded bg-[#EF4444] mr-1.5 inline-block"></span>Run</span>
               <span class="flex items-center"><span class="w-2.5 h-2.5 rounded bg-[#14B8A6] mr-1.5 inline-block"></span>Bike</span>
               <span class="flex items-center"><span class="w-2.5 h-2.5 rounded bg-[#06B6D4] mr-1.5 inline-block"></span>Swim</span>
             </div>
-            <div class="w-full h-3 bg-slate-800 rounded-full overflow-hidden flex">
+            <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden flex">
               <div id="splitBarRun" class="h-full bg-[#EF4444] transition-all duration-500" style="width: 0%"></div>
               <div id="splitBarBike" class="h-full bg-[#14B8A6] transition-all duration-500" style="width: 0%"></div>
               <div id="splitBarSwim" class="h-full bg-[#06B6D4] transition-all duration-500" style="width: 0%"></div>
             </div>
-            <div class="flex justify-between text-[11px] font-medium mt-1">
+            <div class="flex justify-between text-[10px] font-medium mt-1">
               <span id="splitPctRun" class="text-[#EF4444]">0%</span>
               <span id="splitPctBike" class="text-[#14B8A6]">0%</span>
               <span id="splitPctSwim" class="text-[#06B6D4]">0%</span>
@@ -195,23 +196,25 @@
           </div>
         </div>
 
-        <div class="bg-slate-950 border border-slate-800 rounded-xl p-5 flex items-center justify-between shadow-sm">
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between shadow-sm">
           <div class="space-y-1">
             <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Peak Week</p>
             <div class="flex items-baseline space-x-1">
-              <span id="cardPeakKm" class="text-3xl font-bold tracking-tight">0.0</span>
-              <span class="text-sm text-slate-400 font-medium">km</span>
+              <span id="cardPeakKm" class="text-xl font-bold tracking-tight">0.0</span>
+              <span class="text-[11px] text-slate-400 font-medium">km</span>
             </div>
           </div>
-          <div class="bg-amber-500/10 text-amber-400 p-3 rounded-xl border border-amber-500/10">
-            <i data-lucide="crown" class="w-6 h-6"></i>
+          <div class="bg-amber-500/10 text-amber-400 p-2 rounded-lg border border-amber-500/10">
+            <i data-lucide="crown" class="w-4 h-4"></i>
           </div>
         </div>
-      </div>
 
-      <!-- Chart Canvas Wrapper -->
-      <div class="relative w-full h-[360px] md:h-[420px]">
-        <canvas id="trainingChart"></canvas>
+        </div>
+
+        <!-- Chart Canvas Wrapper -->
+        <div class="relative w-full h-[360px] md:h-[420px]">
+          <canvas id="trainingChart"></canvas>
+        </div>
       </div>
 
     </div>

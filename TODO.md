@@ -28,6 +28,13 @@
 - [ ] Unit tests for yearly aggregation helper (`aggregateActivitiesByYear`)
 - [ ] Integration test verifying aggregation toggle + timeframe filter combination updates chart and cards coherently
 
+**New TODO (filter behavior):**
+- [ ] Make the third filter options dynamic based on aggregation level:
+  - Daily: default quick options `7 days`, `1 month`, `3 months`, and `All`
+  - Weekly: provide reasonable week-based ranges and always include `All`
+  - Monthly: provide reasonable month-based ranges and always include `All`
+  - Yearly: offer `3 years`, `5 years`, `10 years`, and `All`
+
 ---
 
 ### 2. Tab System for Visualizations

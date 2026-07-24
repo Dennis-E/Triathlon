@@ -79,79 +79,6 @@
   <!-- Dashboard Grid -->
   <main class="flex-1 overflow-y-auto p-6 space-y-6">
 
-    <!-- Summary Metrics Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      
-      <!-- Total KM Card -->
-      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 flex items-center justify-between shadow-sm">
-        <div class="space-y-1">
-          <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Volume</p>
-          <div class="flex items-baseline space-x-1">
-            <span id="cardTotalKm" class="text-3xl font-bold tracking-tight">0.0</span>
-            <span class="text-sm text-slate-400 font-medium">km</span>
-          </div>
-        </div>
-        <div class="bg-indigo-500/10 text-indigo-400 p-3 rounded-xl border border-indigo-500/10">
-          <i data-lucide="trending-up" class="w-6 h-6"></i>
-        </div>
-      </div>
-
-      <!-- Weekly Avg Card -->
-      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 flex items-center justify-between shadow-sm">
-        <div class="space-y-1">
-          <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Weekly Average</p>
-          <div class="flex items-baseline space-x-1">
-            <span id="cardAvgKm" class="text-3xl font-bold tracking-tight">0.0</span>
-            <span class="text-sm text-slate-400 font-medium">km/wk</span>
-          </div>
-        </div>
-        <div class="bg-emerald-500/10 text-emerald-400 p-3 rounded-xl border border-emerald-500/10">
-          <i data-lucide="calendar" class="w-6 h-6"></i>
-        </div>
-      </div>
-
-      <!-- Sport Split Percentage Card -->
-      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between shadow-sm h-full">
-        <div class="flex items-center justify-between w-full">
-          <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Sport Distribution</p>
-          <span class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">by km</span>
-        </div>
-        <div class="space-y-2 mt-3">
-          <div class="flex justify-between text-xs text-slate-400">
-            <span class="flex items-center"><span class="w-2.5 h-2.5 rounded bg-[#EF4444] mr-1.5 inline-block"></span>Run</span>
-            <span class="flex items-center"><span class="w-2.5 h-2.5 rounded bg-[#14B8A6] mr-1.5 inline-block"></span>Bike</span>
-            <span class="flex items-center"><span class="w-2.5 h-2.5 rounded bg-[#06B6D4] mr-1.5 inline-block"></span>Swim</span>
-          </div>
-          <!-- Stacked progress bar -->
-          <div class="w-full h-3 bg-slate-800 rounded-full overflow-hidden flex">
-            <div id="splitBarRun" class="h-full bg-[#EF4444] transition-all duration-500" style="width: 0%"></div>
-            <div id="splitBarBike" class="h-full bg-[#14B8A6] transition-all duration-500" style="width: 0%"></div>
-            <div id="splitBarSwim" class="h-full bg-[#06B6D4] transition-all duration-500" style="width: 0%"></div>
-          </div>
-          <div class="flex justify-between text-[11px] font-medium mt-1">
-            <span id="splitPctRun" class="text-[#EF4444]">0%</span>
-            <span id="splitPctBike" class="text-[#14B8A6]">0%</span>
-            <span id="splitPctSwim" class="text-[#06B6D4]">0%</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Max Week Card -->
-      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 flex items-center justify-between shadow-sm">
-        <div class="space-y-1">
-          <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Peak Week</p>
-          <div class="flex items-baseline space-x-1">
-            <span id="cardPeakKm" class="text-3xl font-bold tracking-tight">0.0</span>
-            <span class="text-sm text-slate-400 font-medium">km</span>
-          </div>
-        </div>
-        <div class="bg-amber-500/10 text-amber-400 p-3 rounded-xl border border-amber-500/10">
-          <i data-lucide="crown" class="w-6 h-6"></i>
-        </div>
-      </div>
-
-    </div>
-
     <!-- Main Chart Card -->
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-md flex flex-col space-y-6">
       
@@ -212,6 +139,72 @@
             <button onclick="setTimeframeFilter('all')" id="timeBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
               All
             </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- In-Chart Volume KPI Blocks -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-5 flex items-center justify-between shadow-sm">
+          <div class="space-y-1">
+            <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Volume</p>
+            <div class="flex items-baseline space-x-1">
+              <span id="cardTotalKm" class="text-3xl font-bold tracking-tight">0.0</span>
+              <span class="text-sm text-slate-400 font-medium">km</span>
+            </div>
+          </div>
+          <div class="bg-indigo-500/10 text-indigo-400 p-3 rounded-xl border border-indigo-500/10">
+            <i data-lucide="trending-up" class="w-6 h-6"></i>
+          </div>
+        </div>
+
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-5 flex items-center justify-between shadow-sm">
+          <div class="space-y-1">
+            <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Weekly Average</p>
+            <div class="flex items-baseline space-x-1">
+              <span id="cardAvgKm" class="text-3xl font-bold tracking-tight">0.0</span>
+              <span class="text-sm text-slate-400 font-medium">km/wk</span>
+            </div>
+          </div>
+          <div class="bg-emerald-500/10 text-emerald-400 p-3 rounded-xl border border-emerald-500/10">
+            <i data-lucide="calendar" class="w-6 h-6"></i>
+          </div>
+        </div>
+
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-5 flex flex-col justify-between shadow-sm h-full">
+          <div class="flex items-center justify-between w-full">
+            <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Sport Distribution</p>
+            <span class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">by km</span>
+          </div>
+          <div class="space-y-2 mt-3">
+            <div class="flex justify-between text-xs text-slate-400">
+              <span class="flex items-center"><span class="w-2.5 h-2.5 rounded bg-[#EF4444] mr-1.5 inline-block"></span>Run</span>
+              <span class="flex items-center"><span class="w-2.5 h-2.5 rounded bg-[#14B8A6] mr-1.5 inline-block"></span>Bike</span>
+              <span class="flex items-center"><span class="w-2.5 h-2.5 rounded bg-[#06B6D4] mr-1.5 inline-block"></span>Swim</span>
+            </div>
+            <div class="w-full h-3 bg-slate-800 rounded-full overflow-hidden flex">
+              <div id="splitBarRun" class="h-full bg-[#EF4444] transition-all duration-500" style="width: 0%"></div>
+              <div id="splitBarBike" class="h-full bg-[#14B8A6] transition-all duration-500" style="width: 0%"></div>
+              <div id="splitBarSwim" class="h-full bg-[#06B6D4] transition-all duration-500" style="width: 0%"></div>
+            </div>
+            <div class="flex justify-between text-[11px] font-medium mt-1">
+              <span id="splitPctRun" class="text-[#EF4444]">0%</span>
+              <span id="splitPctBike" class="text-[#14B8A6]">0%</span>
+              <span id="splitPctSwim" class="text-[#06B6D4]">0%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-5 flex items-center justify-between shadow-sm">
+          <div class="space-y-1">
+            <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Peak Week</p>
+            <div class="flex items-baseline space-x-1">
+              <span id="cardPeakKm" class="text-3xl font-bold tracking-tight">0.0</span>
+              <span class="text-sm text-slate-400 font-medium">km</span>
+            </div>
+          </div>
+          <div class="bg-amber-500/10 text-amber-400 p-3 rounded-xl border border-amber-500/10">
+            <i data-lucide="crown" class="w-6 h-6"></i>
           </div>
         </div>
       </div>
@@ -488,6 +481,22 @@
       return { minDate: overallMinDate, maxDate };
     }
 
+    function getActivitiesInTimeframe() {
+      const { minDate, maxDate } = getTimeframeRange();
+      return processedActivities.filter(act => act.date >= minDate && act.date <= maxDate);
+    }
+
+    function getWeeksInDisplayedHorizon() {
+      if (typeof selectedTimeframeWeeks === 'number') {
+        return selectedTimeframeWeeks;
+      }
+
+      const { minDate, maxDate } = getTimeframeRange();
+      const diffMs = maxDate - minDate;
+      const weeks = Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000));
+      return Math.max(1, weeks);
+    }
+
     // Helper function to get aggregation based on selected level
     function getAggregatedData() {
       if (selectedAggregationLevel === 'daily') {
@@ -526,10 +535,8 @@
       }
 
       const activeDaysKeys = new Set(daysList.map(d => d.isoKey));
-      const filteredActivities = processedActivities.filter(act => {
-        const key = formatDateIso(act.date);
-        return activeDaysKeys.has(key);
-      });
+      const timeframeActivities = getActivitiesInTimeframe();
+      const filteredActivities = timeframeActivities.filter(act => activeDaysKeys.has(formatDateIso(act.date)));
 
       filteredActivities.forEach(act => {
         if (!act.sport) return;
@@ -567,7 +574,7 @@
         current.setMonth(current.getMonth() + 1);
       }
 
-      const filteredActivities = processedActivities.slice();
+      const filteredActivities = getActivitiesInTimeframe();
       
       filteredActivities.forEach(act => {
         if (!act.sport) return;
@@ -603,7 +610,7 @@
         currentYear++;
       }
 
-      const filteredActivities = processedActivities.slice();
+      const filteredActivities = getActivitiesInTimeframe();
 
       filteredActivities.forEach(act => {
         if (!act.sport) return;
@@ -677,6 +684,7 @@
       if (processedActivities.length === 0) return;
 
       const { aggregatedList: aggregatedList, filteredActivities } = getAggregatedData();
+      const timeframeActivities = getActivitiesInTimeframe();
 
       // Compute Dashboard Stats (Cards)
       let totalKm = 0;
@@ -686,7 +694,7 @@
       let peakKm = 0;
       let uniqueTrainingDays = new Set();
 
-      filteredActivities.forEach(act => {
+      timeframeActivities.forEach(act => {
         // Accumulate raw sport metrics
         if (act.sport === 'Run') totalRun += act.distance;
         else if (act.sport === 'Bike') totalBike += act.distance;
@@ -699,32 +707,18 @@
         }
       });
 
-      // Calculate peaks and counts based on chart datasets
-      aggregatedList.forEach(bucket => {
-        let volume = 0;
-        if (selectedSportFilter === 'All') {
-          volume = bucket.Run + bucket.Bike + bucket.Swim;
-        } else {
-          volume = bucket[selectedSportFilter] || 0;
-        }
-        if (volume > peakKm) {
-          peakKm = volume;
-        }
+      // Peak week is always computed weekly within the currently displayed horizon
+      const weeklyAggregationForPeak = aggregateActivitiesByWeek().aggregatedList;
+      weeklyAggregationForPeak.forEach(bucket => {
+        const volume = selectedSportFilter === 'All'
+          ? (bucket.Run + bucket.Bike + bucket.Swim)
+          : (bucket[selectedSportFilter] || 0);
+        if (volume > peakKm) peakKm = volume;
       });
 
-      // Calculate averages (interpret timeframe value when weekly)
-      let divisor = 1;
-      if (selectedAggregationLevel === 'weekly' && typeof selectedTimeframeWeeks === 'number') {
-        divisor = selectedTimeframeWeeks;
-      } else if (selectedAggregationLevel === 'daily') {
-        divisor = aggregatedList.length || 1;
-      } else if (selectedAggregationLevel === 'monthly') {
-        divisor = aggregatedList.length || 1;
-      } else if (selectedAggregationLevel === 'yearly') {
-        divisor = aggregatedList.length || 1;
-      }
-
-      const avgKmPerWeek = divisor > 0 ? (totalKm / divisor) : 0;
+      // Weekly average always reflects visible horizon length in weeks
+      const weeksInHorizon = getWeeksInDisplayedHorizon();
+      const avgKmPerWeek = weeksInHorizon > 0 ? (totalKm / weeksInHorizon) : 0;
 
       // Update Card UI
       document.getElementById('cardTotalKm').textContent = totalKm.toFixed(1);

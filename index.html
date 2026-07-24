@@ -81,124 +81,162 @@
 
     <!-- Main Chart Card -->
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-md flex flex-col space-y-6">
-      
-      <!-- Chart Controls Header -->
-      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
-        <div class="space-y-1">
-          <h2 class="text-2xl font-bold tracking-tight">Total distance</h2>
+
+      <!-- Visualization Tabs -->
+      <div class="border-b border-slate-800 pb-4">
+        <div role="tablist" aria-label="Visualization tabs" class="inline-flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+          <button
+            id="vizTabTotalDistance"
+            type="button"
+            role="tab"
+            aria-selected="true"
+            aria-controls="vizPanelTotalDistance"
+            tabindex="0"
+            onclick="setVisualizationTab('totalDistance')"
+            onkeydown="handleVisualizationTabKeydown(event, 'totalDistance')"
+            class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25"
+          >
+            Total distance
+          </button>
+          <button
+            id="vizTabHeartratePace"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="vizPanelHeartratePace"
+            tabindex="-1"
+            onclick="setVisualizationTab('heartratePace')"
+            onkeydown="handleVisualizationTabKeydown(event, 'heartratePace')"
+            class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
+          >
+            Heartrate vs Pace
+          </button>
         </div>
- 
-        <div class="flex flex-wrap items-center gap-4">
-          <!-- Aggregation Level Selector -->
-          <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
-            <button onclick="setAggregationLevel('daily')" id="aggBtnDaily" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
-              Daily
-            </button>
-            <button onclick="setAggregationLevel('weekly')" id="aggBtnWeekly" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">
-              Weekly
-            </button>
-            <button onclick="setAggregationLevel('monthly')" id="aggBtnMonthly" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
-              Monthly
-            </button>
-            <button onclick="setAggregationLevel('yearly')" id="aggBtnYearly" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
-              Yearly
-            </button>
+      </div>
+      
+      <div id="vizPanelTotalDistance" role="tabpanel" aria-labelledby="vizTabTotalDistance">
+        <!-- Chart Controls Header -->
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+          <div class="space-y-1">
+            <h2 class="text-2xl font-bold tracking-tight">Total distance</h2>
           </div>
 
-          <!-- Sport Filter Selector -->
-          <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
-            <button onclick="setSportFilter('All')" id="sportBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">
-              All Sports
-            </button>
-            <button onclick="setSportFilter('Run')" id="sportBtnRun" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
-              Run
-            </button>
-            <button onclick="setSportFilter('Bike')" id="sportBtnBike" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
-              Bike
-            </button>
-            <button onclick="setSportFilter('Swim')" id="sportBtnSwim" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
-              Swim
-            </button>
+          <div class="flex flex-wrap items-center gap-4">
+            <!-- Aggregation Level Selector -->
+            <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+              <button onclick="setAggregationLevel('daily')" id="aggBtnDaily" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
+                Daily
+              </button>
+              <button onclick="setAggregationLevel('weekly')" id="aggBtnWeekly" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">
+                Weekly
+              </button>
+              <button onclick="setAggregationLevel('monthly')" id="aggBtnMonthly" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
+                Monthly
+              </button>
+              <button onclick="setAggregationLevel('yearly')" id="aggBtnYearly" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
+                Yearly
+              </button>
+            </div>
+
+            <!-- Sport Filter Selector -->
+            <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+              <button onclick="setSportFilter('All')" id="sportBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">
+                All Sports
+              </button>
+              <button onclick="setSportFilter('Run')" id="sportBtnRun" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
+                Run
+              </button>
+              <button onclick="setSportFilter('Bike')" id="sportBtnBike" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
+                Bike
+              </button>
+              <button onclick="setSportFilter('Swim')" id="sportBtnSwim" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
+                Swim
+              </button>
+            </div>
+
+            <!-- Timeframe Selector -->
+            <div id="timeframeSelector" class="flex flex-wrap bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+            </div>
           </div>
- 
-          <!-- Timeframe Selector -->
-          <div id="timeframeSelector" class="flex flex-wrap bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+        </div>
+
+        <div class="flex flex-col lg:flex-row gap-4 lg:items-stretch mt-6">
+          <!-- In-Chart Volume KPI Blocks -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-1 gap-3 lg:w-56 shrink-0">
+          <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between shadow-sm">
+            <div class="space-y-1">
+              <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Volume</p>
+              <div class="flex items-baseline space-x-1">
+                <span id="cardTotalKm" class="text-xl font-bold tracking-tight">0.0</span>
+                <span class="text-[11px] text-slate-400 font-medium">km</span>
+              </div>
+            </div>
+            <div class="bg-indigo-500/10 text-indigo-400 p-2 rounded-lg border border-indigo-500/10">
+              <i data-lucide="trending-up" class="w-4 h-4"></i>
+            </div>
+          </div>
+
+          <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between shadow-sm">
+            <div class="space-y-1">
+              <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Weekly Average</p>
+              <div class="flex items-baseline space-x-1">
+                <span id="cardAvgKm" class="text-xl font-bold tracking-tight">0.0</span>
+                <span class="text-[11px] text-slate-400 font-medium">km/wk</span>
+              </div>
+            </div>
+            <div class="bg-emerald-500/10 text-emerald-400 p-2 rounded-lg border border-emerald-500/10">
+              <i data-lucide="calendar" class="w-4 h-4"></i>
+            </div>
+          </div>
+
+          <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between shadow-sm h-full">
+            <div class="flex items-center justify-between w-full">
+              <p class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Sport Distribution</p>
+              <span class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">by km</span>
+            </div>
+            <div class="space-y-1.5 mt-2.5">
+              <div class="flex justify-between text-[10px] text-slate-400">
+                <span class="flex items-center"><span class="w-2.5 h-2.5 rounded bg-[#EF4444] mr-1.5 inline-block"></span>Run</span>
+                <span class="flex items-center"><span class="w-2.5 h-2.5 rounded bg-[#14B8A6] mr-1.5 inline-block"></span>Bike</span>
+                <span class="flex items-center"><span class="w-2.5 h-2.5 rounded bg-[#06B6D4] mr-1.5 inline-block"></span>Swim</span>
+              </div>
+              <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden flex">
+                <div id="splitBarRun" class="h-full bg-[#EF4444] transition-all duration-500" style="width: 0%"></div>
+                <div id="splitBarBike" class="h-full bg-[#14B8A6] transition-all duration-500" style="width: 0%"></div>
+                <div id="splitBarSwim" class="h-full bg-[#06B6D4] transition-all duration-500" style="width: 0%"></div>
+              </div>
+              <div class="flex justify-between text-[10px] font-medium mt-1">
+                <span id="splitPctRun" class="text-[#EF4444]">0%</span>
+                <span id="splitPctBike" class="text-[#14B8A6]">0%</span>
+                <span id="splitPctSwim" class="text-[#06B6D4]">0%</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between shadow-sm">
+            <div class="space-y-1">
+              <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Peak Week</p>
+              <div class="flex items-baseline space-x-1">
+                <span id="cardPeakKm" class="text-xl font-bold tracking-tight">0.0</span>
+                <span class="text-[11px] text-slate-400 font-medium">km</span>
+              </div>
+            </div>
+            <div class="bg-amber-500/10 text-amber-400 p-2 rounded-lg border border-amber-500/10">
+              <i data-lucide="crown" class="w-4 h-4"></i>
+            </div>
+          </div>
+
+          </div>
+
+          <!-- Chart Canvas Wrapper -->
+          <div class="relative w-full h-[360px] md:h-[420px]">
+            <canvas id="trainingChart"></canvas>
           </div>
         </div>
       </div>
 
-      <div class="flex flex-col lg:flex-row gap-4 lg:items-stretch">
-        <!-- In-Chart Volume KPI Blocks -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-1 gap-3 lg:w-56 shrink-0">
-        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between shadow-sm">
-          <div class="space-y-1">
-            <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Volume</p>
-            <div class="flex items-baseline space-x-1">
-              <span id="cardTotalKm" class="text-xl font-bold tracking-tight">0.0</span>
-              <span class="text-[11px] text-slate-400 font-medium">km</span>
-            </div>
-          </div>
-          <div class="bg-indigo-500/10 text-indigo-400 p-2 rounded-lg border border-indigo-500/10">
-            <i data-lucide="trending-up" class="w-4 h-4"></i>
-          </div>
-        </div>
-
-        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between shadow-sm">
-          <div class="space-y-1">
-            <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Weekly Average</p>
-            <div class="flex items-baseline space-x-1">
-              <span id="cardAvgKm" class="text-xl font-bold tracking-tight">0.0</span>
-              <span class="text-[11px] text-slate-400 font-medium">km/wk</span>
-            </div>
-          </div>
-          <div class="bg-emerald-500/10 text-emerald-400 p-2 rounded-lg border border-emerald-500/10">
-            <i data-lucide="calendar" class="w-4 h-4"></i>
-          </div>
-        </div>
-
-        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between shadow-sm h-full">
-          <div class="flex items-center justify-between w-full">
-            <p class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Sport Distribution</p>
-            <span class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">by km</span>
-          </div>
-          <div class="space-y-1.5 mt-2.5">
-            <div class="flex justify-between text-[10px] text-slate-400">
-              <span class="flex items-center"><span class="w-2.5 h-2.5 rounded bg-[#EF4444] mr-1.5 inline-block"></span>Run</span>
-              <span class="flex items-center"><span class="w-2.5 h-2.5 rounded bg-[#14B8A6] mr-1.5 inline-block"></span>Bike</span>
-              <span class="flex items-center"><span class="w-2.5 h-2.5 rounded bg-[#06B6D4] mr-1.5 inline-block"></span>Swim</span>
-            </div>
-            <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden flex">
-              <div id="splitBarRun" class="h-full bg-[#EF4444] transition-all duration-500" style="width: 0%"></div>
-              <div id="splitBarBike" class="h-full bg-[#14B8A6] transition-all duration-500" style="width: 0%"></div>
-              <div id="splitBarSwim" class="h-full bg-[#06B6D4] transition-all duration-500" style="width: 0%"></div>
-            </div>
-            <div class="flex justify-between text-[10px] font-medium mt-1">
-              <span id="splitPctRun" class="text-[#EF4444]">0%</span>
-              <span id="splitPctBike" class="text-[#14B8A6]">0%</span>
-              <span id="splitPctSwim" class="text-[#06B6D4]">0%</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between shadow-sm">
-          <div class="space-y-1">
-            <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Peak Week</p>
-            <div class="flex items-baseline space-x-1">
-              <span id="cardPeakKm" class="text-xl font-bold tracking-tight">0.0</span>
-              <span class="text-[11px] text-slate-400 font-medium">km</span>
-            </div>
-          </div>
-          <div class="bg-amber-500/10 text-amber-400 p-2 rounded-lg border border-amber-500/10">
-            <i data-lucide="crown" class="w-4 h-4"></i>
-          </div>
-        </div>
-
-        </div>
-
-        <!-- Chart Canvas Wrapper -->
-        <div class="relative w-full h-[360px] md:h-[420px]">
-          <canvas id="trainingChart"></canvas>
-        </div>
+      <div id="vizPanelHeartratePace" role="tabpanel" aria-labelledby="vizTabHeartratePace" class="hidden">
+        <div class="min-h-[420px]"></div>
       </div>
 
     </div>
@@ -218,6 +256,7 @@
     let processedActivities = [];
     let selectedSportFilter = 'All'; // 'All', 'Run', 'Bike', 'Swim'
     let selectedAggregationLevel = 'weekly'; // 'daily', 'weekly', 'monthly', 'yearly'
+    let selectedVisualizationTab = 'totalDistance'; // 'totalDistance', 'heartratePace'
     let selectedTimeframeByAggregation = {
       daily: '3m',
       weekly: '1y',
@@ -945,6 +984,57 @@
       });
     }
 
+    function setVisualizationTab(tabName, options = {}) {
+      const validTabs = ['totalDistance', 'heartratePace'];
+      if (!validTabs.includes(tabName)) return;
+
+      selectedVisualizationTab = tabName;
+
+      const isTotalDistance = tabName === 'totalDistance';
+      const totalDistanceBtn = document.getElementById('vizTabTotalDistance');
+      const heartratePaceBtn = document.getElementById('vizTabHeartratePace');
+      const totalDistancePanel = document.getElementById('vizPanelTotalDistance');
+      const heartratePacePanel = document.getElementById('vizPanelHeartratePace');
+
+      if (!totalDistanceBtn || !heartratePaceBtn || !totalDistancePanel || !heartratePacePanel) return;
+
+      totalDistanceBtn.setAttribute('aria-selected', isTotalDistance ? 'true' : 'false');
+      totalDistanceBtn.setAttribute('tabindex', isTotalDistance ? '0' : '-1');
+      totalDistanceBtn.className = isTotalDistance
+        ? 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25'
+        : 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200';
+
+      heartratePaceBtn.setAttribute('aria-selected', isTotalDistance ? 'false' : 'true');
+      heartratePaceBtn.setAttribute('tabindex', isTotalDistance ? '-1' : '0');
+      heartratePaceBtn.className = isTotalDistance
+        ? 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200'
+        : 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25';
+
+      totalDistancePanel.classList.toggle('hidden', !isTotalDistance);
+      heartratePacePanel.classList.toggle('hidden', isTotalDistance);
+
+      if (options.focusTab) {
+        (isTotalDistance ? totalDistanceBtn : heartratePaceBtn).focus();
+      }
+    }
+
+    function handleVisualizationTabKeydown(event, currentTab) {
+      const tabOrder = ['totalDistance', 'heartratePace'];
+      const currentIndex = tabOrder.indexOf(currentTab);
+      if (currentIndex === -1) return;
+
+      let direction = 0;
+      if (event.key === 'ArrowRight') direction = 1;
+      if (event.key === 'ArrowLeft') direction = -1;
+      if (event.key === 'Tab') direction = event.shiftKey ? -1 : 1;
+
+      if (direction === 0) return;
+      event.preventDefault();
+
+      const nextIndex = (currentIndex + direction + tabOrder.length) % tabOrder.length;
+      setVisualizationTab(tabOrder[nextIndex], { focusTab: true });
+    }
+
     // Aggregation level toggle
     function setAggregationLevel(level) {
       selectedAggregationLevel = level;
@@ -975,6 +1065,8 @@
         chartInstance.update();
       }
     });
+
+    setVisualizationTab(selectedVisualizationTab);
 
     // Start loading local CSV on page load
     loadLocalCsv();

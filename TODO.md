@@ -2,43 +2,8 @@
 
 ## Visualization Enhancements
 
-### 1. Aggregation Level Toggle (Daily / Weekly / Monthly / Yearly)
-**Status:** ✅ Implemented (first iteration)  
-**Priority:** High  
-**Description:** Add a toggle control to switch between daily, weekly, monthly, and yearly aggregation levels for the training volume chart.
-
-**Requirements:**
-- Add toggle buttons/dropdown next to timeframe selector
-- Allow user to switch between:
-  - **Daily**: Show individual activity days respecting timeframe
-  - **Weekly**: Monday-based weeks respecting timeframe
-  - **Monthly**: Group activities by calendar month respecting timeframe
-  - **Yearly**: Group activities by calendar year respecting timeframe
-- Update chart aggregation logic to recalculate based on selected level
-- Preserve selected sport filter and timeframe filter when changing aggregation level
-- Chart should refresh automatically when toggling
-
-**Files modified:**
-- `index.html` - Added aggregation toggle UI; implemented `aggregateActivitiesByDay`, `aggregateActivitiesByMonth`, `aggregateActivitiesByYear`, `aggregateActivitiesByWeek`, `getAggregatedData`, and `getTimeframeRange`; wired cards and chart to generic aggregated buckets.
-- `dashboard-utils.js` - Weekly aggregation and metrics already covered by tests (no change needed for toggle itself).
-
-**Test status / follow-ups:**
-- [ ] Unit tests for daily aggregation helper (`aggregateActivitiesByDay` or mirrored utility)
-- [ ] Unit tests for monthly aggregation helper (`aggregateActivitiesByMonth`)
-- [ ] Unit tests for yearly aggregation helper (`aggregateActivitiesByYear`)
-- [ ] Integration test verifying aggregation toggle + timeframe filter combination updates chart and cards coherently
-
-**New TODO (filter behavior):**
-- [ ] Make the third filter options dynamic based on aggregation level:
-  - Daily: default quick options `7 days`, `1 month`, `3 months`, and `All`
-  - Weekly: provide reasonable week-based ranges and always include `All`
-  - Monthly: provide reasonable month-based ranges and always include `All`
-  - Yearly: offer `3 years`, `5 years`, `10 years`, and `All`
-
----
-
-### 2. Tab System for Visualizations
-**Status:** ⏳ Pending  
+### 1. Tab System for Visualizations
+**Status:** ✅ Implemented (navigation only; second tab content pending)  
 **Priority:** High  
 **Description:** Add tabs to switch between different chart visualizations.
 
@@ -56,12 +21,12 @@
 - Dashboard script - Add tab switching logic
 
 **Test requirements:**
-- Integration test for tab switching
-- Verify correct chart renders for each tab
+- [ ] Integration test for tab switching
+- [ ] Verify correct chart renders for each tab
 
 ---
 
-### 3. Scatter Plot: Distance vs Speed Analysis
+### 2. Scatter Plot: Distance vs Speed Analysis
 **Status:** ⏳ Pending  
 **Priority:** High  
 **Description:** Create second visualization showing the relationship between activity length (distance) and speed (pace/avg speed).
@@ -114,8 +79,7 @@ pace = duration / 60 / distance  // minutes per km
 
 | Feature | Status | Priority | Effort |
 |---------|--------|----------|--------|
-| Aggregation Toggle (Daily/Weekly/Monthly/Yearly) | ✅ Implemented (tests pending) | High | Medium |
-| Tab System | ⏳ Pending | High | Medium |
+| Tab System | ✅ Implemented (navigation only) | High | Medium |
 | Scatter Plot (Distance vs Speed) | ⏳ Pending | High | Medium-High |
 
 **Total Estimated Effort:** ~2-3 sprints (depends on design refinement)
@@ -131,10 +95,8 @@ pace = duration / 60 / distance  // minutes per km
 ## Implementation Notes
 
 ### Order of Implementation:
-1. **First:** Add aggregation functions (Daily/Weekly/Monthly) and tests
-2. **Second:** Add toggle UI and integrate with existing chart
-3. **Third:** Create tab system
-4. **Fourth:** Add scatter plot visualization with speed calculations
+1. **First:** Create tab system
+2. **Second:** Add scatter plot visualization with speed calculations
 
 ### Design Consistency:
 - Use same color scheme as existing chart (Run=#EF4444, Bike=#14B8A6, Swim=#06B6D4)
@@ -160,6 +122,8 @@ pace = duration / 60 / distance  // minutes per km
 - [x] Timeframe filtering (12 weeks, 6 months, 1 year, 2 years, all)
 - [x] Remove Recent Activities widget
 - [x] Dashboard theme and styling
+- [x] Aggregation level toggle (Daily/Weekly/Monthly/Yearly)
+- [x] Tab system navigation (Total distance / Heartrate vs Pace)
 
 ---
 

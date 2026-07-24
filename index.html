@@ -10,6 +10,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- PapaParse for CSV parsing -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <!-- Tab navigation helpers -->
+  <script src="./tab-navigation.js"></script>
   <!-- Lucide Icons -->
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.344.0/dist/umd/lucide.min.js"></script>
   <style>
@@ -985,54 +987,20 @@
     }
 
     function setVisualizationTab(tabName, options = {}) {
-      const validTabs = ['totalDistance', 'heartratePace'];
-      if (!validTabs.includes(tabName)) return;
-
-      selectedVisualizationTab = tabName;
-
-      const isTotalDistance = tabName === 'totalDistance';
-      const totalDistanceBtn = document.getElementById('vizTabTotalDistance');
-      const heartratePaceBtn = document.getElementById('vizTabHeartratePace');
-      const totalDistancePanel = document.getElementById('vizPanelTotalDistance');
-      const heartratePacePanel = document.getElementById('vizPanelHeartratePace');
-
-      if (!totalDistanceBtn || !heartratePaceBtn || !totalDistancePanel || !heartratePacePanel) return;
-
-      totalDistanceBtn.setAttribute('aria-selected', isTotalDistance ? 'true' : 'false');
-      totalDistanceBtn.setAttribute('tabindex', isTotalDistance ? '0' : '-1');
-      totalDistanceBtn.className = isTotalDistance
-        ? 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25'
-        : 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200';
-
-      heartratePaceBtn.setAttribute('aria-selected', isTotalDistance ? 'false' : 'true');
-      heartratePaceBtn.setAttribute('tabindex', isTotalDistance ? '-1' : '0');
-      heartratePaceBtn.className = isTotalDistance
-        ? 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200'
-        : 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25';
-
-      totalDistancePanel.classList.toggle('hidden', !isTotalDistance);
-      heartratePacePanel.classList.toggle('hidden', isTotalDistance);
-
-      if (options.focusTab) {
-        (isTotalDistance ? totalDistanceBtn : heartratePaceBtn).focus();
+      const nextTab = window.dashboardTabNavigation.setVisualizationTab(tabName, options);
+      if (nextTab) {
+        selectedVisualizationTab = nextTab;
       }
     }
 
     function handleVisualizationTabKeydown(event, currentTab) {
-      const tabOrder = ['totalDistance', 'heartratePace'];
-      const currentIndex = tabOrder.indexOf(currentTab);
-      if (currentIndex === -1) return;
+      const nextTab = window.dashboardTabNavigation.handleVisualizationTabKeydown(event, currentTab, {
+        onTabChange: setVisualizationTab
+      });
 
-      let direction = 0;
-      if (event.key === 'ArrowRight') direction = 1;
-      if (event.key === 'ArrowLeft') direction = -1;
-      if (event.key === 'Tab') direction = event.shiftKey ? -1 : 1;
-
-      if (direction === 0) return;
-      event.preventDefault();
-
-      const nextIndex = (currentIndex + direction + tabOrder.length) % tabOrder.length;
-      setVisualizationTab(tabOrder[nextIndex], { focusTab: true });
+      if (nextTab) {
+        selectedVisualizationTab = nextTab;
+      }
     }
 
     // Aggregation level toggle
@@ -1067,6 +1035,10 @@
     });
 
     setVisualizationTab(selectedVisualizationTab);
+    const initialTabButton = document.getElementById('vizTabTotalDistance');
+    if (initialTabButton) {
+      initialTabButton.focus();
+    }
 
     // Start loading local CSV on page load
     loadLocalCsv();

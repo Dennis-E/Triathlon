@@ -122,22 +122,7 @@
           </div>
  
           <!-- Timeframe Selector -->
-          <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
-            <button onclick="setTimeframeFilter(12)" id="timeBtn12" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
-              12 Wks
-            </button>
-            <button onclick="setTimeframeFilter(26)" id="timeBtn26" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
-              6 Mos
-            </button>
-            <button onclick="setTimeframeFilter(52)" id="timeBtn52" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-slate-850 border border-slate-800 text-indigo-400">
-              1 Year
-            </button>
-            <button onclick="setTimeframeFilter(104)" id="timeBtn104" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
-              2 Years
-            </button>
-            <button onclick="setTimeframeFilter('all')" id="timeBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
-              All
-            </button>
+          <div id="timeframeSelector" class="flex flex-wrap bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
           </div>
         </div>
       </div>
@@ -232,9 +217,44 @@
     let rawCsvData = [];
     let processedActivities = [];
     let selectedSportFilter = 'All'; // 'All', 'Run', 'Bike', 'Swim'
-    let selectedTimeframeWeeks = 52; // 12, 26, 52, 104, 'all'
     let selectedAggregationLevel = 'weekly'; // 'daily', 'weekly', 'monthly', 'yearly'
+    let selectedTimeframeByAggregation = {
+      daily: '3m',
+      weekly: '1y',
+      monthly: '1y',
+      yearly: '5y'
+    };
     let chartInstance = null;
+
+    const TIMEFRAME_OPTIONS = {
+      daily: [
+        { key: '7d', label: '7 Days', amount: 7, unit: 'days' },
+        { key: '1m', label: '1 Month', amount: 1, unit: 'months' },
+        { key: '3m', label: '3 Months', amount: 3, unit: 'months' },
+        { key: '1y', label: '1 Year', amount: 1, unit: 'years' },
+        { key: 'all', label: 'All', all: true }
+      ],
+      weekly: [
+        { key: '3m', label: '3 Months', amount: 3, unit: 'months' },
+        { key: '6m', label: '6 Months', amount: 6, unit: 'months' },
+        { key: '1y', label: '1 Year', amount: 1, unit: 'years' },
+        { key: '2y', label: '2 Years', amount: 2, unit: 'years' },
+        { key: 'all', label: 'All', all: true }
+      ],
+      monthly: [
+        { key: '6m', label: '6 Months', amount: 6, unit: 'months' },
+        { key: '1y', label: '1 Year', amount: 1, unit: 'years' },
+        { key: '2y', label: '2 Years', amount: 2, unit: 'years' },
+        { key: '5y', label: '5 Years', amount: 5, unit: 'years' },
+        { key: 'all', label: 'All', all: true }
+      ],
+      yearly: [
+        { key: '3y', label: '3 Years', amount: 3, unit: 'years' },
+        { key: '5y', label: '5 Years', amount: 5, unit: 'years' },
+        { key: '10y', label: '10 Years', amount: 10, unit: 'years' },
+        { key: 'all', label: 'All', all: true }
+      ]
+    };
 
     // Standard Sport Categorization
     const SPORT_MAP = {
@@ -460,21 +480,40 @@
 
       updateStatusBadge('success', `Parsed ${processedActivities.length} activities`);
       
-      // Set the timeframe buttons layout on initial load
-      setBtnActive('timeBtn52');
+      // Set initial active controls
       setBtnActive('sportBtnAll');
+      renderTimeframeButtons();
       
       renderDashboard();
+    }
+
+    function getCurrentTimeframeOption() {
+      const options = TIMEFRAME_OPTIONS[selectedAggregationLevel] || [];
+      const selectedKey = selectedTimeframeByAggregation[selectedAggregationLevel];
+      const selectedOption = options.find(opt => opt.key === selectedKey);
+      return selectedOption || options[0] || { key: 'all', all: true };
+    }
+
+    function shiftDateByUnit(date, amount, unit) {
+      const shifted = new Date(date);
+      if (unit === 'days') {
+        shifted.setDate(shifted.getDate() - amount);
+      } else if (unit === 'months') {
+        shifted.setMonth(shifted.getMonth() - amount);
+      } else if (unit === 'years') {
+        shifted.setFullYear(shifted.getFullYear() - amount);
+      }
+      return shifted;
     }
 
     // Helper to derive a date range from the selected timeframe (always using weeks as horizon)
     function getTimeframeRange() {
       const maxDate = new Date(Math.max(...processedActivities.map(a => a.date)));
       const overallMinDate = new Date(Math.min(...processedActivities.map(a => a.date)));
+      const selectedTimeframe = getCurrentTimeframeOption();
 
-      if (typeof selectedTimeframeWeeks === 'number') {
-        const msPerWeek = 7 * 24 * 60 * 60 * 1000;
-        const proposedMin = new Date(maxDate.getTime() - selectedTimeframeWeeks * msPerWeek);
+      if (!selectedTimeframe.all) {
+        const proposedMin = shiftDateByUnit(maxDate, selectedTimeframe.amount, selectedTimeframe.unit);
         const minDate = proposedMin < overallMinDate ? overallMinDate : proposedMin;
         return { minDate, maxDate };
       }
@@ -489,10 +528,6 @@
     }
 
     function getWeeksInDisplayedHorizon() {
-      if (typeof selectedTimeframeWeeks === 'number') {
-        return selectedTimeframeWeeks;
-      }
-
       const { minDate, maxDate } = getTimeframeRange();
       const diffMs = maxDate - minDate;
       const weeks = Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000));
@@ -628,27 +663,14 @@
 
     // Aggregate by week (existing logic, adapted into helper)
     function aggregateActivitiesByWeek() {
-      // Find maximum Monday in dataset as ending point
-      const maxDate = new Date(Math.max(...processedActivities.map(a => a.date)));
+      const { minDate, maxDate } = getTimeframeRange();
       const lastMonday = getMonday(maxDate);
+      const firstMonday = getMonday(minDate);
 
-      // Generate sequence of weeks depending on timeframe selection
-      let numberOfWeeks = 52;
-      if (typeof selectedTimeframeWeeks === 'number') {
-        numberOfWeeks = selectedTimeframeWeeks;
-      } else {
-        // 'all' time: find earliest Monday
-        const minDate = new Date(Math.min(...processedActivities.map(a => a.date)));
-        const firstMonday = getMonday(minDate);
-        const diffMs = lastMonday - firstMonday;
-        numberOfWeeks = Math.max(1, Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000)) + 1);
-      }
-
-      // Generate the chronological array of weeks
       const weeksList = [];
-      for (let i = numberOfWeeks - 1; i >= 0; i--) {
-        const monday = new Date(lastMonday);
-        monday.setDate(lastMonday.getDate() - (i * 7));
+      const currentMonday = new Date(firstMonday);
+      while (currentMonday <= lastMonday) {
+        const monday = new Date(currentMonday);
         weeksList.push({
           date: monday,
           formattedLabel: formatDateLabel(monday),
@@ -657,12 +679,14 @@
           Bike: 0,
           Swim: 0
         });
+        currentMonday.setDate(currentMonday.getDate() + 7);
       }
 
       const activeWeeksKeys = new Set(weeksList.map(w => w.isoKey));
 
       // Filter activities inside this timeframe
-      const filteredActivities = processedActivities.filter(act => {
+      const timeframeActivities = getActivitiesInTimeframe();
+      const filteredActivities = timeframeActivities.filter(act => {
         const key = formatDateIso(act.monday);
         return activeWeeksKeys.has(key);
       });
@@ -888,16 +912,37 @@
       renderDashboard();
     }
 
-    function setTimeframeFilter(weeks) {
-      selectedTimeframeWeeks = weeks;
-
-      // Update Buttons State
-      document.querySelectorAll('[id^="timeBtn"]').forEach(btn => {
-        btn.className = "px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200";
-      });
-      setBtnActive(`timeBtn${weeks}`);
-
+    function setTimeframeFilter(timeframeKey) {
+      selectedTimeframeByAggregation[selectedAggregationLevel] = timeframeKey;
+      renderTimeframeButtons();
       renderDashboard();
+    }
+
+    function renderTimeframeButtons() {
+      const container = document.getElementById('timeframeSelector');
+      if (!container) return;
+
+      const options = TIMEFRAME_OPTIONS[selectedAggregationLevel] || [];
+      const selectedKey = selectedTimeframeByAggregation[selectedAggregationLevel];
+
+      if (!options.some(opt => opt.key === selectedKey) && options[0]) {
+        selectedTimeframeByAggregation[selectedAggregationLevel] = options[0].key;
+      }
+
+      const activeKey = selectedTimeframeByAggregation[selectedAggregationLevel];
+      container.innerHTML = '';
+
+      options.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.id = `timeBtn${opt.key}`;
+        btn.textContent = opt.label;
+        btn.className = opt.key === activeKey
+          ? 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25'
+          : 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200';
+        btn.addEventListener('click', () => setTimeframeFilter(opt.key));
+        container.appendChild(btn);
+      });
     }
 
     // Aggregation level toggle
@@ -910,6 +955,8 @@
       });
       const btnId = `aggBtn${level.charAt(0).toUpperCase() + level.slice(1)}`;
       setBtnActive(btnId);
+
+      renderTimeframeButtons();
 
       renderDashboard();
     }

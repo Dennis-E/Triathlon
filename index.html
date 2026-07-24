@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Youth Training Dashboard - MVP</title>
+  <title>Training Dashboard - MVP</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Chart.js -->
@@ -40,7 +40,7 @@
       </div>
       <div>
         <h1 class="font-bold text-lg leading-tight tracking-tight">Triathlon Training Dashboard</h1>
-        <p class="text-xs text-slate-400">Youth Endurance Performance Analytics</p>
+        <p class="text-xs text-slate-400">Endurance Performance Analytics</p>
       </div>
     </div>
     <div class="flex items-center space-x-4">
@@ -85,8 +85,7 @@
       <!-- Chart Controls Header -->
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
         <div class="space-y-1">
-          <h2 class="text-lg font-bold tracking-tight">Training Volume</h2>
-          <p class="text-xs text-slate-400" id="volumeDescription">Aggregated mileage per sport category</p>
+          <h2 class="text-2xl font-bold tracking-tight">Total distance</h2>
         </div>
  
         <div class="flex flex-wrap items-center gap-4">
@@ -222,7 +221,7 @@
   </main>
 
   <footer class="border-t border-slate-900 bg-slate-950/70 py-3 px-6 text-center text-[11px] text-slate-500 shrink-0">
-    Youth Training Dashboard MVP • Local Offline Processing (No internet transmission of your personal files)
+    Training Dashboard MVP • Local Offline Processing (No internet transmission of your personal files)
   </footer>
 
   <script>
@@ -911,18 +910,6 @@
       });
       const btnId = `aggBtn${level.charAt(0).toUpperCase() + level.slice(1)}`;
       setBtnActive(btnId);
-
-      // Update description based on level
-      const descriptions = {
-        daily: 'Daily training activity volume',
-        weekly: 'Aggregated mileage per sport category',
-        monthly: 'Monthly training summary',
-        yearly: 'Yearly training summary'
-      };
-      const descEl = document.getElementById('volumeDescription');
-      if (descEl && descriptions[level]) {
-        descEl.textContent = descriptions[level];
-      }
 
       renderDashboard();
     }

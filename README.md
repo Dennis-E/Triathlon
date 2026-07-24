@@ -1,6 +1,6 @@
-# Youth Training Dashboard
+# Training Dashboard
 
-A web-based application where youth athletes can upload their Strava data export and explore visualizations of their long-term training effort. The focus is on endurance sports (running, cycling, swimming, etc.) and on building healthy, sustainable training habits, not on social or commercial aspects of Strava.
+A web-based application where athletes can upload their Strava data export and explore visualizations of their long-term training effort. The focus is on endurance sports (running, cycling, swimming, etc.) and on building healthy, sustainable training habits, not on social or commercial aspects of Strava.
 
 ## Project Overview
 
@@ -8,7 +8,7 @@ This project will:
 
 - Accept Strava data exports (the ZIP file that Strava provides via "Download your data").
 - Parse the exported files that contain training and athlete information.
-- Provide interactive visualizations of long-term training effort for youth athletes.
+- Provide interactive visualizations of long-term training effort for athletes.
 - Ignore non-training data (social interactions, marketing, etc.) at ingest time.
 
 The repository currently includes an example Strava export in `Data/Dennis/export_39173135/` that will be used to design and validate the data model and visualizations.
@@ -17,7 +17,7 @@ The repository currently includes an example Strava export in `Data/Dennis/expor
 
 Target users:
 
-- Youth athletes (triathlon / running).
+- Athletes (triathlon / running).
 - Coaches and parents who want to monitor training volume and trends over months and years.
 
 Key questions this dashboard should answer:
@@ -209,7 +209,7 @@ Planned functionality for the web app:
 
 - Athlete and Coach Views:
   - Athlete perspective: personal dashboard.
-  - Coach perspective: view multiple youth athletes and compare training blocks.
+  - Coach perspective: view multiple athletes and compare training blocks.
 
 ## Roadmap (Conceptual Plan Only)
 
@@ -247,7 +247,7 @@ This section describes the plan; no implementation is done yet.
    - Athlete/coach views.
 
 5. Privacy and Safeguards  
-   Add clear consent and terms for youth athletes.  
+   Add clear consent and terms for athletes.  
    Avoid storing or showing unnecessary personal data.  
    Respect Strava's export semantics and any local privacy regulations.
 
@@ -256,7 +256,7 @@ This section describes the plan; no implementation is done yet.
 Even though we ignore social and commercial data:
 
 - The export still contains personal information (name, email, home area via privacy zones).
-- Youth athletes require special care:
+- Athletes require special care:
   - Limit who can see detailed data.
   - Provide a way to delete uploads.
   - Consider aggregating or anonymizing location information.

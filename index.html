@@ -12,6 +12,8 @@
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <!-- Tab navigation helpers -->
   <script src="./tab-navigation.js"></script>
+  <!-- Scatter chart helpers -->
+  <script src="./scatter-utils.js"></script>
   <!-- Lucide Icons -->
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.344.0/dist/umd/lucide.min.js"></script>
   <style>
@@ -29,6 +31,40 @@
     }
     ::-webkit-scrollbar-thumb:hover {
       background: #64748b;
+    }
+
+    .dual-range input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      background: transparent;
+      pointer-events: none;
+    }
+
+    .dual-range input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      border: 2px solid #0f172a;
+      background: #6366f1;
+      pointer-events: auto;
+      cursor: pointer;
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35);
+    }
+
+    .dual-range input[type="range"]::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      border: 2px solid #0f172a;
+      background: #6366f1;
+      pointer-events: auto;
+      cursor: pointer;
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35);
     }
   </style>
 </head>
@@ -238,7 +274,38 @@
       </div>
 
       <div id="vizPanelHeartratePace" role="tabpanel" aria-labelledby="vizTabHeartratePace" class="hidden">
-        <div class="min-h-[420px]"></div>
+        <div class="space-y-5">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+            <div class="space-y-1">
+              <h2 class="text-2xl font-bold tracking-tight">Heartrate vs Pace</h2>
+              <p id="scatterPointCount" class="text-xs text-slate-400">0 sessions</p>
+            </div>
+
+            <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+              <button onclick="setScatterSportFilter('All')" id="scatterSportBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">All Sports</button>
+              <button onclick="setScatterSportFilter('Run')" id="scatterSportBtnRun" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">Run</button>
+              <button onclick="setScatterSportFilter('Bike')" id="scatterSportBtnBike" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Bike</button>
+              <button onclick="setScatterSportFilter('Swim')" id="scatterSportBtnSwim" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Swim</button>
+            </div>
+          </div>
+
+          <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
+            <div class="flex items-center justify-between text-xs text-slate-400">
+              <span>Date range</span>
+              <span id="scatterRangeLabel">All</span>
+            </div>
+            <div class="relative h-7 dual-range">
+              <div class="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 bg-slate-800 rounded-full"></div>
+              <div id="scatterRangeSelectedTrack" class="absolute top-1/2 -translate-y-1/2 h-1 bg-indigo-500 rounded-full" style="left:0%; right:0%;"></div>
+              <input id="scatterDateStart" type="range" oninput="setScatterDateRange('start', this.value)">
+              <input id="scatterDateEnd" type="range" oninput="setScatterDateRange('end', this.value)">
+            </div>
+          </div>
+
+          <div class="relative w-full h-[420px] md:h-[500px]">
+            <canvas id="heartratePaceChart"></canvas>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -259,6 +326,10 @@
     let selectedSportFilter = 'All'; // 'All', 'Run', 'Bike', 'Swim'
     let selectedAggregationLevel = 'weekly'; // 'daily', 'weekly', 'monthly', 'yearly'
     let selectedVisualizationTab = 'totalDistance'; // 'totalDistance', 'heartratePace'
+    let selectedScatterSportFilter = 'Run';
+    let scatterChartInstance = null;
+    let scatterDateRange = { start: 0, end: 0 };
+    let scatterDateCandidates = [];
     let selectedTimeframeByAggregation = {
       daily: '3m',
       weekly: '1y',
@@ -356,6 +427,21 @@
       return `${m}m`;
     }
 
+    function formatPaceLabel(minPerKm) {
+      if (!Number.isFinite(minPerKm) || minPerKm <= 0) return '--';
+      const min = Math.floor(minPerKm);
+      const sec = Math.round((minPerKm - min) * 60);
+      return `${min}:${String(sec).padStart(2, '0')} /km`;
+    }
+
+    function formatShortDate(date) {
+      if (!(date instanceof Date)) return '--';
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
     // Main local loader
     async function loadLocalCsv() {
       const path = './Data/Dennis/export_39173135/activities.csv';
@@ -442,6 +528,12 @@
       const sportIdx = headers.indexOf('Aktivitätsart');
       const nameIdx = headers.indexOf('Name der Aktivität');
       const durationIdx = headers.indexOf('Bewegungszeit'); // Moving time is better than elapsed time
+      const avgHeartRateIdx = headers.findIndex(h => {
+        if (!h) return false;
+        const normalized = String(h).toLowerCase();
+        return (normalized.includes('herz') || normalized.includes('heart')) &&
+          (normalized.includes('durch') || normalized.includes('avg') || normalized.includes('durchschnitt'));
+      });
 
       // Find 'Distanz' columns (index 17 is usually the dot-formatted meters)
       const distIndices = [];
@@ -503,6 +595,9 @@
         }
 
         const name = row[nameIdx] || 'Activity';
+        const avgHeartRate = avgHeartRateIdx !== -1
+          ? window.scatterUtils.parseLocalizedNumber(row[avgHeartRateIdx])
+          : null;
 
         processedActivities.push({
           id: row[0],
@@ -512,6 +607,7 @@
           sport: sportCategory, // 'Run', 'Bike', 'Swim' or null
           distance: distKm,
           duration: durationSeconds,
+          avgHeartRate: avgHeartRate,
           name: name
         });
       }
@@ -523,9 +619,244 @@
       
       // Set initial active controls
       setBtnActive('sportBtnAll');
+      setScatterSportBtnActive('scatterSportBtnRun');
       renderTimeframeButtons();
+      initScatterDateSlider();
       
       renderDashboard();
+      renderHeartratePaceChart();
+    }
+
+    function initScatterDateSlider() {
+      const startInput = document.getElementById('scatterDateStart');
+      const endInput = document.getElementById('scatterDateEnd');
+      if (!startInput || !endInput) return;
+
+      const uniqueIsoDates = Array.from(new Set(processedActivities.map(a => formatDateIso(a.date)))).sort();
+      scatterDateCandidates = uniqueIsoDates.map(iso => {
+        const [y, m, d] = iso.split('-').map(Number);
+        return new Date(y, m - 1, d);
+      });
+
+      if (scatterDateCandidates.length === 0) {
+        scatterDateCandidates = [new Date()];
+      }
+
+      const maxIndex = scatterDateCandidates.length - 1;
+      scatterDateRange.start = 0;
+      scatterDateRange.end = maxIndex;
+
+      startInput.min = '0';
+      endInput.min = '0';
+      startInput.max = String(maxIndex);
+      endInput.max = String(maxIndex);
+      startInput.step = '1';
+      endInput.step = '1';
+      startInput.value = '0';
+      endInput.value = String(maxIndex);
+
+      updateScatterDateRangeLabel();
+      updateScatterDateRangeTrack();
+    }
+
+    function updateScatterDateRangeLabel() {
+      const label = document.getElementById('scatterRangeLabel');
+      if (!label || scatterDateCandidates.length === 0) return;
+
+      const startDate = scatterDateCandidates[scatterDateRange.start];
+      const endDate = scatterDateCandidates[scatterDateRange.end];
+      const isAll = scatterDateRange.start === 0 && scatterDateRange.end === scatterDateCandidates.length - 1;
+      label.textContent = isAll
+        ? 'All'
+        : `${formatShortDate(startDate)} to ${formatShortDate(endDate)}`;
+    }
+
+    function getScatterDateBounds() {
+      if (scatterDateCandidates.length === 0) return { minDate: null, maxDate: null };
+      const minDate = scatterDateCandidates[scatterDateRange.start];
+      const maxDate = new Date(scatterDateCandidates[scatterDateRange.end]);
+      maxDate.setHours(23, 59, 59, 999);
+      return { minDate, maxDate };
+    }
+
+    function setScatterDateRange(boundary, value) {
+      const parsed = parseInt(value, 10);
+      if (Number.isNaN(parsed)) return;
+
+      if (boundary === 'start') {
+        scatterDateRange.start = Math.max(0, Math.min(parsed, scatterDateRange.end));
+      } else {
+        const maxIndex = scatterDateCandidates.length - 1;
+        scatterDateRange.end = Math.min(maxIndex, Math.max(parsed, scatterDateRange.start));
+      }
+
+      const startInput = document.getElementById('scatterDateStart');
+      const endInput = document.getElementById('scatterDateEnd');
+      if (startInput) startInput.value = String(scatterDateRange.start);
+      if (endInput) endInput.value = String(scatterDateRange.end);
+
+      updateScatterDateRangeLabel();
+      updateScatterDateRangeTrack();
+      renderHeartratePaceChart();
+    }
+
+    function updateScatterDateRangeTrack() {
+      const track = document.getElementById('scatterRangeSelectedTrack');
+      if (!track || scatterDateCandidates.length === 0) return;
+
+      const maxIndex = Math.max(1, scatterDateCandidates.length - 1);
+      const leftPct = (scatterDateRange.start / maxIndex) * 100;
+      const rightPct = 100 - ((scatterDateRange.end / maxIndex) * 100);
+
+      track.style.left = `${leftPct}%`;
+      track.style.right = `${rightPct}%`;
+    }
+
+    function setScatterSportBtnActive(btnId) {
+      document.querySelectorAll('[id^="scatterSportBtn"]').forEach(btn => {
+        btn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200';
+      });
+      const btn = document.getElementById(btnId);
+      if (btn) {
+        btn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25';
+      }
+    }
+
+    function setScatterSportFilter(sport) {
+      selectedScatterSportFilter = sport;
+      setScatterSportBtnActive(`scatterSportBtn${sport}`);
+      renderHeartratePaceChart();
+    }
+
+    function renderHeartratePaceChart() {
+      const canvas = document.getElementById('heartratePaceChart');
+      if (!canvas) return;
+
+      const { minDate, maxDate } = getScatterDateBounds();
+      const points = window.scatterUtils.getHeartratePacePoints(processedActivities, {
+        sport: selectedScatterSportFilter,
+        minDate,
+        maxDate
+      });
+
+      const countEl = document.getElementById('scatterPointCount');
+      if (countEl) {
+        countEl.textContent = `${points.length} sessions`;
+      }
+
+      const durationValues = points.map(p => p.duration).filter(v => Number.isFinite(v) && v > 0);
+      const minDuration = durationValues.length > 0 ? Math.min(...durationValues) : 0;
+      const maxDuration = durationValues.length > 0 ? Math.max(...durationValues) : 0;
+
+      const sportColor = {
+        Run: '#EF4444',
+        Bike: '#14B8A6',
+        Swim: '#06B6D4'
+      };
+
+      const sportsToRender = selectedScatterSportFilter === 'All'
+        ? ['Run', 'Bike', 'Swim']
+        : [selectedScatterSportFilter];
+
+      const bubbleDatasets = sportsToRender.map(sport => {
+        const filtered = points.filter(p => p.sport === sport);
+        return {
+          type: 'bubble',
+          label: sport,
+          data: filtered.map(p => ({
+            x: p.x,
+            y: p.y,
+            r: window.scatterUtils.calculateBubbleRadius(p.duration, minDuration, maxDuration),
+            meta: p
+          })),
+          backgroundColor: `${sportColor[sport]}AA`,
+          borderColor: sportColor[sport],
+          borderWidth: 1.2
+        };
+      });
+
+      const regressionDatasets = window.scatterUtils.buildYearlyRegressionDatasets(points, [
+        '#F59E0B', '#A78BFA', '#F97316', '#22D3EE', '#84CC16'
+      ]);
+
+      if (scatterChartInstance) {
+        scatterChartInstance.destroy();
+      }
+
+      const ctx = canvas.getContext('2d');
+      scatterChartInstance = new Chart(ctx, {
+        type: 'bubble',
+        data: {
+          datasets: [...bubbleDatasets, ...regressionDatasets]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: {
+                color: '#94A3B8',
+                font: { size: 11, weight: '500' },
+                boxWidth: 12,
+                usePointStyle: true,
+                pointStyle: 'circle'
+              }
+            },
+            tooltip: {
+              backgroundColor: '#0F172A',
+              titleColor: '#F8FAFC',
+              bodyColor: '#94A3B8',
+              borderColor: '#334155',
+              borderWidth: 1,
+              callbacks: {
+                title: function(items) {
+                  const first = items[0];
+                  if (!first || !first.raw || !first.raw.meta) return first.dataset.label;
+                  return first.raw.meta.name;
+                },
+                label: function(context) {
+                  if (context.dataset.type === 'line') return context.dataset.label;
+                  const meta = context.raw.meta;
+                  return [
+                    `Pace: ${formatPaceLabel(meta.x)}`,
+                    `Heartrate: ${meta.y.toFixed(0)} bpm`,
+                    `Distance: ${meta.distance.toFixed(1)} km`,
+                    `Duration: ${formatDuration(meta.duration)}`,
+                    `Date: ${formatShortDate(meta.date)}`
+                  ];
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              reverse: true,
+              title: {
+                display: true,
+                text: 'Pace (min/km)',
+                color: '#94A3B8'
+              },
+              grid: { color: '#1E293B' },
+              ticks: {
+                color: '#64748B',
+                callback: function(value) {
+                  return formatPaceLabel(value).replace(' /km', '');
+                }
+              }
+            },
+            y: {
+              title: {
+                display: true,
+                text: 'Average Heartrate (bpm)',
+                color: '#94A3B8'
+              },
+              grid: { color: '#1E293B' },
+              ticks: { color: '#64748B' }
+            }
+          }
+        }
+      });
     }
 
     function getCurrentTimeframeOption() {
@@ -990,6 +1321,9 @@
       const nextTab = window.dashboardTabNavigation.setVisualizationTab(tabName, options);
       if (nextTab) {
         selectedVisualizationTab = nextTab;
+        if (nextTab === 'heartratePace') {
+          renderHeartratePaceChart();
+        }
       }
     }
 

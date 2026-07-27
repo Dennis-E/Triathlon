@@ -1,138 +1,22 @@
-# TODO - Training Dashboard Features
+# TODO
 
-## Visualization Enhancements
+## Strava Ingest
+- Strava-ZIP-Export einlesen (activities.csv + Mediendateien) per Drag & Drop oder Dateiauswahl.
+- Geparste Daten im LocalStorage/IndexedDB cachen, damit kein Re-Upload nötig ist.
+- Mehrere Athleten-Profile verwalten (Profilwechsel in der Landing Page).
 
-### 1. Tab System for Visualizations
-**Status:** ✅ Implemented (navigation only; second tab content pending)  
-**Priority:** High  
-**Description:** Add tabs to switch between different chart visualizations.
+## Visualisierungen
+- Herzfrequenz-Trend über Zeit als Liniendiagramm (Aerobic-Entwicklung).
+- Elevationsprofil und Höhenmeter-Analyse pro Sport.
+- Trainingsbelastungs-Verteilung (Easy / Moderate / Hard nach Puls-Zonen).
+- Saison-Vergleich: mehrere Jahre überlagert in einem Chart.
 
-**Requirements:**
-- Create tab navigation at the top of main chart area
-- Tab 1: "Training Volume" (current bar chart)
-- Tab 2: "Performance Analysis" (for scatter plot)
-- Only one tab active at a time
-- Tabs should be styled consistently with dashboard theme
-- Sport filter applies to all tabs
-- Timeframe filter applies to all tabs
+## Landing Page
+- Echte Canvas-Screenshots der Charts als Vorschaubilder (html2canvas oder ähnlich).
+- Kurze Live-Stats auf den Karten (letzte Aktivität, Gesamtkilometer).
 
-**Files to modify:**
-- `index.html` - Add tab UI structure
-- Dashboard script - Add tab switching logic
-
-**Test requirements:**
-- [ ] Integration test for tab switching
-- [ ] Verify correct chart renders for each tab
-
----
-
-### 2. Scatter Plot: Distance vs Speed Analysis
-**Status:** ⏳ Pending  
-**Priority:** High  
-**Description:** Create second visualization showing the relationship between activity length (distance) and speed (pace/avg speed).
-
-**Requirements:**
-
-#### Chart Design:
-- **X-axis:** Distance (km)
-- **Y-axis:** Average Speed (km/h) or Pace (min/km)
-- **Points:** Individual activities as dots
-- **Colors:** By sport (Run=Red, Bike=Teal, Swim=Cyan)
-- **Size:** Optional - bubble size could represent duration
-- **Tooltip:** Show activity name, date, distance, speed, duration on hover
-
-#### Functionality:
-- Include sport type selector (All, Run, Bike, Swim)
-- Respect timeframe filter (12 weeks, 6 months, 1 year, 2 years, all)
-- Show activity count in header
-- Highlight outliers (unusually fast/slow or long/short activities)
-- Optional: Add trend line per sport type
-
-#### Data Requirements:
-- Need to calculate speed from distance and moving time
-- Handle cases where duration is 0 (avoid div by zero)
-- Only include activities with valid distance and duration data
-
-**Calculations needed:**
-```javascript
-// Average speed (km/h)
-avgSpeed = (distance / duration) * 3.6  // if duration in seconds
-
-// Or pace (min/km)
-pace = duration / 60 / distance  // minutes per km
-```
-
-**Files to modify:**
-- `index.html` - Add scatter plot canvas/container
-- `dashboard-utils.js` - Add speed calculation functions
-- Chart.js integration for scatter plot
-
-**Test requirements:**
-- Unit test for speed calculation: `calculateSpeed(distance, duration)`
-- Unit test for pace calculation: `calculatePace(distance, duration)`
-- Unit test filtering by sport on scatter plot
-- Integration test: load CSV → display scatter plot with correct points
-
----
-
-## Summary
-
-| Feature | Status | Priority | Effort |
-|---------|--------|----------|--------|
-| Tab System | ✅ Implemented (navigation only) | High | Medium |
-| Scatter Plot (Distance vs Speed) | ⏳ Pending | High | Medium-High |
-
-**Total Estimated Effort:** ~2-3 sprints (depends on design refinement)
-
-**Testing Strategy:**
-1. Write tests first (TDD approach)
-2. Unit tests for new utility functions
-3. Integration tests for complete workflows
-4. All tests must pass before commits
-
----
-
-## Implementation Notes
-
-### Order of Implementation:
-1. **First:** Create tab system
-2. **Second:** Add scatter plot visualization with speed calculations
-
-### Design Consistency:
-- Use same color scheme as existing chart (Run=#EF4444, Bike=#14B8A6, Swim=#06B6D4)
-- Match button styling (sport filters, timeframe controls)
-- Keep dark theme (Tailwind: bg-slate-900, text-slate-100)
-- Responsive design (mobile-friendly)
-
-### Performance Considerations:
-- Cache calculations for different aggregation levels
-- Lazy-load second visualization only when tab is active
-- Limit scatter plot to max 1000 points for performance
-- Consider pagination or data sampling for very large datasets
-
----
-
-## Done ✅
-
-- [x] TDD Setup with Jest (77 tests passing)
-- [x] CSV parsing and data processing utilities
-- [x] Weekly aggregation for training volume
-- [x] Weekly training volume bar chart with filters
-- [x] Sport category filtering (Run, Bike, Swim)
-- [x] Timeframe filtering (12 weeks, 6 months, 1 year, 2 years, all)
-- [x] Remove Recent Activities widget
-- [x] Dashboard theme and styling
-- [x] Aggregation level toggle (Daily/Weekly/Monthly/Yearly)
-- [x] Tab system navigation (Total distance / Heartrate vs Pace)
-
----
-
-## Backlog / Future Ideas
-
-- Heart rate trends over time
-- Elevation gain analysis
-- Training load distribution (easy vs hard sessions)
-- Gear usage tracking (shoe/bike mileage)
-- Season/build-up comparison
-- Coach view (multiple athletes)
-- Data export (CSV, PDF)
+## Allgemein
+- Dark-/Light-Mode-Toggle.
+- Datenexport als CSV oder PDF-Report.
+- Coach-Ansicht: mehrere Athleten parallel analysieren.
+- PWA-Support (offline-fähig, installierbar).

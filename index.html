@@ -73,15 +73,15 @@
 
   <!-- Header -->
   <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur px-6 py-4 flex items-center justify-between shrink-0">
-    <div class="flex items-center space-x-3">
+    <button type="button" onclick="goToLanding()" class="flex items-center space-x-3 hover:opacity-80 transition-opacity cursor-pointer">
       <div class="bg-indigo-600 p-2 rounded-lg text-white">
         <i data-lucide="activity" class="w-6 h-6"></i>
       </div>
-      <div>
+      <div class="text-left">
         <h1 class="font-bold text-lg leading-tight tracking-tight">Triathlon Training Dashboard</h1>
         <p class="text-xs text-slate-400">Endurance Performance Analytics</p>
       </div>
-    </div>
+    </button>
     <div class="flex items-center space-x-4">
       <div id="statusBadge" class="flex items-center space-x-2 text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 rounded-full">
         <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
@@ -115,8 +115,225 @@
     </div>
   </div>
 
+  <!-- Landing Page -->
+  <div id="landingPage" class="flex-1 overflow-y-auto p-6 md:p-10 flex flex-col items-center">
+
+    <!-- Hero -->
+    <div class="text-center max-w-2xl mb-10 mt-4">
+      <h2 class="text-3xl font-bold tracking-tight mb-3">Dein Triathlon-Analyse-Dashboard</h2>
+      <p class="text-slate-400 text-sm leading-relaxed">Lade deinen Strava-Export und analysiere Training, Herzfrequenz, Pace und Ausrüstung – direkt im Browser, ohne Server.</p>
+    </div>
+
+    <!-- Strava Ingest Button -->
+    <div class="mb-12">
+      <button
+        id="stravaIngestBtn"
+        type="button"
+        onclick="handleStravaIngest()"
+        class="inline-flex items-center space-x-2.5 bg-[#FC4C02] hover:bg-[#e04402] active:bg-[#c73d02] text-white font-semibold px-6 py-3 rounded-xl shadow-lg shadow-orange-600/20 transition text-sm"
+      >
+        <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L8.22 0 3 9.828h4.172"/>
+        </svg>
+        <span>Strava Ingest</span>
+      </button>
+    </div>
+
+    <!-- Tab Preview Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl">
+
+      <!-- Card: Total Distance -->
+      <button
+        type="button"
+        onclick="openDashboardTab('totalDistance')"
+        class="group bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden text-left hover:border-indigo-500/60 hover:shadow-xl hover:shadow-indigo-500/10 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      >
+        <!-- Preview mockup -->
+        <div class="bg-slate-950 p-4 h-44 flex flex-col justify-between border-b border-slate-800 overflow-hidden relative">
+          <!-- Mini tab bar -->
+          <div class="flex items-center space-x-1 mb-3">
+            <span class="bg-indigo-600 text-white text-[9px] font-medium px-2 py-0.5 rounded">Total distance</span>
+            <span class="text-slate-600 text-[9px] font-medium px-2 py-0.5 rounded">Heartrate</span>
+            <span class="text-slate-600 text-[9px] font-medium px-2 py-0.5 rounded">Equipment</span>
+          </div>
+          <!-- Fake bar chart -->
+          <div class="flex items-end gap-0.5 flex-1 px-1">
+            <div class="flex-1 flex flex-col justify-end gap-0">
+              <div class="w-full rounded-sm" style="height:30%;background:#EF4444;opacity:0.85"></div>
+              <div class="w-full rounded-sm" style="height:45%;background:#14B8A6;opacity:0.85"></div>
+            </div>
+            <div class="flex-1 flex flex-col justify-end gap-0">
+              <div class="w-full rounded-sm" style="height:20%;background:#EF4444;opacity:0.85"></div>
+              <div class="w-full rounded-sm" style="height:60%;background:#14B8A6;opacity:0.85"></div>
+            </div>
+            <div class="flex-1 flex flex-col justify-end gap-0">
+              <div class="w-full rounded-sm" style="height:55%;background:#EF4444;opacity:0.85"></div>
+              <div class="w-full rounded-sm" style="height:25%;background:#14B8A6;opacity:0.85"></div>
+            </div>
+            <div class="flex-1 flex flex-col justify-end gap-0">
+              <div class="w-full rounded-sm" style="height:40%;background:#EF4444;opacity:0.85"></div>
+              <div class="w-full rounded-sm" style="height:50%;background:#14B8A6;opacity:0.85"></div>
+            </div>
+            <div class="flex-1 flex flex-col justify-end gap-0">
+              <div class="w-full rounded-sm" style="height:70%;background:#EF4444;opacity:0.85"></div>
+              <div class="w-full rounded-sm" style="height:20%;background:#14B8A6;opacity:0.85"></div>
+            </div>
+            <div class="flex-1 flex flex-col justify-end gap-0">
+              <div class="w-full rounded-sm" style="height:35%;background:#EF4444;opacity:0.85"></div>
+              <div class="w-full rounded-sm" style="height:55%;background:#14B8A6;opacity:0.85"></div>
+            </div>
+            <div class="flex-1 flex flex-col justify-end gap-0">
+              <div class="w-full rounded-sm" style="height:50%;background:#EF4444;opacity:0.85"></div>
+              <div class="w-full rounded-sm" style="height:35%;background:#14B8A6;opacity:0.85"></div>
+            </div>
+            <div class="flex-1 flex flex-col justify-end gap-0">
+              <div class="w-full rounded-sm" style="height:25%;background:#EF4444;opacity:0.85"></div>
+              <div class="w-full rounded-sm" style="height:65%;background:#14B8A6;opacity:0.85"></div>
+            </div>
+            <div class="flex-1 flex flex-col justify-end gap-0">
+              <div class="w-full rounded-sm" style="height:60%;background:#EF4444;opacity:0.85"></div>
+              <div class="w-full rounded-sm" style="height:30%;background:#14B8A6;opacity:0.85"></div>
+            </div>
+            <div class="flex-1 flex flex-col justify-end gap-0">
+              <div class="w-full rounded-sm" style="height:45%;background:#EF4444;opacity:0.85"></div>
+              <div class="w-full rounded-sm" style="height:45%;background:#14B8A6;opacity:0.85"></div>
+            </div>
+            <div class="flex-1 flex flex-col justify-end gap-0">
+              <div class="w-full rounded-sm" style="height:80%;background:#EF4444;opacity:0.85"></div>
+              <div class="w-full rounded-sm" style="height:15%;background:#14B8A6;opacity:0.85"></div>
+            </div>
+            <div class="flex-1 flex flex-col justify-end gap-0">
+              <div class="w-full rounded-sm" style="height:55%;background:#EF4444;opacity:0.85"></div>
+              <div class="w-full rounded-sm" style="height:40%;background:#14B8A6;opacity:0.85"></div>
+            </div>
+          </div>
+          <!-- Hover overlay -->
+          <div class="absolute inset-0 bg-indigo-600/0 group-hover:bg-indigo-600/5 transition-all flex items-center justify-center">
+            <span class="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-semibold text-indigo-300 bg-slate-900/80 px-3 py-1.5 rounded-lg border border-indigo-500/30">Öffnen →</span>
+          </div>
+        </div>
+        <div class="p-4 space-y-0.5">
+          <h3 class="font-semibold text-sm group-hover:text-indigo-300 transition-colors">Total Distance</h3>
+          <p class="text-xs text-slate-500">Trainingsvolumen nach Sport &amp; Zeitraum</p>
+        </div>
+      </button>
+
+      <!-- Card: Heartrate vs Pace -->
+      <button
+        type="button"
+        onclick="openDashboardTab('heartratePace')"
+        class="group bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden text-left hover:border-indigo-500/60 hover:shadow-xl hover:shadow-indigo-500/10 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      >
+        <div class="bg-slate-950 p-4 h-44 flex flex-col justify-between border-b border-slate-800 overflow-hidden relative">
+          <!-- Mini tab bar -->
+          <div class="flex items-center space-x-1 mb-3">
+            <span class="text-slate-600 text-[9px] font-medium px-2 py-0.5 rounded">Total distance</span>
+            <span class="bg-indigo-600 text-white text-[9px] font-medium px-2 py-0.5 rounded">Heartrate</span>
+            <span class="text-slate-600 text-[9px] font-medium px-2 py-0.5 rounded">Equipment</span>
+          </div>
+          <!-- Fake scatter chart: bubbles -->
+          <div class="flex-1 relative">
+            <!-- axis lines -->
+            <div class="absolute bottom-0 left-0 right-0 h-px bg-slate-800"></div>
+            <div class="absolute bottom-0 top-0 left-0 w-px bg-slate-800"></div>
+            <!-- Run bubbles (red) -->
+            <div class="absolute rounded-full bg-[#EF4444] opacity-70" style="width:10px;height:10px;bottom:55%;left:20%"></div>
+            <div class="absolute rounded-full bg-[#EF4444] opacity-70" style="width:14px;height:14px;bottom:50%;left:30%"></div>
+            <div class="absolute rounded-full bg-[#EF4444] opacity-70" style="width:8px;height:8px;bottom:60%;left:40%"></div>
+            <div class="absolute rounded-full bg-[#EF4444] opacity-70" style="width:12px;height:12px;bottom:45%;left:50%"></div>
+            <div class="absolute rounded-full bg-[#EF4444] opacity-70" style="width:16px;height:16px;bottom:40%;left:60%"></div>
+            <div class="absolute rounded-full bg-[#EF4444] opacity-70" style="width:9px;height:9px;bottom:65%;left:70%"></div>
+            <!-- Trend line (red) -->
+            <svg class="absolute inset-0 w-full h-full" preserveAspectRatio="none">
+              <line x1="18%" y1="42%" x2="75%" y2="30%" stroke="#EF4444" stroke-width="1" stroke-dasharray="3,2" opacity="0.5"/>
+            </svg>
+            <!-- Bike bubbles (teal) -->
+            <div class="absolute rounded-full bg-[#14B8A6] opacity-70" style="width:18px;height:18px;bottom:20%;left:25%"></div>
+            <div class="absolute rounded-full bg-[#14B8A6] opacity-70" style="width:12px;height:12px;bottom:25%;left:45%"></div>
+            <div class="absolute rounded-full bg-[#14B8A6] opacity-70" style="width:20px;height:20px;bottom:15%;left:65%"></div>
+          </div>
+          <div class="absolute inset-0 bg-indigo-600/0 group-hover:bg-indigo-600/5 transition-all flex items-center justify-center">
+            <span class="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-semibold text-indigo-300 bg-slate-900/80 px-3 py-1.5 rounded-lg border border-indigo-500/30">Öffnen →</span>
+          </div>
+        </div>
+        <div class="p-4 space-y-0.5">
+          <h3 class="font-semibold text-sm group-hover:text-indigo-300 transition-colors">Heartrate vs Pace</h3>
+          <p class="text-xs text-slate-500">Bubble-Chart: Pace, Herzfrequenz &amp; Trendlinien</p>
+        </div>
+      </button>
+
+      <!-- Card: Equipment -->
+      <button
+        type="button"
+        onclick="openDashboardTab('equipment')"
+        class="group bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden text-left hover:border-indigo-500/60 hover:shadow-xl hover:shadow-indigo-500/10 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      >
+        <div class="bg-slate-950 p-4 h-44 flex flex-col justify-between border-b border-slate-800 overflow-hidden relative">
+          <!-- Mini tab bar -->
+          <div class="flex items-center space-x-1 mb-3">
+            <span class="text-slate-600 text-[9px] font-medium px-2 py-0.5 rounded">Total distance</span>
+            <span class="text-slate-600 text-[9px] font-medium px-2 py-0.5 rounded">Heartrate</span>
+            <span class="bg-indigo-600 text-white text-[9px] font-medium px-2 py-0.5 rounded">Equipment</span>
+          </div>
+          <!-- Fake horizontal bar chart -->
+          <div class="flex-1 flex flex-col justify-evenly space-y-1.5 pr-1">
+            <div class="flex items-center gap-2">
+              <span class="text-[8px] text-slate-500 w-16 text-right truncate shrink-0">Adidas Boston</span>
+              <div class="flex-1 h-3 bg-slate-800 rounded-full overflow-hidden">
+                <div class="h-full rounded-full bg-violet-500 opacity-80" style="width:78%"></div>
+              </div>
+              <span class="text-[8px] text-slate-400 w-8 shrink-0">781km</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[8px] text-slate-500 w-16 text-right truncate shrink-0">Nike Vaporfly</span>
+              <div class="flex-1 h-3 bg-slate-800 rounded-full overflow-hidden">
+                <div class="h-full rounded-full bg-violet-500 opacity-80" style="width:55%"></div>
+              </div>
+              <span class="text-[8px] text-slate-400 w-8 shrink-0">553km</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[8px] text-slate-500 w-16 text-right truncate shrink-0">Trek Domane</span>
+              <div class="flex-1 h-3 bg-slate-800 rounded-full overflow-hidden">
+                <div class="h-full rounded-full bg-teal-500 opacity-80" style="width:90%"></div>
+              </div>
+              <span class="text-[8px] text-slate-400 w-8 shrink-0">4521km</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[8px] text-slate-500 w-16 text-right truncate shrink-0">Canyon CF</span>
+              <div class="flex-1 h-3 bg-slate-800 rounded-full overflow-hidden">
+                <div class="h-full rounded-full bg-teal-500 opacity-80" style="width:42%"></div>
+              </div>
+              <span class="text-[8px] text-slate-400 w-8 shrink-0">2100km</span>
+            </div>
+          </div>
+          <div class="absolute inset-0 bg-indigo-600/0 group-hover:bg-indigo-600/5 transition-all flex items-center justify-center">
+            <span class="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-semibold text-indigo-300 bg-slate-900/80 px-3 py-1.5 rounded-lg border border-indigo-500/30">Öffnen →</span>
+          </div>
+        </div>
+        <div class="p-4 space-y-0.5">
+          <h3 class="font-semibold text-sm group-hover:text-indigo-300 transition-colors">Equipment</h3>
+          <p class="text-xs text-slate-500">Kilometerstand &amp; Nutzung pro Schuh &amp; Bike</p>
+        </div>
+      </button>
+
+    </div>
+
+    <!-- Enter Dashboard button -->
+    <div class="mt-10">
+      <button
+        type="button"
+        onclick="openDashboardTab('totalDistance')"
+        class="inline-flex items-center space-x-2 text-slate-400 hover:text-slate-200 text-sm transition"
+      >
+        <span>Zum Dashboard</span>
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+
+  </div>
+
   <!-- Dashboard Grid -->
-  <main class="flex-1 overflow-y-auto p-6 space-y-6">
+  <main id="dashboardMain" class="hidden flex-1 overflow-y-auto p-6 space-y-6">
 
     <!-- Main Chart Card -->
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-md flex flex-col space-y-6">
@@ -517,6 +734,17 @@
       updateStatusBadge('offline', 'Awaiting local file selection');
     }
 
+    // After manual CSV upload via the CORS panel, show dashboard
+    function ensureDashboardVisible() {
+      // Only auto-navigate when the user explicitly uploaded a file via the manual picker.
+      // Auto-loading the local CSV in the background should NOT pull the user away from
+      // the landing page — they navigate there by clicking a tab card.
+      if (window._manualUpload) {
+        window._manualUpload = false;
+        openDashboardTab('totalDistance');
+      }
+    }
+
     // Update status bar UI
     function updateStatusBadge(state, text) {
       const badge = document.getElementById('statusBadge');
@@ -542,7 +770,8 @@
       if (!file) return;
       
       updateStatusBadge('offline', 'Parsing uploaded file...');
-      
+      window._manualUpload = true;
+
       const reader = new FileReader();
       reader.onload = function(evt) {
         parseCsvText(evt.target.result);
@@ -672,7 +901,8 @@
       processedActivities.sort((a, b) => a.date - b.date);
 
       updateStatusBadge('success', `Parsed ${processedActivities.length} activities`);
-      
+      ensureDashboardVisible();
+
       // Set initial active controls
       setBtnActive('sportBtnAll');
       setScatterSportBtnActive('scatterSportBtnRun');
@@ -1622,11 +1852,29 @@ datasets: [{
       }
     });
 
-    setVisualizationTab(selectedVisualizationTab);
-    const initialTabButton = document.getElementById('vizTabTotalDistance');
-    if (initialTabButton) {
-      initialTabButton.focus();
+    // Landing page navigation
+    function goToLanding() {
+      document.getElementById('landingPage').classList.remove('hidden');
+      document.getElementById('dashboardMain').classList.add('hidden');
     }
+
+    function openDashboardTab(tabName) {
+      document.getElementById('landingPage').classList.add('hidden');
+      document.getElementById('dashboardMain').classList.remove('hidden');
+      setVisualizationTab(tabName);
+      const tabButton = document.getElementById(
+        tabName === 'totalDistance' ? 'vizTabTotalDistance' :
+        tabName === 'heartratePace' ? 'vizTabHeartratePace' :
+        'vizTabEquipment'
+      );
+      if (tabButton) tabButton.focus();
+    }
+
+    function handleStravaIngest() {
+      // Placeholder — Strava import routine will be wired up here
+    }
+
+    setVisualizationTab(selectedVisualizationTab);
 
     // Start loading local CSV on page load
     loadLocalCsv();

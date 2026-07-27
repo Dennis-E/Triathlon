@@ -336,10 +336,12 @@
             </div>
 
             <div class="flex gap-3 flex-wrap">
-              <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
-                <button onclick="setEquipmentMetric('distance')" id="equipmentMetricDistance" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">Distance</button>
-                <button onclick="setEquipmentMetric('pace')" id="equipmentMetricPace" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Pace</button>
-              </div>
+<div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+                  <button onclick="setEquipmentMetric('distance')" id="equipmentMetricDistance" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">Distance</button>
+                  <button onclick="setEquipmentMetric('pace')" id="equipmentMetricPace" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Pace</button>
+                  <button onclick="setEquipmentMetric('count')" id="equipmentMetricCount" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Activity Count</button>
+                  <button onclick="setEquipmentMetric('avgLength')" id="equipmentMetricAvgLength" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Avg Length</button>
+                </div>
 
               <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
                 <button onclick="setEquipmentFilter('All')" id="equipmentBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">All</button>
@@ -686,9 +688,18 @@
       const canvas = document.getElementById('equipmentChart');
       if (!canvas) return;
 
-      const sortedEntries = selectedEquipmentMetric === 'distance'
-        ? window.equipmentUtils.aggregateEquipmentDistance(processedActivities, selectedEquipmentFilter)
-        : window.equipmentUtils.aggregateEquipmentPace(processedActivities, selectedEquipmentFilter);
+let sortedEntries;
+if (selectedEquipmentMetric === 'distance') {
+  sortedEntries = window.equipmentUtils.aggregateEquipmentDistance(processedActivities, selectedEquipmentFilter);
+} else if (selectedEquipmentMetric === 'pace') {
+  sortedEntries = window.equipmentUtils.aggregateEquipmentPace(processedActivities, selectedEquipmentFilter);
+} else if (selectedEquipmentMetric === 'count') {
+  sortedEntries = window.equipmentUtils.aggregateEquipmentActivityCount(processedActivities, selectedEquipmentFilter);
+} else if (selectedEquipmentMetric === 'avgLength') {
+  sortedEntries = window.equipmentUtils.aggregateEquipmentAvgLength(processedActivities, selectedEquipmentFilter);
+} else {
+  sortedEntries = [];
+}
 
       if (equipmentChartInstance) {
         equipmentChartInstance.destroy();
@@ -710,9 +721,18 @@
 
             chart.getDatasetMeta(0).data.forEach((bar, index) => {
                 const value = dataset.data[index];
-                const label = selectedEquipmentMetric === 'distance'
-                  ? `${value.toFixed(1)} km`
-                  : formatPaceLabel(value);
+let label;
+                if (selectedEquipmentMetric === 'distance') {
+                  label = `${value.toFixed(1)} km`;
+                } else if (selectedEquipmentMetric === 'pace') {
+                  label = formatPaceLabel(value);
+                } else if (selectedEquipmentMetric === 'count') {
+                  label = `${value} activities`;
+                } else if (selectedEquipmentMetric === 'avgLength') {
+                  label = `${value.toFixed(2)} km/act`;
+                } else {
+                  label = value;
+                }
 
                 ctx.fillText(label, bar.x + 12, bar.y);
             });
@@ -722,9 +742,12 @@
         }],
         data: {
           labels: sortedEntries.map(([name]) => name),
-          datasets: [{
-            label: 'Distance',
-            data: sortedEntries.map(([, distance]) => Number(distance.toFixed(1))),
+datasets: [{
+            label: selectedEquipmentMetric === 'distance' ? 'Distance' :
+                  selectedEquipmentMetric === 'pace' ? 'Pace' :
+                  selectedEquipmentMetric === 'count' ? 'Activity Count' :
+                  selectedEquipmentMetric === 'avgLength' ? 'Avg Length' : '',
+            data: sortedEntries.map(([, value]) => selectedEquipmentMetric === 'count' ? value : Number(value.toFixed(2))),
             borderRadius: 6,
             backgroundColor: sortedEntries.map(([name]) =>
               window.equipmentUtils.getEquipmentType(name) === 'Shoes'

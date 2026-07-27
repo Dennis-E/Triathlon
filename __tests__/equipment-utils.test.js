@@ -1,6 +1,7 @@
 const {
   getEquipmentType,
-  aggregateEquipmentDistance
+  aggregateEquipmentDistance,
+  aggregateEquipmentPace
 } = require('../equipment-utils');
 
 describe('equipment utils', () => {
@@ -35,5 +36,15 @@ describe('equipment utils', () => {
     expect(aggregateEquipmentDistance(activities, 'Bikes')).toEqual([
       ['Storck Aero 2', 40]
     ]);
+  });
+
+  it('aggregates average pace per equipment', () => {
+    const result = aggregateEquipmentPace([
+      { equipment: 'ASICS Novablast 4', distance: 10, duration: 3600 },
+      { equipment: 'ASICS Novablast 4', distance: 5, duration: 1500 }
+    ]);
+
+    expect(result[0][0]).toBe('ASICS Novablast 4');
+    expect(result[0][1]).toBeCloseTo(5.666, 2);
   });
 });

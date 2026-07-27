@@ -26,11 +26,39 @@ function aggregateEquipmentDistance(activities, filter = 'All') {
     .sort((a, b) => b[1] - a[1]);
 }
 
+function aggregateEquipmentPace(activities, filter = 'All') {
+  const totals = activities
+    .filter(activity => {
+      if (!activity.equipment || activity.distance <= 0 || activity.duration <= 0) return false;
+
+      const type = getEquipmentType(activity.equipment);
+
+      if (filter === 'Shoes') return type === 'Shoes';
+      if (filter === 'Bikes') return type === 'Bikes';
+
+      return true;
+    })
+    .reduce((acc, activity) => {
+      if (!acc[activity.equipment]) {
+        acc[activity.equipment] = { distance: 0, duration: 0 };
+      }
+
+      acc[activity.equipment].distance += activity.distance;
+      acc[activity.equipment].duration += activity.duration;
+      return acc;
+    }, {});
+
+  return Object.entries(totals)
+    .map(([equipment, values]) => ([equipment, (values.duration / 60) / values.distance]))
+    .sort((a, b) => a[1] - b[1]);
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     SHOE_PATTERN,
     getEquipmentType,
-    aggregateEquipmentDistance
+    aggregateEquipmentDistance,
+    aggregateEquipmentPace
   };
 }
 
@@ -38,6 +66,7 @@ if (typeof window !== 'undefined') {
   window.equipmentUtils = {
     SHOE_PATTERN,
     getEquipmentType,
-    aggregateEquipmentDistance
+    aggregateEquipmentDistance,
+    aggregateEquipmentPace
   };
 }

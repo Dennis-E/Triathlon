@@ -12,12 +12,12 @@ function calculatePaceMinPerKm(distanceKm, durationSeconds) {
 }
 
 function calculateBubbleRadius(durationSeconds, minDurationSeconds, maxDurationSeconds) {
-  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return 4;
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return 0.4;
   if (!Number.isFinite(minDurationSeconds) || !Number.isFinite(maxDurationSeconds) || minDurationSeconds >= maxDurationSeconds) {
-    return 8;
+    return 0.8;
   }
 
-  const minR = 4;
+  const minR = 0.4;
   const maxR = 16;
   const ratio = (durationSeconds - minDurationSeconds) / (maxDurationSeconds - minDurationSeconds);
   const clamped = Math.max(0, Math.min(1, ratio));
@@ -107,6 +107,7 @@ function buildYearlyRegressionDatasets(points, palette) {
       return {
         type: 'line',
         label: `${year} Trend`,
+        year,
         data: [
           { x: minX, y: (regression.slope * minX) + regression.intercept },
           { x: maxX, y: (regression.slope * maxX) + regression.intercept }

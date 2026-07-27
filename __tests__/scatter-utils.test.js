@@ -23,7 +23,7 @@ describe('scatter utils', () => {
   it('calculates scaled bubble radius', () => {
     const minR = calculateBubbleRadius(100, 100, 1000);
     const maxR = calculateBubbleRadius(1000, 100, 1000);
-    expect(minR).toBeGreaterThanOrEqual(4);
+    expect(minR).toBeGreaterThanOrEqual(0.4);
     expect(maxR).toBeLessThanOrEqual(16);
     expect(maxR).toBeGreaterThan(minR);
   });
@@ -91,5 +91,6 @@ describe('scatter utils', () => {
     expect(datasets).toHaveLength(2);
     expect(datasets[0].label).toContain('Trend');
     expect(datasets[0].type).toBe('line');
+    expect(datasets[0].year).toBe(2024);
   });
 });

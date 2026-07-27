@@ -8,7 +8,7 @@ function getEquipmentType(name) {
 function aggregateEquipmentDistance(activities, filter = 'All') {
   const totals = activities
     .filter(activity => {
-      if (!activity.equipment || activity.distance <= 0) return false;
+      if (!activity.equipment || activity.equipment.trim() === '' || activity.distance <= 0) return false;
 
       const type = getEquipmentType(activity.equipment);
 

@@ -14,6 +14,7 @@
   <script src="./tab-navigation.js"></script>
   <!-- Scatter chart helpers -->
   <script src="./scatter-utils.js"></script>
+  <script src="./equipment-utils.js"></script>
   <!-- Lucide Icons -->
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.344.0/dist/umd/lucide.min.js"></script>
   <style>
@@ -148,6 +149,19 @@
             class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
           >
             Heartrate vs Pace
+          </button>
+          <button
+            id="vizTabEquipment"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="vizPanelEquipment"
+            tabindex="-1"
+            onclick="setVisualizationTab('equipment')"
+            onkeydown="handleVisualizationTabKeydown(event, 'equipment')"
+            class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
+          >
+            Equipment
           </button>
         </div>
       </div>
@@ -313,6 +327,27 @@
         </div>
       </div>
 
+      <div id="vizPanelEquipment" role="tabpanel" aria-labelledby="vizTabEquipment" class="hidden">
+        <div class="space-y-5">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+            <div class="space-y-1">
+              <h2 class="text-2xl font-bold tracking-tight">Equipment mileage</h2>
+              <p class="text-xs text-slate-400">Total kilometers per shoe and bike</p>
+            </div>
+
+            <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+              <button onclick="setEquipmentFilter('All')" id="equipmentBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">All</button>
+              <button onclick="setEquipmentFilter('Shoes')" id="equipmentBtnShoes" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Shoes</button>
+              <button onclick="setEquipmentFilter('Bikes')" id="equipmentBtnBikes" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Bikes</button>
+            </div>
+          </div>
+
+          <div class="relative w-full h-[540px]">
+            <canvas id="equipmentChart"></canvas>
+          </div>
+        </div>
+      </div>
+
     </div>
 
   </main>
@@ -331,8 +366,10 @@
     let selectedSportFilter = 'All'; // 'All', 'Run', 'Bike', 'Swim'
     let selectedAggregationLevel = 'weekly'; // 'daily', 'weekly', 'monthly', 'yearly'
     let selectedVisualizationTab = 'totalDistance'; // 'totalDistance', 'heartratePace'
+    let selectedEquipmentFilter = 'All';
     let selectedScatterSportFilter = 'Run';
     let scatterChartInstance = null;
+    let equipmentChartInstance = null;
     let scatterDateRange = { start: 0, end: 0 };
     let scatterDateCandidates = [];
     let enabledScatterTrendYears = null;
@@ -533,6 +570,7 @@
       const dateIdx = headers.indexOf('Aktivitätsdatum');
       const sportIdx = headers.indexOf('Aktivitätsart');
       const nameIdx = headers.indexOf('Name der Aktivität');
+      const equipmentIdx = headers.findIndex(h => h === 'Aktivitätsausrüstung' || h === 'Ausrüstung' || h === 'Fahrrad');
       const durationIdx = headers.indexOf('Bewegungszeit'); // Moving time is better than elapsed time
       const avgHeartRateIdx = headers.findIndex(h => {
         if (!h) return false;
@@ -604,6 +642,7 @@
         const avgHeartRate = avgHeartRateIdx !== -1
           ? window.scatterUtils.parseLocalizedNumber(row[avgHeartRateIdx])
           : null;
+        const equipment = equipmentIdx !== -1 ? (row[equipmentIdx] || '').trim() : '';
 
         processedActivities.push({
           id: row[0],
@@ -612,6 +651,7 @@
           sportRaw: rawSport,
           sport: sportCategory, // 'Run', 'Bike', 'Swim' or null
           distance: distKm,
+          equipment,
           duration: durationSeconds,
           avgHeartRate: avgHeartRate,
           name: name
@@ -631,6 +671,105 @@
       
       renderDashboard();
       renderHeartratePaceChart();
+      renderEquipmentChart();
+    }
+
+    function renderEquipmentChart() {
+      const canvas = document.getElementById('equipmentChart');
+      if (!canvas) return;
+
+      const sortedEntries = window.equipmentUtils.aggregateEquipmentDistance(
+        processedActivities,
+        selectedEquipmentFilter
+      );
+
+      if (equipmentChartInstance) {
+        equipmentChartInstance.destroy();
+      }
+
+      equipmentChartInstance = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        plugins: [{
+          id: 'equipmentValueLabels',
+          afterDatasetsDraw(chart) {
+            const { ctx } = chart;
+            const dataset = chart.data.datasets[0];
+
+            ctx.save();
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '600 12px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+
+            chart.getDatasetMeta(0).data.forEach((bar, index) => {
+              const value = dataset.data[index];
+              ctx.fillText(`${value.toFixed(1)} km`, bar.x + 12, bar.y);
+            });
+
+            ctx.restore();
+          }
+        }],
+        data: {
+          labels: sortedEntries.map(([name]) => name),
+          datasets: [{
+            label: 'Distance',
+            data: sortedEntries.map(([, distance]) => Number(distance.toFixed(1))),
+            borderRadius: 6,
+            backgroundColor: sortedEntries.map(([name]) =>
+              window.equipmentUtils.getEquipmentType(name) === 'Shoes'
+                ? '#8B5CF6'
+                : '#14B8A6'
+            )
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#0F172A',
+              titleColor: '#F8FAFC',
+              bodyColor: '#CBD5E1',
+              callbacks: {
+                label: context => `${context.raw.toFixed(1)} km`
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: '#1E293B' },
+              ticks: {
+                color: '#94A3B8',
+                callback: value => `${value} km`
+              }
+            },
+            y: {
+              grid: { display: false },
+              ticks: {
+                color: '#E2E8F0',
+                autoSkip: false
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function setEquipmentFilter(filter) {
+      selectedEquipmentFilter = filter;
+
+      document.querySelectorAll('[id^="equipmentBtn"]').forEach(btn => {
+        btn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200';
+      });
+
+      const activeButton = document.getElementById(`equipmentBtn${filter}`);
+      if (activeButton) {
+        activeButton.className = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25';
+      }
+
+      renderEquipmentChart();
     }
 
     function initScatterDateSlider() {
@@ -1383,6 +1522,8 @@
         selectedVisualizationTab = nextTab;
         if (nextTab === 'heartratePace') {
           renderHeartratePaceChart();
+        } else if (nextTab === 'equipment') {
+          renderEquipmentChart();
         }
       }
     }

@@ -39,8 +39,10 @@ function createMockDocument() {
   const elements = {
     vizTabTotalDistance: createMockElement(),
     vizTabHeartratePace: createMockElement(),
+    vizTabEquipment: createMockElement(),
     vizPanelTotalDistance: createMockElement(),
-    vizPanelHeartratePace: createMockElement()
+    vizPanelHeartratePace: createMockElement(),
+    vizPanelEquipment: createMockElement()
   };
 
   return {
@@ -54,8 +56,9 @@ function createMockDocument() {
 describe('tab navigation helpers', () => {
   it('cycles to next and previous tabs', () => {
     expect(getNextVisualizationTab('totalDistance', 1)).toBe('heartratePace');
-    expect(getNextVisualizationTab('heartratePace', 1)).toBe('totalDistance');
-    expect(getNextVisualizationTab('totalDistance', -1)).toBe('heartratePace');
+    expect(getNextVisualizationTab('heartratePace', 1)).toBe('equipment');
+    expect(getNextVisualizationTab('equipment', 1)).toBe('totalDistance');
+    expect(getNextVisualizationTab('totalDistance', -1)).toBe('equipment');
     expect(getNextVisualizationTab('unknown', 1)).toBe('totalDistance');
   });
 
@@ -98,9 +101,9 @@ describe('tab navigation helpers', () => {
 
     const nextTab = handleVisualizationTabKeydown(event, 'totalDistance', { onTabChange });
 
-    expect(nextTab).toBe('heartratePace');
+    expect(nextTab).toBe('equipment');
     expect(event.preventDefault).toHaveBeenCalledTimes(1);
-    expect(onTabChange).toHaveBeenCalledWith('heartratePace', { focusTab: true });
+    expect(onTabChange).toHaveBeenCalledWith('equipment', { focusTab: true });
   });
 
   it('ignores unrelated keys', () => {

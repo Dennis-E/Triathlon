@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZIP Import Test</title>
+  <script src="./zip-importer.js"></script>
+  <style>
+    body {
+      font-family: monospace;
+      padding: 20px;
+      background: #f0f0f0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+    }
+    button {
+      padding: 10px 20px;
+      background: #0066cc;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover {
+      background: #0052a3;
+    }
+    #output {
+      margin-top: 20px;
+      padding: 10px;
+      background: #f9f9f9;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 400px;
+      overflow-y: auto;
+      font-size: 12px;
+    }
+    .success { color: green; }
+    .error { color: red; }
+    .info { color: blue; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>ZIP Import Test</h1>
+    <p>Test the Strava ZIP import functionality</p>
+    
+    <button onclick="testImport()">Select ZIP File & Test Import</button>
+    
+    <div id="output">Ready for testing...</div>
+  </div>
+
+  <script>
+    function log(message, type = 'info') {
+      const output = document.getElementById('output');
+      const className = type === 'success' ? 'success' : type === 'error' ? 'error' : 'info';
+      output.innerHTML += `<span class="${className}">[${type.toUpperCase()}]</span> ${message}\n`;
+      output.scrollTop = output.scrollHeight;
+    }
+
+    async function testImport() {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.zip';
+      input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) {
+          log('No file selected', 'error');
+          return;
+        }
+
+        log(`Selected file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, 'info');
+
+        try {
+          log('Starting ZIP extraction...', 'info');
+          const csvText = await importStravaZip(file, (progress) => {
+            log(`${progress.stage} (${progress.percent}%)`, 'info');
+          });
+
+          log(`✓ Successfully extracted CSV (${csvText.length} characters)`, 'success');
+
+          // Show first few lines
+          const lines = csvText.split('\n').slice(0, 3);
+          log('First 3 lines of CSV:', 'info');
+          lines.forEach((line, idx) => {
+            log(`  Line ${idx + 1}: ${line.substring(0, 100)}${line.length > 100 ? '...' : ''}`, 'info');
+          });
+
+          // Count rows
+          const rowCount = csvText.split('\n').filter(line => line.trim()).length;
+          log(`Total rows: ${rowCount}`, 'success');
+        } catch (error) {
+          log(`✗ Import failed: ${error.message}`, 'error');
+          log(error.stack, 'error');
+        }
+      };
+      input.click();
+    }
+  </script>
+</body>
+</html>

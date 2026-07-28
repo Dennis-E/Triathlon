@@ -102,14 +102,14 @@
           Browsers restrict direct loading of local files via <code>file://</code> protocol. To automate loading, run this dashboard using a local server (e.g., the <strong>VS Code Live Server</strong> extension, or command <code>python -m http.server</code>).
         </p>
         <p class="text-sm text-slate-400 mt-2">
-          <strong>Alternatively:</strong> Select your local CSV file from your file system directly. No server needed.
+          <strong>Alternatively:</strong> Select your reduced `activities.csv` extract from your file system directly. No server needed.
         </p>
       </div>
     </div>
     <div class="shrink-0 flex items-center">
       <label for="manualCsvFile" class="bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-medium text-sm px-4 py-2 rounded-lg cursor-pointer transition flex items-center space-x-2 shadow-lg shadow-indigo-600/20">
         <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
-        <span>Select activities.csv</span>
+        <span>Select reduced activities.csv</span>
       </label>
       <input type="file" id="manualCsvFile" accept=".csv" class="hidden">
     </div>
@@ -121,7 +121,7 @@
     <!-- Hero -->
     <div class="text-center max-w-2xl mb-10 mt-4">
       <h2 class="text-3xl font-bold tracking-tight mb-3">Dein Triathlon-Analyse-Dashboard</h2>
-      <p class="text-slate-400 text-sm leading-relaxed">Lade deinen Strava-Export und analysiere Training, Herzfrequenz, Pace und Ausrüstung – direkt im Browser, ohne Server.</p>
+      <p class="text-slate-400 text-sm leading-relaxed">Lade deinen reduzierten Strava-Datenauszug und analysiere Training, Herzfrequenz, Pace und Ausrüstung – direkt im Browser, ohne Server.</p>
     </div>
 
     <!-- Strava Ingest Button -->
@@ -712,18 +712,19 @@
       return `${y}-${m}-${d}`;
     }
 
+    const DEFAULT_ACTIVITIES_PATH = './Data/Dennis/relevant-export_39173135/activities.csv';
+
     // Main local loader
     async function loadLocalCsv() {
-      const path = './Data/Dennis/export_39173135/activities.csv';
       try {
-        const response = await fetch(path);
+        const response = await fetch(DEFAULT_ACTIVITIES_PATH);
         if (!response.ok) {
           throw new Error(`Failed to load: ${response.statusText}`);
         }
         const text = await response.text();
         parseCsvText(text);
       } catch (err) {
-        console.warn("Could not load CSV automatically (CORS or direct file protocol). Showing Manual Selector.", err);
+        console.warn(`Could not load reduced activities extract from ${DEFAULT_ACTIVITIES_PATH}. Showing Manual Selector.`, err);
         showCorsWarning();
       }
     }

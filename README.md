@@ -1,4 +1,4 @@
-# Training Dashboard
+why# Training Dashboard
 
 A web-based application where athletes can upload their Strava data export and explore visualizations of their long-term training effort. The focus is on endurance sports (running, cycling, swimming, etc.) and on building healthy, sustainable training habits, not on social or commercial aspects of Strava.
 
@@ -11,7 +11,7 @@ This project will:
 - Provide interactive visualizations of long-term training effort for athletes.
 - Ignore non-training data (social interactions, marketing, etc.) at ingest time.
 
-The repository currently includes an example Strava export in `Data/Dennis/export_39173135/` that will be used to design and validate the data model and visualizations.
+The repository includes a reduced visualization-ready extract in `Data/Dennis/relevant-export_39173135/`.
 
 ## Use Case
 
@@ -37,7 +37,7 @@ Data comes from Strava's "Download your data" feature. Strava delivers a ZIP arc
 - Media assets (images and videos).
 - FIT or GPX files (raw activity recordings).
 
-Example export directory: `Data/Dennis/export_39173135/`
+Example reduced visualization dataset: `Data/Dennis/relevant-export_39173135/activities.csv`
 
 This README describes which parts of that export are relevant for the training dashboard and which parts can be ignored when designing the ingest pipeline.
 

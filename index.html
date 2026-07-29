@@ -647,12 +647,14 @@
     let selectedVisualizationTab = 'totalDistance'; // 'totalDistance', 'heartratePace'
     let selectedEquipmentFilter = 'All';
     let selectedEquipmentMetric = 'distance';
-    let selectedScatterSportFilter = 'Run';
-    let scatterChartInstance = null;
-    let equipmentChartInstance = null;
-    let scatterDateRange = { start: 0, end: 0 };
-    let scatterDateCandidates = [];
-    let enabledScatterTrendYears = null;
+     let selectedScatterSportFilter = 'Run';
+     let scatterChartInstance = null;
+     let equipmentChartInstance = null;
+     let scatterDateRange = { start: 0, end: 0 };
+     let scatterDateCandidates = [];
+     let enabledScatterTrendYears = null;
+     let enabledScatterDataYears = null;
+     let scatterShowTrendLines = true;
     let selectedTimeframeByAggregation = {
       daily: '3m',
       weekly: '1y',
@@ -1226,55 +1228,120 @@ datasets: [{
       renderHeartratePaceChart();
     }
 
-    function setScatterTrendEnabled(year, enabled) {
-      if (!enabledScatterTrendYears) enabledScatterTrendYears = new Set();
-      if (enabled) {
-        enabledScatterTrendYears.add(year);
-      } else {
-        enabledScatterTrendYears.delete(year);
-      }
+     function setScatterDataYearEnabled(year, enabled) {
+       if (!enabledScatterDataYears) enabledScatterDataYears = new Set();
+       if (enabled) {
+         enabledScatterDataYears.add(year);
+       } else {
+         enabledScatterDataYears.delete(year);
+       }
 
-      if (!scatterChartInstance) return;
-      const datasetIndex = scatterChartInstance.data.datasets.findIndex(dataset => dataset.year === year);
-      if (datasetIndex === -1) return;
-      scatterChartInstance.setDatasetVisibility(datasetIndex, enabled);
-      scatterChartInstance.update();
-    }
+       if (!scatterChartInstance) return;
+       updateScatterChartVisibility();
+     }
 
-    function renderScatterTrendControls(datasets) {
-      const controls = document.getElementById('scatterTrendControls');
-      if (!controls) return;
+     function setScatterTrendLinesVisible(visible) {
+       scatterShowTrendLines = visible;
+       if (!scatterChartInstance) return;
+       updateScatterChartVisibility();
+     }
 
-      controls.replaceChildren();
-      controls.classList.toggle('hidden', datasets.length === 0);
-      if (datasets.length === 0) return;
+     function updateScatterChartVisibility() {
+       if (!scatterChartInstance) return;
+       
+       scatterChartInstance.data.datasets.forEach((dataset, index) => {
+         let isVisible = false;
+         
+         if (dataset.type === 'bubble') {
+           // Show bubble if its year is enabled
+           isVisible = enabledScatterDataYears && enabledScatterDataYears.has(dataset.year);
+         } else if (dataset.type === 'line') {
+           // Show trend line if trend lines are visible AND the year's data is enabled
+           isVisible = scatterShowTrendLines && (enabledScatterDataYears && enabledScatterDataYears.has(dataset.year));
+         }
+         
+         scatterChartInstance.setDatasetVisibility(index, isVisible);
+       });
+       
+       scatterChartInstance.update();
+     }
 
-      const legend = document.createElement('legend');
-      legend.className = 'mb-2 font-medium text-white';
-      legend.textContent = 'Year trends';
-      controls.appendChild(legend);
+     function renderScatterTrendControls(regressionDatasets) {
+       const controls = document.getElementById('scatterTrendControls');
+       if (!controls) return;
 
-      datasets.forEach(dataset => {
-        const label = document.createElement('label');
-        label.className = 'flex items-center gap-2 cursor-pointer';
+       controls.replaceChildren();
+       controls.classList.toggle('hidden', regressionDatasets.length === 0);
+       if (regressionDatasets.length === 0) return;
 
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.checked = enabledScatterTrendYears && enabledScatterTrendYears.has(dataset.year);
-        checkbox.className = 'accent-indigo-500';
-        checkbox.addEventListener('change', () => setScatterTrendEnabled(dataset.year, checkbox.checked));
+       // Get years from regression datasets
+       const years = regressionDatasets.map(d => d.year).sort((a, b) => a - b);
+       
+       // Initialize enabled data years on first render
+       if (enabledScatterDataYears === null) {
+         enabledScatterDataYears = new Set(years);
+       }
 
-        const line = document.createElement('span');
-        line.className = 'w-5 border-t-2 border-dashed';
-        line.style.borderColor = dataset.borderColor;
+       // Legend for data years
+       const dataLegend = document.createElement('legend');
+       dataLegend.className = 'mb-2 font-medium text-white';
+       dataLegend.textContent = 'Years';
+       controls.appendChild(dataLegend);
 
-        const text = document.createElement('span');
-        text.textContent = dataset.label;
+       // Year data checkboxes
+       years.forEach(year => {
+         const regressionDataset = regressionDatasets.find(d => d.year === year);
+         const label = document.createElement('label');
+         label.className = 'flex items-center gap-2 cursor-pointer';
 
-        label.append(checkbox, line, text);
-        controls.appendChild(label);
-      });
-    }
+         const checkbox = document.createElement('input');
+         checkbox.type = 'checkbox';
+         checkbox.checked = enabledScatterDataYears && enabledScatterDataYears.has(year);
+         checkbox.className = 'accent-indigo-500';
+         checkbox.addEventListener('change', () => setScatterDataYearEnabled(year, checkbox.checked));
+
+         const colorBall = document.createElement('span');
+         colorBall.className = 'w-3 h-3 rounded-full';
+         colorBall.style.backgroundColor = regressionDataset.borderColor;
+
+         const text = document.createElement('span');
+         text.textContent = year;
+
+         label.append(checkbox, colorBall, text);
+         controls.appendChild(label);
+       });
+
+       // Separator
+       const separator = document.createElement('div');
+       separator.className = 'my-3 border-t border-slate-600';
+       controls.appendChild(separator);
+
+       // Trend line toggle legend
+       const trendLegend = document.createElement('legend');
+       trendLegend.className = 'mb-2 font-medium text-white';
+       trendLegend.textContent = 'Display';
+       controls.appendChild(trendLegend);
+
+       // Trend line toggle checkbox
+       const trendLabel = document.createElement('label');
+       trendLabel.className = 'flex items-center gap-2 cursor-pointer';
+
+       const trendCheckbox = document.createElement('input');
+       trendCheckbox.type = 'checkbox';
+       trendCheckbox.checked = scatterShowTrendLines;
+       trendCheckbox.className = 'accent-indigo-500';
+       trendCheckbox.addEventListener('change', () => setScatterTrendLinesVisible(trendCheckbox.checked));
+
+       const trendLine = document.createElement('span');
+       trendLine.className = 'w-5 border-t-2 border-dashed';
+       trendLine.style.borderColor = '#94A3B8';
+
+       const trendText = document.createElement('span');
+       trendText.textContent = 'Trend lines';
+
+       trendLabel.append(trendCheckbox, trendLine, trendText);
+       controls.appendChild(trendLabel);
+     }
 
     function renderHeartratePaceChart() {
       const canvas = document.getElementById('heartratePaceChart');
@@ -1296,121 +1363,137 @@ datasets: [{
       const minDuration = durationValues.length > 0 ? Math.min(...durationValues) : 0;
       const maxDuration = durationValues.length > 0 ? Math.max(...durationValues) : 0;
 
-      const sportColor = {
-        Run: '#EF4444',
-        Bike: '#14B8A6',
-        Swim: '#06B6D4'
-      };
+      const regressionDatasets = window.scatterUtils.buildYearlyRegressionDatasets(points, [
+        '#F59E0B', '#A78BFA', '#F97316', '#22D3EE', '#84CC16'
+      ]);
+
+      // Create a map of year to color from regression datasets
+      const yearToColor = new Map();
+      regressionDatasets.forEach(dataset => {
+        yearToColor.set(dataset.year, dataset.borderColor);
+      });
 
       const sportsToRender = selectedScatterSportFilter === 'All'
         ? ['Run', 'Bike', 'Swim']
         : [selectedScatterSportFilter];
 
-      const bubbleDatasets = sportsToRender.map(sport => {
-        const filtered = points.filter(p => p.sport === sport);
-        return {
-          type: 'bubble',
-          label: sport,
-          data: filtered.map(p => ({
-            x: p.x,
-            y: p.y,
-            r: window.scatterUtils.calculateBubbleRadius(p.duration, minDuration, maxDuration),
-            meta: p
-          })),
-          backgroundColor: `${sportColor[sport]}AA`,
-          borderColor: sportColor[sport],
-          borderWidth: 1.2,
-          order: 2
-        };
+      // Group points by year to create datasets with year-based colors
+      const bubbleDatasets = [];
+      const yearGroups = new Map();
+      
+      points.forEach(point => {
+        if (sportsToRender.includes(point.sport)) {
+          if (!yearGroups.has(point.year)) {
+            yearGroups.set(point.year, []);
+          }
+          yearGroups.get(point.year).push(point);
+        }
       });
 
-      const regressionDatasets = window.scatterUtils.buildYearlyRegressionDatasets(points, [
-        '#F59E0B', '#A78BFA', '#F97316', '#22D3EE', '#84CC16'
-      ]);
-      const regressionYears = new Set(regressionDatasets.map(dataset => dataset.year));
-      if (enabledScatterTrendYears === null) {
-        enabledScatterTrendYears = regressionYears;
-      } else {
-        enabledScatterTrendYears = new Set([...enabledScatterTrendYears].filter(year => regressionYears.has(year)));
-      }
+       yearGroups.forEach((yearPoints, year) => {
+         const color = yearToColor.get(year) || '#64748B';
+         bubbleDatasets.push({
+           type: 'bubble',
+           label: `${year}`,
+           year: year,
+           data: yearPoints.map(p => ({
+             x: p.x,
+             y: p.y,
+             r: window.scatterUtils.calculateBubbleRadius(p.duration, minDuration, maxDuration),
+             meta: p
+           })),
+           backgroundColor: `${color}AA`,
+           borderColor: color,
+           borderWidth: 1.2,
+           order: 2
+         });
+       });
+       
+       // Initialize enabled data years on first chart creation
+       const regressionYears = new Set(regressionDatasets.map(dataset => dataset.year));
+       if (enabledScatterDataYears === null) {
+         enabledScatterDataYears = regressionYears;
+       } else {
+         enabledScatterDataYears = new Set([...enabledScatterDataYears].filter(year => regressionYears.has(year)));
+       }
 
-      regressionDatasets.forEach(dataset => {
-        dataset.hidden = !enabledScatterTrendYears.has(dataset.year);
-      });
-      renderScatterTrendControls(regressionDatasets);
+       renderScatterTrendControls(regressionDatasets);
 
       if (scatterChartInstance) {
         scatterChartInstance.destroy();
       }
 
-      const ctx = canvas.getContext('2d');
-      scatterChartInstance = new Chart(ctx, {
-        type: 'bubble',
-        data: {
-          datasets: [...bubbleDatasets, ...regressionDatasets]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              display: false
-            },
-            tooltip: {
-              backgroundColor: '#0F172A',
-              titleColor: '#F8FAFC',
-              bodyColor: '#94A3B8',
-              borderColor: '#334155',
-              borderWidth: 1,
-              callbacks: {
-                title: function(items) {
-                  const first = items[0];
-                  if (!first || !first.raw || !first.raw.meta) return first.dataset.label;
-                  return first.raw.meta.name;
-                },
-                label: function(context) {
-                  if (context.dataset.type === 'line') return context.dataset.label;
-                  const meta = context.raw.meta;
-                  return [
-                    `Pace: ${formatPaceLabel(meta.x)}`,
-                    `Heartrate: ${meta.y.toFixed(0)} bpm`,
-                    `Distance: ${meta.distance.toFixed(1)} km`,
-                    `Duration: ${formatDuration(meta.duration)}`,
-                    `Date: ${formatShortDate(meta.date)}`
-                  ];
-                }
-              }
-            }
-          },
-          scales: {
-            x: {
-              reverse: true,
-              title: {
-                display: true,
-                text: 'Pace (min/km)',
-                color: '#94A3B8'
-              },
-              grid: { color: '#1E293B' },
-              ticks: {
-                color: '#64748B',
-                callback: function(value) {
-                  return formatPaceLabel(value).replace(' /km', '');
-                }
-              }
-            },
-            y: {
-              title: {
-                display: true,
-                text: 'Average Heartrate (bpm)',
-                color: '#94A3B8'
-              },
-              grid: { color: '#1E293B' },
-              ticks: { color: '#64748B' }
-            }
-          }
-        }
-      });
-    }
+       const ctx = canvas.getContext('2d');
+       scatterChartInstance = new Chart(ctx, {
+         type: 'bubble',
+         data: {
+           datasets: [...bubbleDatasets, ...regressionDatasets]
+         },
+         options: {
+           responsive: true,
+           maintainAspectRatio: false,
+           plugins: {
+             legend: {
+               display: false
+             },
+             tooltip: {
+               backgroundColor: '#0F172A',
+               titleColor: '#F8FAFC',
+               bodyColor: '#94A3B8',
+               borderColor: '#334155',
+               borderWidth: 1,
+               callbacks: {
+                 title: function(items) {
+                   const first = items[0];
+                   if (!first || !first.raw || !first.raw.meta) return first.dataset.label;
+                   return first.raw.meta.name;
+                 },
+                 label: function(context) {
+                   if (context.dataset.type === 'line') return context.dataset.label;
+                   const meta = context.raw.meta;
+                   return [
+                     `Pace: ${formatPaceLabel(meta.x)}`,
+                     `Heartrate: ${meta.y.toFixed(0)} bpm`,
+                     `Distance: ${meta.distance.toFixed(1)} km`,
+                     `Duration: ${formatDuration(meta.duration)}`,
+                     `Date: ${formatShortDate(meta.date)}`
+                   ];
+                 }
+               }
+             }
+           },
+           scales: {
+             x: {
+               reverse: true,
+               title: {
+                 display: true,
+                 text: 'Pace (min/km)',
+                 color: '#94A3B8'
+               },
+               grid: { color: '#1E293B' },
+               ticks: {
+                 color: '#64748B',
+                 callback: function(value) {
+                   return formatPaceLabel(value).replace(' /km', '');
+                 }
+               }
+             },
+             y: {
+               title: {
+                 display: true,
+                 text: 'Average Heartrate (bpm)',
+                 color: '#94A3B8'
+               },
+               grid: { color: '#1E293B' },
+               ticks: { color: '#64748B' }
+             }
+           }
+         }
+       });
+
+       // Apply initial visibility settings
+       updateScatterChartVisibility();
+     }
 
     function getCurrentTimeframeOption() {
       const options = TIMEFRAME_OPTIONS[selectedAggregationLevel] || [];

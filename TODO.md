@@ -13,8 +13,6 @@ Project:
 - Login? Persist data? (Why? What for?)
 
 Improvements:
-- Trendlines in foreground for heartrate vs pace
-- bubbles different colour per year
 - bullet size make dynamic (log vs linear, min und max size)
 - ability to zoom into charts, eg heartrate vs pace there are outliers
 - outlier exclusion (dynamic %age or # to exclude)

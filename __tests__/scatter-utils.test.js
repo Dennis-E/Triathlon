@@ -93,4 +93,46 @@ describe('scatter utils', () => {
     expect(datasets[0].type).toBe('line');
     expect(datasets[0].year).toBe(2024);
   });
+
+  it('adds order property to regression datasets for layering', () => {
+    const points = [
+      { x: 4, y: 150, year: 2024 },
+      { x: 5, y: 155, year: 2024 }
+    ];
+
+    const datasets = buildYearlyRegressionDatasets(points, ['#fff']);
+    expect(datasets[0].order).toBe(1);
+  });
+
+  it('applies correct border colors from palette to regression datasets', () => {
+    const points = [
+      { x: 4, y: 150, year: 2024 },
+      { x: 5, y: 155, year: 2024 },
+      { x: 6, y: 160, year: 2025 },
+      { x: 7, y: 165, year: 2025 }
+    ];
+
+    const palette = ['#F59E0B', '#A78BFA'];
+    const datasets = buildYearlyRegressionDatasets(points, palette);
+    
+    expect(datasets[0].borderColor).toBe('#F59E0B');
+    expect(datasets[1].borderColor).toBe('#A78BFA');
+  });
+
+  it('regression datasets have correct line styling properties', () => {
+    const points = [
+      { x: 4, y: 150, year: 2024 },
+      { x: 5, y: 155, year: 2024 }
+    ];
+
+    const datasets = buildYearlyRegressionDatasets(points, ['#fff']);
+    const dataset = datasets[0];
+
+    expect(dataset.borderDash).toEqual([6, 4]);
+    expect(dataset.borderWidth).toBe(2);
+    expect(dataset.pointRadius).toBe(0);
+    expect(dataset.pointHoverRadius).toBe(0);
+    expect(dataset.fill).toBe(false);
+    expect(dataset.tension).toBe(0);
+  });
 });

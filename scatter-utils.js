@@ -118,7 +118,8 @@ function buildYearlyRegressionDatasets(points, palette) {
         pointRadius: 0,
         pointHoverRadius: 0,
         fill: false,
-        tension: 0
+        tension: 0,
+        order: 1
       };
     })
     .filter(Boolean);

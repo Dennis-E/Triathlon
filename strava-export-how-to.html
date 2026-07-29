@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How to Export Strava Data</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-full bg-slate-950 text-slate-100 font-sans antialiased">
+  <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur px-6 py-4">
+    <div class="max-w-4xl mx-auto flex items-center justify-between gap-4">
+      <h1 class="text-lg font-bold tracking-tight">How to create a Strava data export</h1>
+      <a href="./index.html" class="text-sm text-indigo-300 hover:text-indigo-200 underline underline-offset-4">Back to dashboard</a>
+    </div>
+  </header>
+
+  <main class="max-w-4xl mx-auto px-6 py-8">
+    <div class="rounded-2xl border border-slate-800 bg-slate-900 p-6 md:p-8 shadow-xl">
+      <p class="text-slate-300 text-sm leading-relaxed">
+        Follow these steps to generate your Strava export and use it with this dashboard.
+      </p>
+
+      <ol class="mt-6 space-y-4 text-sm text-slate-200 list-decimal list-inside">
+        <li>Open <a href="https://www.strava.com/settings/account" target="_blank" rel="noopener noreferrer" class="text-indigo-300 hover:text-indigo-200 underline underline-offset-4">Strava Account Settings</a> and sign in.</li>
+        <li>Scroll down to <span class="font-semibold text-white">Download or Delete Your Account</span>.</li>
+        <li>Click <span class="font-semibold text-white">Get Started</span> under <span class="font-semibold text-white">Download Request</span>.</li>
+        <li>Request your archive and confirm the process in Strava.</li>
+        <li>Wait for Strava to send you an email with the download link (can take minutes to hours).</li>
+        <li>Download the ZIP archive from the email link.</li>
+        <li>Go back to this dashboard and click <span class="font-semibold text-white">Strava Ingest</span>.</li>
+        <li>Select the ZIP file you downloaded and wait until the import is complete.</li>
+      </ol>
+
+      <div class="mt-8 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+        <p class="text-xs text-amber-200">
+          Note: Your data is processed locally in your browser. No personal training files are uploaded by this dashboard.
+        </p>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

@@ -236,7 +236,7 @@
     </div>
 
     <!-- Tab Preview Cards -->
-    <div id="previewCardsContainer" class="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl">
+    <div id="previewCardsContainer" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 w-full max-w-7xl">
 
       <!-- Card: Total Distance -->
       <button
@@ -381,6 +381,70 @@
         <div class="p-4 space-y-0.5">
           <h3 class="font-semibold text-sm transition-colors group-hover:text-indigo-300">Equipment</h3>
           <p class="text-xs text-slate-500">Mileage and usage by shoe and bike</p>
+        </div>
+      </button>
+
+      <!-- Card: Equipment Timeline -->
+      <button
+        type="button"
+        onclick="openDashboardTab('equipmentTimeline')"
+        class="group overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 text-left transition-all duration-200 hover:border-indigo-500/60 hover:shadow-xl hover:shadow-indigo-500/10 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      >
+        <div class="relative h-44 overflow-hidden border-b border-slate-800 bg-slate-950 p-4">
+          <div class="absolute left-3 top-3 z-10 rounded-full border border-indigo-400/30 bg-slate-950/85 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-200">Preview</div>
+          <div class="absolute inset-0 bg-gradient-to-b from-white/5 via-transparent to-transparent"></div>
+          <div class="relative z-10 flex h-full flex-col">
+            <div class="flex items-center gap-1 pl-16 pt-7">
+              <span class="rounded px-2 py-0.5 text-[9px] font-medium text-slate-600">Total distance</span>
+              <span class="rounded px-2 py-0.5 text-[9px] font-medium text-slate-600">Heartrate</span>
+              <span class="rounded px-2 py-0.5 text-[9px] font-medium text-slate-600">Equipment</span>
+              <span class="rounded bg-indigo-600 px-2 py-0.5 text-[9px] font-medium text-white">Timeline</span>
+            </div>
+
+            <div class="mt-4 flex-1 space-y-3 px-1">
+              <div class="space-y-1">
+                <div class="flex items-center justify-between text-[8px] text-slate-500">
+                  <span>Adidas Boston</span>
+                  <span>2023 - 2025</span>
+                </div>
+                <div class="relative h-3 rounded-full bg-slate-800 overflow-hidden">
+                  <div class="absolute left-[12%] w-[58%] h-full rounded-full bg-violet-500/85"></div>
+                </div>
+              </div>
+
+              <div class="space-y-1">
+                <div class="flex items-center justify-between text-[8px] text-slate-500">
+                  <span>Nike Vaporfly</span>
+                  <span>2024 - 2026</span>
+                </div>
+                <div class="relative h-3 rounded-full bg-slate-800 overflow-hidden">
+                  <div class="absolute left-[34%] w-[44%] h-full rounded-full bg-violet-400/85"></div>
+                </div>
+              </div>
+
+              <div class="space-y-1">
+                <div class="flex items-center justify-between text-[8px] text-slate-500">
+                  <span>Trek Domane</span>
+                  <span>2022 - 2026</span>
+                </div>
+                <div class="relative h-3 rounded-full bg-slate-800 overflow-hidden">
+                  <div class="absolute left-[6%] w-[82%] h-full rounded-full bg-teal-500/85"></div>
+                </div>
+              </div>
+
+              <div class="flex justify-between pt-2 text-[8px] text-slate-600">
+                <span>2022</span>
+                <span>2023</span>
+                <span>2024</span>
+                <span>2025</span>
+                <span>2026</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="p-4 space-y-0.5">
+          <h3 class="font-semibold text-sm transition-colors group-hover:text-indigo-300">Equipment Timeline</h3>
+          <p class="text-xs text-slate-500">Equipment lifecycle and active usage periods</p>
         </div>
       </button>
 

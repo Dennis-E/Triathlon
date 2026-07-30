@@ -132,7 +132,7 @@ function extractRelevantColumns(csvText) {
     {
       outputHeader: 'Aktivitätsausrüstung',
       type: 'oneOf',
-      headers: ['Aktivitätsausrüstung', 'Ausrüstung', 'Fahrrad', 'Gear', 'Bike'],
+      headers: ['Aktivitätsausrüstung', 'Activity Gear', 'Ausrüstung', 'Fahrrad', 'Gear', 'Bike'],
       required: false,
     },
     {

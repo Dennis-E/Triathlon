@@ -169,7 +169,7 @@ function processData(rawCsvData) {
   }
 
   const nameIdx = findHeaderIndex(headers, { type: 'oneOf', headers: ['Name der Aktivität', 'Activity Name'] });
-  const equipmentIdx = findHeaderIndex(headers, { type: 'oneOf', headers: ['Aktivitätsausrüstung', 'Ausrüstung', 'Fahrrad', 'Gear', 'Bike'] });
+  const equipmentIdx = findHeaderIndex(headers, { type: 'oneOf', headers: ['Aktivitätsausrüstung', 'Activity Gear', 'Ausrüstung', 'Fahrrad', 'Gear', 'Bike'] });
   const durationIdx = findHeaderIndex(headers, { type: 'oneOf', headers: ['Bewegungszeit', 'Moving Time'] });
   const avgHeartRateIdx = headers.findIndex(header => {
     if (!header) return false;

@@ -117,6 +117,29 @@ describe('reduceActivitiesRows', () => {
     expect(reduced[1]).toEqual(['1', '19.07.2026, 14:52:02', 'Morning run', 'Run', 'ASICS Novablast 4', '3600', '10.00', '150', '10000']);
   });
 
+  it('prefers Activity Gear over Gear id columns in english exports', () => {
+    const rows = [
+      [
+        'Activity ID',
+        'Activity Date',
+        'Activity Name',
+        'Activity Type',
+        'Activity Gear',
+        'Moving Time',
+        'Distance',
+        'Average Heart Rate',
+        'Distance',
+        'Gear',
+        'Bike'
+      ],
+      ['1', '19.07.2026, 14:52:02', 'Morning run', 'Run', 'Saucony Kinvara 13', '3600', '10.00', '150', '10000', '15416331', '17529118']
+    ];
+
+    const reduced = reduceActivitiesRows(rows);
+
+    expect(reduced[1][4]).toBe('Saucony Kinvara 13');
+  });
+
   it('supports repeated english distance headers', () => {
     const rows = [
       [

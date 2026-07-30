@@ -8,7 +8,7 @@ const REQUIRED_ACTIVITY_COLUMNS = [
   { outputHeader: 'Aktivitätsdatum', type: 'oneOf', headers: ['Aktivitätsdatum', 'Activity Date'], required: true },
   { outputHeader: 'Name der Aktivität', type: 'oneOf', headers: ['Name der Aktivität', 'Activity Name'], required: true },
   { outputHeader: 'Aktivitätsart', type: 'oneOf', headers: ['Aktivitätsart', 'Activity Type', 'Sport Type'], required: true },
-  { outputHeader: 'Aktivitätsausrüstung', type: 'oneOf', headers: ['Aktivitätsausrüstung', 'Ausrüstung', 'Fahrrad', 'Gear', 'Bike'], required: false },
+  { outputHeader: 'Aktivitätsausrüstung', type: 'oneOf', headers: ['Aktivitätsausrüstung', 'Activity Gear', 'Ausrüstung', 'Fahrrad', 'Gear', 'Bike'], required: false },
   { outputHeader: 'Bewegungszeit', type: 'oneOf', headers: ['Bewegungszeit', 'Moving Time'], required: false },
   { outputHeader: 'Distanz', type: 'occurrence', headers: ['Distanz', 'Distance'], occurrence: 1, required: true },
   { outputHeader: 'Durchschnittliche Herzfrequenz', type: 'predicate', required: false },

@@ -1033,7 +1033,7 @@
       }
 
       const nameIdx = findHeaderIndex(headers, { type: 'oneOf', headers: ['Name der Aktivität', 'Activity Name'] });
-      const equipmentIdx = findHeaderIndex(headers, { type: 'oneOf', headers: ['Aktivitätsausrüstung', 'Ausrüstung', 'Fahrrad', 'Gear', 'Bike'] });
+      const equipmentIdx = findHeaderIndex(headers, { type: 'oneOf', headers: ['Aktivitätsausrüstung', 'Activity Gear', 'Ausrüstung', 'Fahrrad', 'Gear', 'Bike'] });
       const durationIdx = findHeaderIndex(headers, { type: 'oneOf', headers: ['Bewegungszeit', 'Moving Time'] }); // Moving time is better than elapsed time
       const avgHeartRateIdx = headers.findIndex(h => {
         if (!h) return false;

@@ -9,7 +9,9 @@ const {
 describe('equipment utils', () => {
   it('detects shoe vs bike equipment', () => {
     expect(getEquipmentType('ASICS Novablast 4')).toBe('Shoes');
+    expect(getEquipmentType('Saucony Kinvara 13')).toBe('Shoes');
     expect(getEquipmentType('Storck Aero 2')).toBe('Bikes');
+    expect(getEquipmentType('Granville')).toBe('Bikes');
   });
 
   it('aggregates total distance per equipment', () => {

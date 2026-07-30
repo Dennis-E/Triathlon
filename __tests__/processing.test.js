@@ -136,6 +136,18 @@ describe('processData', () => {
     expect(result[0].name).toBe('Morning run');
   });
 
+  it('should prefer Activity Gear names over Gear id columns when both are present', () => {
+    const data = [
+      ['Activity Date', 'Activity Type', 'Activity Name', 'Activity Gear', 'Moving Time', 'Distance', 'Distance', 'Gear', 'Bike'],
+      ['19.07.2026, 14:52:02', 'Run', 'Morning run', 'Saucony Kinvara 13', '3600', '10.00', '10000', '15416331', '17529118']
+    ];
+
+    const result = processData(data);
+
+    expect(result.length).toBe(1);
+    expect(result[0].equipment).toBe('Saucony Kinvara 13');
+  });
+
   it('should parse distance with German number format (meters)', () => {
     const data = [
       ['Aktivitätsdatum', 'Aktivitätsart', 'Name der Aktivität', 'Bewegungszeit', 'Distanz'],

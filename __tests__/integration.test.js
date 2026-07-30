@@ -12,6 +12,8 @@ const {
   calculateTotalsByCategory,
   calculateMetrics
 } = require('../dashboard-utils');
+const { reduceActivitiesRows } = require('../relevant-export-extractor');
+const { aggregateEquipmentDistance } = require('../equipment-utils');
 
 describe('Complete CSV Import Workflow', () => {
   let testCsvData;
@@ -195,5 +197,66 @@ describe('Data Validation', () => {
 
     // Should skip incomplete row or handle gracefully
     expect(Array.isArray(result)).toBe(true);
+  });
+
+  it('preserves readable equipment names through raw export reduction and processing', () => {
+    const rawRows = [
+      [
+        'Activity ID',
+        'Activity Date',
+        'Activity Name',
+        'Activity Type',
+        'Activity Description',
+        'Elapsed Time',
+        'Distance',
+        'Activity Gear',
+        'Moving Time',
+        'Distance',
+        'Bike',
+        'Gear'
+      ],
+      [
+        '1',
+        'Jul 28, 2026, 4:09:25 PM',
+        'Evening Run',
+        'Run',
+        '',
+        '2387',
+        '7.71',
+        'Saucony Kinvara 13',
+        '2362',
+        '7711.5',
+        '17529118',
+        '15416331'
+      ],
+      [
+        '2',
+        'Jul 29, 2026, 2:21:10 PM',
+        'Zwift Ride',
+        'Virtual Ride',
+        '',
+        '3467',
+        '26.92',
+        'Granville',
+        '3467',
+        '26927.5',
+        '6071390',
+        '6071390'
+      ]
+    ];
+
+    const reducedRows = reduceActivitiesRows(rawRows);
+    const processedActivities = processData(reducedRows);
+
+    expect(processedActivities).toHaveLength(2);
+    expect(processedActivities[0].equipment).toBe('Saucony Kinvara 13');
+    expect(processedActivities[1].equipment).toBe('Granville');
+
+    expect(aggregateEquipmentDistance(processedActivities, 'Shoes')).toEqual([
+      ['Saucony Kinvara 13', 7.7115]
+    ]);
+    expect(aggregateEquipmentDistance(processedActivities, 'Bikes')).toEqual([
+      ['Granville', 26.9275]
+    ]);
   });
 });

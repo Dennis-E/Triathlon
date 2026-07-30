@@ -105,28 +105,68 @@ function extractRelevantColumns(csvText) {
 
   // Define required columns (matching relevant-export-extractor.js)
   const columnDefinitions = [
-    { outputHeader: 'Aktivitäts-ID', type: 'exact', header: 'Aktivitäts-ID' },
-    { outputHeader: 'Aktivitätsdatum', type: 'exact', header: 'Aktivitätsdatum' },
-    { outputHeader: 'Name der Aktivität', type: 'exact', header: 'Name der Aktivität' },
-    { outputHeader: 'Aktivitätsart', type: 'exact', header: 'Aktivitätsart' },
+    {
+      outputHeader: 'Aktivitäts-ID',
+      type: 'oneOf',
+      headers: ['Aktivitäts-ID', 'Activity ID'],
+      required: true,
+    },
+    {
+      outputHeader: 'Aktivitätsdatum',
+      type: 'oneOf',
+      headers: ['Aktivitätsdatum', 'Activity Date'],
+      required: true,
+    },
+    {
+      outputHeader: 'Name der Aktivität',
+      type: 'oneOf',
+      headers: ['Name der Aktivität', 'Activity Name'],
+      required: true,
+    },
+    {
+      outputHeader: 'Aktivitätsart',
+      type: 'oneOf',
+      headers: ['Aktivitätsart', 'Activity Type', 'Sport Type'],
+      required: true,
+    },
     {
       outputHeader: 'Aktivitätsausrüstung',
       type: 'oneOf',
-      headers: ['Aktivitätsausrüstung', 'Ausrüstung', 'Fahrrad'],
+      headers: ['Aktivitätsausrüstung', 'Ausrüstung', 'Fahrrad', 'Gear', 'Bike'],
+      required: false,
     },
-    { outputHeader: 'Bewegungszeit', type: 'exact', header: 'Bewegungszeit' },
-    { outputHeader: 'Distanz', type: 'exact', header: 'Distanz' },
+    {
+      outputHeader: 'Bewegungszeit',
+      type: 'oneOf',
+      headers: ['Bewegungszeit', 'Moving Time'],
+      required: false,
+    },
+    {
+      outputHeader: 'Distanz',
+      type: 'occurrence',
+      headers: ['Distanz', 'Distance'],
+      occurrence: 1,
+      required: false,
+    },
     {
       outputHeader: 'Durchschnittliche Herzfrequenz',
       type: 'predicate',
+      required: false,
       predicate: (header) => {
         if (!header) return false;
         const normalized = String(header).toLowerCase();
         return (
           (normalized.includes('herz') || normalized.includes('heart')) &&
-          (normalized.includes('durch') || normalized.includes('avg') || normalized.includes('durchschnitt'))
+          (normalized.includes('durch') || normalized.includes('durchschnitt') || normalized.includes('avg') || normalized.includes('average'))
         );
       },
+    },
+    {
+      outputHeader: 'Distanz',
+      type: 'occurrence',
+      headers: ['Distanz', 'Distance'],
+      occurrence: 2,
+      required: true,
     },
   ];
 
@@ -145,6 +185,16 @@ function extractRelevantColumns(csvText) {
         index = headers.indexOf(header);
         if (index !== -1) break;
       }
+    } else if (colDef.type === 'occurrence') {
+      let matches = 0;
+      for (let i = 0; i < headers.length; i++) {
+        if (!colDef.headers.includes(headers[i])) continue;
+        matches++;
+        if (matches === colDef.occurrence) {
+          index = i;
+          break;
+        }
+      }
     } else if (colDef.type === 'predicate') {
       for (let i = 0; i < headers.length; i++) {
         if (colDef.predicate(headers[i])) {
@@ -158,9 +208,8 @@ function extractRelevantColumns(csvText) {
   }
 
   // Check that all required columns are found
-  const requiredIndices = [0, 1, 2, 3, 6]; // ID, Date, Name, Sport, Distanz
-  for (const idx of requiredIndices) {
-    if (columnIndices[idx] === null) {
+  for (let idx = 0; idx < columnDefinitions.length; idx++) {
+    if (columnDefinitions[idx].required && columnIndices[idx] === null) {
       missingColumns.push(columnDefinitions[idx].outputHeader);
     }
   }

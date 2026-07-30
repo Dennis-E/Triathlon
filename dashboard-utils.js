@@ -6,9 +6,36 @@
 // Standard Sport Categorization
 const SPORT_MAP = {
   'lauf': 'Run', 'laufen': 'Run', 'run': 'Run', 'running': 'Run', 'virtueller lauf': 'Run',
-  'radfahrt': 'Bike', 'virtuelle radfahrt': 'Bike', 'radfahren': 'Bike', 'ride': 'Bike', 'virtualride': 'Bike', 'biking': 'Bike', 'cycling': 'Bike',
+  'trail run': 'Run', 'trailrun': 'Run', 'walk': 'Run', 'gehen': 'Run',
+  'radfahrt': 'Bike', 'virtuelle radfahrt': 'Bike', 'radfahren': 'Bike', 'ride': 'Bike', 'virtual ride': 'Bike', 'virtualride': 'Bike', 'virtuelle fahrt': 'Bike', 'bike': 'Bike', 'biking': 'Bike', 'cycling': 'Bike', 'gravel ride': 'Bike', 'mountain bike ride': 'Bike', 'ebike ride': 'Bike', 'e-bike ride': 'Bike',
   'schwimmen': 'Swim', 'swim': 'Swim', 'swimming': 'Swim'
 };
+
+function findHeaderIndex(headers, matcher) {
+  if (!Array.isArray(headers)) return -1;
+
+  if (matcher.type === 'exact') {
+    return headers.indexOf(matcher.header);
+  }
+
+  if (matcher.type === 'oneOf') {
+    for (const header of matcher.headers) {
+      const index = headers.indexOf(header);
+      if (index !== -1) return index;
+    }
+    return -1;
+  }
+
+  if (matcher.type === 'includesOneOf') {
+    return headers.findIndex(header => {
+      if (!header) return false;
+      const normalized = String(header).toLowerCase();
+      return matcher.values.some(value => normalized.includes(value));
+    });
+  }
+
+  return -1;
+}
 
 /**
  * Parse German date format (e.g., "19.07.2026, 14:52:02")
@@ -17,6 +44,11 @@ const SPORT_MAP = {
  */
 function parseGermanDate(dateStr) {
   if (!dateStr) return null;
+  const directParse = new Date(dateStr);
+  if (!Number.isNaN(directParse.getTime())) {
+    return directParse;
+  }
+
   const parts = dateStr.split(',');
   if (!parts[0]) return null;
   const dmy = parts[0].trim().split('.');
@@ -119,23 +151,23 @@ function processData(rawCsvData) {
   const headers = rawCsvData[0];
   
   // Dynamic column resolution - try exact match first, then partial
-  let dateIdx = headers.indexOf('Aktivitätsdatum');
+  let dateIdx = findHeaderIndex(headers, { type: 'oneOf', headers: ['Aktivitätsdatum', 'Activity Date'] });
   if (dateIdx === -1) {
     dateIdx = headers.findIndex(h => h && h.includes('Aktivitätsdatum'));
   }
   
-  let sportIdx = headers.indexOf('Aktivitätsart');
+  let sportIdx = findHeaderIndex(headers, { type: 'oneOf', headers: ['Aktivitätsart', 'Activity Type', 'Sport Type'] });
   if (sportIdx === -1) {
     sportIdx = headers.findIndex(h => h && h.includes('Aktivitätsart'));
   }
   
-  const nameIdx = headers.indexOf('Name der Aktivität');
-  const durationIdx = headers.indexOf('Bewegungszeit');
+  const nameIdx = findHeaderIndex(headers, { type: 'oneOf', headers: ['Name der Aktivität', 'Activity Name'] });
+  const durationIdx = findHeaderIndex(headers, { type: 'oneOf', headers: ['Bewegungszeit', 'Moving Time'] });
 
   // Find 'Distanz' columns
   const distIndices = [];
   headers.forEach((h, i) => {
-    if (h === 'Distanz') distIndices.push(i);
+    if (h === 'Distanz' || h === 'Distance') distIndices.push(i);
   });
   const distIdx = distIndices.length > 1 ? distIndices[1] : (distIndices[0] || -1);
 

@@ -98,6 +98,31 @@ describe('processData', () => {
     expect(result[0].sportRaw).toBe('Unknown Sport');
   });
 
+  it('should support newer bike activity labels', () => {
+    const data = [
+      ['Aktivitätsdatum', 'Aktivitätsart', 'Name der Aktivität', 'Bewegungszeit', 'Distanz'],
+      ['19.07.2026, 14:52:02', 'Gravel Ride', 'Gravel session', '3600', '10000']
+    ];
+
+    const result = processData(data);
+
+    expect(result.length).toBe(1);
+    expect(result[0].sport).toBe('Bike');
+  });
+
+  it('should support english export headers for required columns', () => {
+    const data = [
+      ['Activity Date', 'Activity Type', 'Activity Name', 'Moving Time', 'Distance'],
+      ['19.07.2026, 14:52:02', 'Run', 'Morning run', '3600', '10000']
+    ];
+
+    const result = processData(data);
+
+    expect(result.length).toBe(1);
+    expect(result[0].sport).toBe('Run');
+    expect(result[0].name).toBe('Morning run');
+  });
+
   it('should parse distance with German number format (meters)', () => {
     const data = [
       ['Aktivitätsdatum', 'Aktivitätsart', 'Name der Aktivität', 'Bewegungszeit', 'Distanz'],

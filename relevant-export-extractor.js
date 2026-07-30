@@ -4,15 +4,15 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const REQUIRED_ACTIVITY_COLUMNS = [
-  { outputHeader: 'Aktivitäts-ID', type: 'exact', header: 'Aktivitäts-ID', required: true },
-  { outputHeader: 'Aktivitätsdatum', type: 'exact', header: 'Aktivitätsdatum', required: true },
-  { outputHeader: 'Name der Aktivität', type: 'exact', header: 'Name der Aktivität', required: true },
-  { outputHeader: 'Aktivitätsart', type: 'exact', header: 'Aktivitätsart', required: true },
-  { outputHeader: 'Aktivitätsausrüstung', type: 'oneOf', headers: ['Aktivitätsausrüstung', 'Ausrüstung', 'Fahrrad'], required: false },
-  { outputHeader: 'Bewegungszeit', type: 'exact', header: 'Bewegungszeit', required: false },
-  { outputHeader: 'Distanz', type: 'occurrence', header: 'Distanz', occurrence: 1, required: true },
+  { outputHeader: 'Aktivitäts-ID', type: 'oneOf', headers: ['Aktivitäts-ID', 'Activity ID'], required: true },
+  { outputHeader: 'Aktivitätsdatum', type: 'oneOf', headers: ['Aktivitätsdatum', 'Activity Date'], required: true },
+  { outputHeader: 'Name der Aktivität', type: 'oneOf', headers: ['Name der Aktivität', 'Activity Name'], required: true },
+  { outputHeader: 'Aktivitätsart', type: 'oneOf', headers: ['Aktivitätsart', 'Activity Type', 'Sport Type'], required: true },
+  { outputHeader: 'Aktivitätsausrüstung', type: 'oneOf', headers: ['Aktivitätsausrüstung', 'Ausrüstung', 'Fahrrad', 'Gear', 'Bike'], required: false },
+  { outputHeader: 'Bewegungszeit', type: 'oneOf', headers: ['Bewegungszeit', 'Moving Time'], required: false },
+  { outputHeader: 'Distanz', type: 'occurrence', headers: ['Distanz', 'Distance'], occurrence: 1, required: true },
   { outputHeader: 'Durchschnittliche Herzfrequenz', type: 'predicate', required: false },
-  { outputHeader: 'Distanz', type: 'occurrence', header: 'Distanz', occurrence: 2, required: true }
+  { outputHeader: 'Distanz', type: 'occurrence', headers: ['Distanz', 'Distance'], occurrence: 2, required: true }
 ];
 
 function parseCsv(text) {
@@ -104,7 +104,7 @@ function findHeaderIndex(headers, column) {
   if (column.type === 'occurrence') {
     let matchCount = 0;
     for (let index = 0; index < headers.length; index++) {
-      if (headers[index] !== column.header) continue;
+      if (!column.headers.includes(headers[index])) continue;
       matchCount++;
       if (matchCount === column.occurrence) {
         return index;
@@ -117,8 +117,8 @@ function findHeaderIndex(headers, column) {
     const index = headers.findIndex(header => {
       if (!header) return false;
       const normalized = String(header).toLowerCase();
-      return normalized.includes('herz') &&
-        (normalized.includes('durch') || normalized.includes('durchschnitt') || normalized.includes('avg'));
+      return (normalized.includes('herz') || normalized.includes('heart')) &&
+        (normalized.includes('durch') || normalized.includes('durchschnitt') || normalized.includes('avg') || normalized.includes('average'));
     });
     return index === -1 ? null : index;
   }
@@ -135,11 +135,11 @@ function reduceActivitiesRows(rows) {
   const selectedColumns = REQUIRED_ACTIVITY_COLUMNS.map(column => {
     const index = findHeaderIndex(headers, column);
     if (index === null && column.required) {
-      const descriptor = column.type === 'occurrence'
-        ? `${column.header} (#${column.occurrence})`
-        : column.outputHeader;
-      throw new Error(`Missing required activities.csv column: ${descriptor}`);
-    }
+        const descriptor = column.type === 'occurrence'
+          ? `${column.outputHeader} (#${column.occurrence})`
+          : column.outputHeader;
+        throw new Error(`Missing required activities.csv column: ${descriptor}`);
+      }
 
     return {
       outputHeader: column.outputHeader,

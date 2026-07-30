@@ -30,6 +30,14 @@ describe('parseGermanDate', () => {
     expect(result.getDate()).toBe(19);
   });
 
+  it('should parse english export dates with month names', () => {
+    const result = parseGermanDate('Jul 27, 2026, 9:00:37 AM');
+    expect(result).not.toBeNull();
+    expect(result.getFullYear()).toBe(2026);
+    expect(result.getMonth()).toBe(6);
+    expect(result.getDate()).toBe(27);
+  });
+
   it('should return null for empty string', () => {
     expect(parseGermanDate('')).toBeNull();
   });
@@ -179,6 +187,7 @@ describe('categorizeSport', () => {
     expect(categorizeSport('Ride')).toBe('Bike');
     expect(categorizeSport('Cycling')).toBe('Bike');
     expect(categorizeSport('Biking')).toBe('Bike');
+    expect(categorizeSport('Virtual Ride')).toBe('Bike');
   });
 
   it('should categorize German swimming terms to Swim', () => {

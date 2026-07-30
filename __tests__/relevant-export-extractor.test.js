@@ -84,6 +84,59 @@ describe('reduceActivitiesRows', () => {
     const reduced = reduceActivitiesRows(rows);
     expect(reduced[1][7]).toBe('150');
   });
+
+  it('keeps english export columns needed by the dashboards', () => {
+    const rows = [
+      [
+        'Activity ID',
+        'Activity Date',
+        'Activity Name',
+        'Activity Type',
+        'Gear',
+        'Moving Time',
+        'Distance',
+        'Average Heart Rate',
+        'Distance'
+      ],
+      ['1', '19.07.2026, 14:52:02', 'Morning run', 'Run', 'ASICS Novablast 4', '3600', '10.00', '150', '10000']
+    ];
+
+    const reduced = reduceActivitiesRows(rows);
+
+    expect(reduced[0]).toEqual([
+      'Aktivitäts-ID',
+      'Aktivitätsdatum',
+      'Name der Aktivität',
+      'Aktivitätsart',
+      'Aktivitätsausrüstung',
+      'Bewegungszeit',
+      'Distanz',
+      'Durchschnittliche Herzfrequenz',
+      'Distanz'
+    ]);
+    expect(reduced[1]).toEqual(['1', '19.07.2026, 14:52:02', 'Morning run', 'Run', 'ASICS Novablast 4', '3600', '10.00', '150', '10000']);
+  });
+
+  it('supports repeated english distance headers', () => {
+    const rows = [
+      [
+        'Activity ID',
+        'Activity Date',
+        'Activity Name',
+        'Activity Type',
+        'Moving Time',
+        'Distance',
+        'Average Heart Rate',
+        'Distance'
+      ],
+      ['1', '19.07.2026, 14:52:02', 'Morning run', 'Run', '3600', '10.00', '150', '10000']
+    ];
+
+    const reduced = reduceActivitiesRows(rows);
+
+    expect(reduced[1][6]).toBe('10.00');
+    expect(reduced[1][8]).toBe('10000');
+  });
 });
 
 describe('extractRelevantExport', () => {

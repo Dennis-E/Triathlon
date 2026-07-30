@@ -4,11 +4,14 @@ A browser-based dashboard for exploring long-term training trends from a reduced
 
 ## Current Dataset
 
-The repository keeps one visualization-ready dataset:
+The repository keeps visualization-ready datasets such as:
 
+- `Data/EE/relevant-export_155559589/activities.csv`
 - `Data/Dennis/relevant-export_39173135/activities.csv`
 
 This reduced file contains only the fields currently needed by the visualizations.
+
+If a Strava export has no heart-rate values or no equipment assigned to activities, the heart-rate and equipment visualizations will stay empty even though the import succeeded.
 
 ## Current Visualizations
 
@@ -52,8 +55,9 @@ python -m http.server
 
 or use VS Code Live Server.
 
-The dashboard auto-loads:
+The dashboard auto-loads the first available reduced extract from:
 
+- `./Data/EE/relevant-export_155559589/activities.csv`
 - `./Data/Dennis/relevant-export_39173135/activities.csv`
 
 If that is not available through the browser, you can manually select a reduced `activities.csv` file in the UI.

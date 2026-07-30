@@ -23,7 +23,6 @@ Features:
 - best all time
 - length vs pace
 - Heatmap
-- equipment: von ... bis... first activity to last activity 2024-01 to 2027-03 als roadmap chart
 - Heart-rate trend over time
 - Elevation profile and elevation analysis by sport
 - Training load distribution by intensity zones

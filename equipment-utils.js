@@ -137,6 +137,62 @@ function aggregateEquipmentTimeline(activities, filter = 'All') {
     .sort((a, b) => b.lastDate - a.lastDate);
 }
 
+/**
+ * Groups individual activities by equipment, maintaining the same ordering
+ * (most recently used equipment first) as aggregateEquipmentTimeline.
+ *
+ * Returns an array of equipment rows, each with their sorted activity list:
+ *   {
+ *     name, type, firstDate, lastDate,
+ *     activities: [{ date, distance, name, sport }, ...]   ← sorted asc
+ *   }
+ *
+ * @param {Array} activities - Processed activity objects
+ * @param {string} filter - 'All', 'Shoes', or 'Bikes'
+ * @returns {Array}
+ */
+function getEquipmentTimelineActivities(activities, filter = 'All') {
+  const map = {};
+
+  activities.forEach(activity => {
+    if (!activity.equipment || activity.equipment.trim() === '') return;
+    if (activity.distance <= 0) return;
+
+    const type = getEquipmentType(activity.equipment);
+    if (filter === 'Shoes' && type !== 'Shoes') return;
+    if (filter === 'Bikes' && type !== 'Bikes') return;
+
+    const key = activity.equipment;
+    if (!map[key]) {
+      map[key] = {
+        name: key,
+        type,
+        firstDate: activity.date,
+        lastDate: activity.date,
+        activities: []
+      };
+    }
+
+    const entry = map[key];
+    if (activity.date < entry.firstDate) entry.firstDate = activity.date;
+    if (activity.date > entry.lastDate) entry.lastDate = activity.date;
+    entry.activities.push({
+      date: activity.date,
+      distance: activity.distance,
+      name: activity.name || '',
+      sport: activity.sport || null
+    });
+  });
+
+  // Sort activities within each row chronologically
+  Object.values(map).forEach(row => {
+    row.activities.sort((a, b) => a.date - b.date);
+  });
+
+  // Return rows sorted by lastDate descending (mirrors aggregateEquipmentTimeline)
+  return Object.values(map).sort((a, b) => b.lastDate - a.lastDate);
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     SHOE_PATTERN,
@@ -145,7 +201,8 @@ if (typeof module !== 'undefined' && module.exports) {
     aggregateEquipmentPace,
     aggregateEquipmentActivityCount,
     aggregateEquipmentAvgLength,
-    aggregateEquipmentTimeline
+    aggregateEquipmentTimeline,
+    getEquipmentTimelineActivities
   };
 }
 
@@ -157,6 +214,7 @@ if (typeof window !== 'undefined') {
     aggregateEquipmentPace,
     aggregateEquipmentActivityCount,
     aggregateEquipmentAvgLength,
-    aggregateEquipmentTimeline
+    aggregateEquipmentTimeline,
+    getEquipmentTimelineActivities
   };
 }

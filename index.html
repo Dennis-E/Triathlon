@@ -730,12 +730,20 @@
           <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
             <div class="space-y-1">
               <h2 class="text-2xl font-bold tracking-tight">Equipment Timeline</h2>
-              <p class="text-xs text-slate-400">Active period per piece of equipment, ordered by most recently used</p>
+              <p id="equipmentTimelineSubtitle" class="text-xs text-slate-400">Active period per piece of equipment, ordered by most recently used</p>
             </div>
-            <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
-              <button onclick="setEquipmentTimelineFilter('All')" id="equipmentTimelineBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">All</button>
-              <button onclick="setEquipmentTimelineFilter('Shoes')" id="equipmentTimelineBtnShoes" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Shoes</button>
-              <button onclick="setEquipmentTimelineFilter('Bikes')" id="equipmentTimelineBtnBikes" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Bikes</button>
+            <div class="flex flex-wrap gap-3">
+              <!-- View mode toggle -->
+              <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+                <button onclick="setEquipmentTimelineMode('continuous')" id="equipmentTimelineModeContinuous" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">Continuous</button>
+                <button onclick="setEquipmentTimelineMode('activities')" id="equipmentTimelineModeActivities" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Activities</button>
+              </div>
+              <!-- Equipment type filter -->
+              <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+                <button onclick="setEquipmentTimelineFilter('All')" id="equipmentTimelineBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">All</button>
+                <button onclick="setEquipmentTimelineFilter('Shoes')" id="equipmentTimelineBtnShoes" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Shoes</button>
+                <button onclick="setEquipmentTimelineFilter('Bikes')" id="equipmentTimelineBtnBikes" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Bikes</button>
+              </div>
             </div>
           </div>
 
@@ -786,6 +794,7 @@
     let selectedEquipmentFilter = 'All';
     let selectedEquipmentMetric = 'distance';
     let selectedEquipmentTimelineFilter = 'All';
+    let selectedEquipmentTimelineMode = 'continuous'; // 'continuous' | 'activities'
     let equipmentTimelineChartInstance = null;
      let selectedScatterSportFilter = 'Run';
      let scatterChartInstance = null;
@@ -1399,129 +1408,102 @@ datasets: [{
       renderEquipmentTimeline();
     }
 
-    function renderEquipmentTimeline() {
-      const canvas = document.getElementById('equipmentTimelineChart');
-      const wrapper = document.getElementById('equipmentTimelineWrapper');
-      const emptyState = document.getElementById('equipmentTimelineEmptyState');
-      if (!canvas) return;
+    function setEquipmentTimelineMode(mode) {
+      selectedEquipmentTimelineMode = mode;
 
-      const entries = window.equipmentUtils.aggregateEquipmentTimeline(
-        processedActivities,
-        selectedEquipmentTimelineFilter
-      );
+      const btnContinuous = document.getElementById('equipmentTimelineModeContinuous');
+      const btnActivities = document.getElementById('equipmentTimelineModeActivities');
+      const activeClass = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25';
+      const inactiveClass = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200';
 
-      if (equipmentTimelineChartInstance) {
-        equipmentTimelineChartInstance.destroy();
-        equipmentTimelineChartInstance = null;
+      if (btnContinuous) btnContinuous.className = mode === 'continuous' ? activeClass : inactiveClass;
+      if (btnActivities) btnActivities.className = mode === 'activities' ? activeClass : inactiveClass;
+
+      const subtitle = document.getElementById('equipmentTimelineSubtitle');
+      if (subtitle) {
+        subtitle.textContent = mode === 'continuous'
+          ? 'Active period per piece of equipment, ordered by most recently used'
+          : 'Individual activities per piece of equipment, ordered by most recently used';
       }
 
-      if (entries.length === 0) {
-        canvas.classList.add('hidden');
-        if (emptyState) emptyState.classList.remove('hidden');
-        return;
-      }
+      renderEquipmentTimeline();
+    }
 
-      canvas.classList.remove('hidden');
-      if (emptyState) emptyState.classList.add('hidden');
+    // ─── shared helpers ────────────────────────────────────────────────────────
 
-      // Dynamic canvas height: 48px per row, min 300px
-      const rowHeight = 48;
-      const chartHeight = Math.max(300, entries.length * rowHeight + 80);
-      canvas.style.height = chartHeight + 'px';
-      if (wrapper) wrapper.style.height = chartHeight + 'px';
+    function _timelineSetCanvasHeight(canvas, wrapper, rowCount) {
+      const rowHeight = 52;
+      const h = Math.max(320, rowCount * rowHeight + 80);
+      canvas.style.height = h + 'px';
+      if (wrapper) wrapper.style.height = h + 'px';
+    }
 
-      // The overall time span across all equipment
+    function _timelineDateLabel(d) {
+      return d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' });
+    }
+
+    function _timelineFullDateLabel(d) {
+      return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+
+    // ─── CONTINUOUS mode renderer ──────────────────────────────────────────────
+
+    function _renderTimelineContinuous(canvas, entries) {
       const globalMin = Math.min(...entries.map(e => e.firstDate.getTime()));
       const globalMax = Math.max(...entries.map(e => e.lastDate.getTime()));
-
-      // Labels (equipment names) — top = most recently used (index 0)
       const labels = entries.map(e => e.name);
 
-      // For each equipment build two segments:
-      //   segment A: invisible spacer from globalMin to firstDate
-      //   segment B: visible bar from firstDate to lastDate
       const spacerData = entries.map(e => e.firstDate.getTime() - globalMin);
       const durationData = entries.map(e => Math.max(
         e.lastDate.getTime() - e.firstDate.getTime(),
-        1000 * 60 * 60 * 24  // minimum 1 day so single-day bars are visible
+        1000 * 60 * 60 * 24   // min 1 day so point-in-time is visible
       ));
+      const barColors = entries.map(e => e.type === 'Shoes' ? '#8B5CF6' : '#14B8A6');
+      const barBorderColors = entries.map(e => e.type === 'Shoes' ? '#A78BFA' : '#2DD4BF');
 
-      const barColors = entries.map(e =>
-        e.type === 'Shoes' ? '#8B5CF6' : '#14B8A6'
-      );
-      const barBorderColors = entries.map(e =>
-        e.type === 'Shoes' ? '#A78BFA' : '#2DD4BF'
-      );
-
-      // Custom plugin: draw date labels inside/beside each bar
       const ganttLabelPlugin = {
-        id: 'ganttLabels',
+        id: 'ganttLabelsContinuous',
         afterDatasetsDraw(chart) {
-          const { ctx, data } = chart;
-          const barMeta = chart.getDatasetMeta(1); // visible bars dataset
-
+          const { ctx } = chart;
+          const barMeta = chart.getDatasetMeta(1);
           ctx.save();
           ctx.font = '500 11px sans-serif';
           ctx.textBaseline = 'middle';
 
           barMeta.data.forEach((bar, i) => {
             const entry = entries[i];
-            const barWidth = bar.width;
-            if (barWidth < 20) return; // too narrow to label
-
-            const firstLabel = entry.firstDate.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' });
-            const lastLabel = entry.lastDate.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' });
-            const kmLabel = `${Math.round(entry.totalKm)} km`;
-
-            const centerX = bar.x - bar.width / 2 + bar.width / 2;
+            const bw = bar.width;
+            const barLeft = bar.x - bw;
+            const centerX = bar.x - bw / 2;
             const barY = bar.y;
 
-            // Draw start date left of bar start
-            const barLeft = bar.x - bar.width;
-            const barRight = bar.x;
-
-            ctx.fillStyle = '#94A3B8';
+            ctx.fillStyle = '#64748B';
             ctx.textAlign = 'right';
-            ctx.fillText(firstLabel, barLeft - 4, barY);
+            ctx.fillText(_timelineDateLabel(entry.firstDate), barLeft - 4, barY);
 
-            // Draw km + end date inside or right of bar
-            ctx.fillStyle = '#FFFFFF';
-            ctx.textAlign = 'center';
-            if (barWidth > 80) {
-              ctx.fillText(`${kmLabel}  ·  to ${lastLabel}`, centerX, barY);
-            } else if (barWidth > 40) {
+            if (bw > 80) {
+              ctx.fillStyle = '#FFFFFF';
+              ctx.textAlign = 'center';
+              const kmLabel = `${Math.round(entry.totalKm)} km · to ${_timelineDateLabel(entry.lastDate)}`;
               ctx.fillText(kmLabel, centerX, barY);
+            } else if (bw > 38) {
+              ctx.fillStyle = '#FFFFFF';
+              ctx.textAlign = 'center';
+              ctx.fillText(`${Math.round(entry.totalKm)} km`, centerX, barY);
             }
           });
-
           ctx.restore();
         }
       };
 
-      equipmentTimelineChartInstance = new Chart(canvas.getContext('2d'), {
+      return new Chart(canvas.getContext('2d'), {
         type: 'bar',
         plugins: [ganttLabelPlugin],
         data: {
           labels,
           datasets: [
-            {
-              // Invisible spacer (offset bar)
-              label: 'spacer',
-              data: spacerData,
-              backgroundColor: 'transparent',
-              borderWidth: 0,
-              borderSkipped: false
-            },
-            {
-              // Visible Gantt bar
-              label: 'Active period',
-              data: durationData,
-              backgroundColor: barColors,
-              borderColor: barBorderColors,
-              borderWidth: 1,
-              borderSkipped: false,
-              borderRadius: 4
-            }
+            { label: 'spacer', data: spacerData, backgroundColor: 'transparent', borderWidth: 0, borderSkipped: false },
+            { label: 'Active period', data: durationData, backgroundColor: barColors, borderColor: barBorderColors, borderWidth: 1, borderSkipped: false, borderRadius: 4 }
           ]
         },
         options: {
@@ -1540,10 +1522,9 @@ datasets: [{
                 label: ctx => {
                   if (ctx.datasetIndex !== 1) return null;
                   const entry = entries[ctx.dataIndex];
-                  const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
                   return [
-                    `From: ${fmt(entry.firstDate)}`,
-                    `To:   ${fmt(entry.lastDate)}`,
+                    `From: ${_timelineFullDateLabel(entry.firstDate)}`,
+                    `To:   ${_timelineFullDateLabel(entry.lastDate)}`,
                     `Distance: ${entry.totalKm.toFixed(1)} km`,
                     `Activities: ${entry.activityCount}`
                   ];
@@ -1561,14 +1542,172 @@ datasets: [{
               ticks: {
                 color: '#94A3B8',
                 maxTicksLimit: 8,
-                callback: value => {
-                  const d = new Date(globalMin + value);
-                  return d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' });
-                }
+                callback: value => _timelineDateLabel(new Date(globalMin + value))
               }
             },
             y: {
               stacked: true,
+              grid: { display: false },
+              ticks: { color: '#E2E8F0', autoSkip: false, font: { size: 12 } }
+            }
+          }
+        }
+      });
+    }
+
+    // ─── ACTIVITIES mode renderer ──────────────────────────────────────────────
+    //
+    // Strategy: use a scatter chart with custom rendering.
+    //   X axis = real timestamp (ms).
+    //   Y axis = equipment row index (0 = top = most recently used).
+    //   Each activity is a point at (date.getTime(), rowIndex).
+    //   We draw it as a vertical pill/rectangle via a custom plugin so we can
+    //   control width (proportional to distance) and height (fixed, fits in row).
+
+    function _renderTimelineActivities(canvas, rows) {
+      const allDates = rows.flatMap(r => r.activities.map(a => a.date.getTime()));
+      const globalMin = Math.min(...allDates);
+      const globalMax = Math.max(...allDates);
+
+      // Pad the axis slightly so bars at edges don't clip
+      const span = Math.max(globalMax - globalMin, 1000 * 60 * 60 * 24 * 7);
+      const xMin = globalMin - span * 0.01;
+      const xMax = globalMax + span * 0.02;
+
+      // Colour palette per equipment row
+      const rowColors = rows.map(r => r.type === 'Shoes' ? '#8B5CF6' : '#14B8A6');
+      const rowBorderColors = rows.map(r => r.type === 'Shoes' ? '#A78BFA' : '#2DD4BF');
+
+      // Distance normalisation for bar width:
+      //   largest activity in dataset gets a reference pixel-equivalent width.
+      //   We express widths as fractions of the time span so Chart.js scale handles it.
+      const allDistances = rows.flatMap(r => r.activities.map(a => a.distance));
+      const maxDist = Math.max(...allDistances, 1);
+      // Reference width: largest activity occupies ~2.5% of the time axis
+      const refWidthMs = span * 0.025;
+      const minWidthMs = span * 0.004; // minimum so tiny activities are still visible
+
+      // Y-axis category labels — row 0 (most recently used) at top
+      const yLabels = rows.map(r => r.name);
+
+      // Build one scatter dataset per equipment row so colours work simply.
+      // Use the equipment name string as the Y value so Chart.js maps it onto
+      // the category axis — this gives the same centering as the continuous chart.
+      const datasets = rows.map((row, rowIdx) => ({
+        label: row.name,
+        data: row.activities.map(act => ({
+          x: act.date.getTime(),
+          y: row.name,
+          distance: act.distance,
+          actName: act.name,
+          sport: act.sport,
+          widthMs: Math.max(minWidthMs, (act.distance / maxDist) * refWidthMs)
+        })),
+        backgroundColor: rowColors[rowIdx] + 'CC',   // slight transparency
+        borderColor: rowBorderColors[rowIdx],
+        borderWidth: 1,
+        pointRadius: 0,   // we draw custom rects, hide default points
+        showLine: false
+      }));
+
+      // Custom plugin that draws the activity bars.
+      // The Y scale is a category axis, so getPixelForValue(equipmentName)
+      // returns the exact vertical centre of that row's band — identical to
+      // how the continuous Gantt chart centres its bars.
+      const activityBarsPlugin = {
+        id: 'activityBars',
+        afterDatasetsDraw(chart) {
+          const { ctx, scales: { x, y } } = chart;
+          // Category band height = total axis height / number of categories
+          const barH = Math.max(10, (y.height / rows.length) * 0.55);
+
+          ctx.save();
+          chart.data.datasets.forEach((ds, dsIdx) => {
+            const meta = chart.getDatasetMeta(dsIdx);
+            if (meta.hidden) return;
+
+            ds.data.forEach((point) => {
+              const cx = x.getPixelForValue(point.x);
+              const cy = y.getPixelForValue(point.y);   // centered in category band
+              const halfW = Math.max(2, x.getPixelForValue(point.x + point.widthMs) - cx);
+              const rx = cx - halfW / 2;
+              const ry = cy - barH / 2;
+
+              ctx.fillStyle = rowColors[dsIdx] + 'CC';
+              ctx.strokeStyle = rowBorderColors[dsIdx];
+              ctx.lineWidth = 1;
+
+              // Rounded rect
+              const r = Math.min(3, halfW / 2, barH / 2);
+              ctx.beginPath();
+              ctx.moveTo(rx + r, ry);
+              ctx.lineTo(rx + halfW - r, ry);
+              ctx.quadraticCurveTo(rx + halfW, ry, rx + halfW, ry + r);
+              ctx.lineTo(rx + halfW, ry + barH - r);
+              ctx.quadraticCurveTo(rx + halfW, ry + barH, rx + halfW - r, ry + barH);
+              ctx.lineTo(rx + r, ry + barH);
+              ctx.quadraticCurveTo(rx, ry + barH, rx, ry + barH - r);
+              ctx.lineTo(rx, ry + r);
+              ctx.quadraticCurveTo(rx, ry, rx + r, ry);
+              ctx.closePath();
+              ctx.fill();
+              ctx.stroke();
+            });
+          });
+          ctx.restore();
+        }
+      };
+
+      return new Chart(canvas.getContext('2d'), {
+        type: 'scatter',
+        plugins: [activityBarsPlugin],
+        data: { datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          layout: { padding: { left: 0, right: 16 } },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#0F172A',
+              titleColor: '#F8FAFC',
+              bodyColor: '#CBD5E1',
+              callbacks: {
+                title: ctx => {
+                  if (!ctx[0]) return '';
+                  const ds = datasets[ctx[0].datasetIndex];
+                  return ds ? ds.label : '';
+                },
+                label: ctx => {
+                  const point = ctx.raw;
+                  if (!point) return '';
+                  return [
+                    point.actName ? `Activity: ${point.actName}` : null,
+                    `Date: ${_timelineFullDateLabel(new Date(point.x))}`,
+                    `Distance: ${point.distance.toFixed(1)} km`,
+                    point.sport ? `Sport: ${point.sport}` : null
+                  ].filter(Boolean);
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              type: 'linear',
+              min: xMin,
+              max: xMax,
+              grid: { color: '#1E293B' },
+              ticks: {
+                color: '#94A3B8',
+                maxTicksLimit: 8,
+                callback: value => _timelineDateLabel(new Date(value))
+              }
+            },
+            y: {
+              type: 'category',
+              labels: yLabels,
+              reverse: false,
+              offset: true,
               grid: { display: false },
               ticks: {
                 color: '#E2E8F0',
@@ -1579,6 +1718,54 @@ datasets: [{
           }
         }
       });
+    }
+
+    // ─── main entry point ──────────────────────────────────────────────────────
+
+    function renderEquipmentTimeline() {
+      const canvas = document.getElementById('equipmentTimelineChart');
+      const wrapper = document.getElementById('equipmentTimelineWrapper');
+      const emptyState = document.getElementById('equipmentTimelineEmptyState');
+      if (!canvas) return;
+
+      if (equipmentTimelineChartInstance) {
+        equipmentTimelineChartInstance.destroy();
+        equipmentTimelineChartInstance = null;
+      }
+
+      if (selectedEquipmentTimelineMode === 'activities') {
+        const rows = window.equipmentUtils.getEquipmentTimelineActivities(
+          processedActivities,
+          selectedEquipmentTimelineFilter
+        );
+
+        if (rows.length === 0 || rows.every(r => r.activities.length === 0)) {
+          canvas.classList.add('hidden');
+          if (emptyState) emptyState.classList.remove('hidden');
+          return;
+        }
+        canvas.classList.remove('hidden');
+        if (emptyState) emptyState.classList.add('hidden');
+        _timelineSetCanvasHeight(canvas, wrapper, rows.length);
+        equipmentTimelineChartInstance = _renderTimelineActivities(canvas, rows);
+
+      } else {
+        // continuous mode
+        const entries = window.equipmentUtils.aggregateEquipmentTimeline(
+          processedActivities,
+          selectedEquipmentTimelineFilter
+        );
+
+        if (entries.length === 0) {
+          canvas.classList.add('hidden');
+          if (emptyState) emptyState.classList.remove('hidden');
+          return;
+        }
+        canvas.classList.remove('hidden');
+        if (emptyState) emptyState.classList.add('hidden');
+        _timelineSetCanvasHeight(canvas, wrapper, entries.length);
+        equipmentTimelineChartInstance = _renderTimelineContinuous(canvas, entries);
+      }
     }
 
     function initScatterDateSlider() {

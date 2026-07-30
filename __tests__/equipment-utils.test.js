@@ -4,7 +4,8 @@ const {
   aggregateEquipmentPace,
   aggregateEquipmentActivityCount,
   aggregateEquipmentAvgLength,
-  aggregateEquipmentTimeline
+  aggregateEquipmentTimeline,
+  getEquipmentTimelineActivities
 } = require('../equipment-utils');
 
 describe('equipment utils', () => {
@@ -174,6 +175,95 @@ describe('equipment utils', () => {
       expect(aggregateEquipmentTimeline([
         { equipment: '', date: d('2024-01-01'), distance: 10 }
       ])).toEqual([]);
+    });
+  });
+
+  describe('getEquipmentTimelineActivities', () => {
+    const d = s => new Date(s);
+
+    const activities = [
+      { equipment: 'ASICS Novablast 4', date: d('2024-01-10'), distance: 10, name: 'Morning run', sport: 'Run' },
+      { equipment: 'ASICS Novablast 4', date: d('2024-06-15'), distance: 12, name: 'Long run', sport: 'Run' },
+      { equipment: 'ASICS Novablast 4', date: d('2024-03-20'), distance: 8,  name: 'Easy run', sport: 'Run' },
+      { equipment: 'Nike Pegasus',      date: d('2025-02-01'), distance: 9,  name: 'Track', sport: 'Run' },
+      { equipment: 'Nike Pegasus',      date: d('2025-05-10'), distance: 11, name: 'Race', sport: 'Run' },
+      { equipment: 'Storck Aero 2',     date: d('2023-07-04'), distance: 50, name: 'Ride', sport: 'Bike' }
+    ];
+
+    it('returns rows sorted by lastDate descending', () => {
+      const result = getEquipmentTimelineActivities(activities);
+      expect(result.map(r => r.name)).toEqual([
+        'Nike Pegasus',
+        'ASICS Novablast 4',
+        'Storck Aero 2'
+      ]);
+    });
+
+    it('sorts activities within each row chronologically ascending', () => {
+      const result = getEquipmentTimelineActivities(activities);
+      const asics = result.find(r => r.name === 'ASICS Novablast 4');
+      const dates = asics.activities.map(a => a.date.toISOString().slice(0, 10));
+      expect(dates).toEqual(['2024-01-10', '2024-03-20', '2024-06-15']);
+    });
+
+    it('includes distance and name on each activity', () => {
+      const result = getEquipmentTimelineActivities(activities);
+      const peg = result.find(r => r.name === 'Nike Pegasus');
+      expect(peg.activities[0].distance).toBe(9);
+      expect(peg.activities[0].name).toBe('Track');
+      expect(peg.activities[1].name).toBe('Race');
+    });
+
+    it('sets firstDate and lastDate from activities in the row', () => {
+      const result = getEquipmentTimelineActivities(activities);
+      const asics = result.find(r => r.name === 'ASICS Novablast 4');
+      expect(asics.firstDate).toEqual(d('2024-01-10'));
+      expect(asics.lastDate).toEqual(d('2024-06-15'));
+    });
+
+    it('assigns correct equipment type', () => {
+      const result = getEquipmentTimelineActivities(activities);
+      expect(result.find(r => r.name === 'ASICS Novablast 4').type).toBe('Shoes');
+      expect(result.find(r => r.name === 'Storck Aero 2').type).toBe('Bikes');
+    });
+
+    it('filters by Shoes', () => {
+      const result = getEquipmentTimelineActivities(activities, 'Shoes');
+      expect(result.every(r => r.type === 'Shoes')).toBe(true);
+      expect(result.find(r => r.name === 'Storck Aero 2')).toBeUndefined();
+    });
+
+    it('filters by Bikes', () => {
+      const result = getEquipmentTimelineActivities(activities, 'Bikes');
+      expect(result.length).toBe(1);
+      expect(result[0].name).toBe('Storck Aero 2');
+      expect(result[0].activities.length).toBe(1);
+    });
+
+    it('ignores activities with missing or empty equipment', () => {
+      const mixed = [
+        { equipment: '',   date: d('2024-01-01'), distance: 5,  name: 'A', sport: 'Run' },
+        { equipment: null, date: d('2024-02-01'), distance: 6,  name: 'B', sport: 'Run' },
+        { equipment: 'Hoka', date: d('2024-03-01'), distance: 8, name: 'C', sport: 'Run' }
+      ];
+      const result = getEquipmentTimelineActivities(mixed);
+      expect(result.length).toBe(1);
+      expect(result[0].activities.length).toBe(1);
+    });
+
+    it('ignores activities with zero or negative distance', () => {
+      const mixed = [
+        { equipment: 'Hoka', date: d('2024-01-01'), distance: 0,  name: 'X', sport: 'Run' },
+        { equipment: 'Hoka', date: d('2024-02-01'), distance: -1, name: 'Y', sport: 'Run' },
+        { equipment: 'Hoka', date: d('2024-03-01'), distance: 10, name: 'Z', sport: 'Run' }
+      ];
+      const result = getEquipmentTimelineActivities(mixed);
+      expect(result[0].activities.length).toBe(1);
+      expect(result[0].activities[0].name).toBe('Z');
+    });
+
+    it('returns empty array for no valid input', () => {
+      expect(getEquipmentTimelineActivities([])).toEqual([]);
     });
   });
 });

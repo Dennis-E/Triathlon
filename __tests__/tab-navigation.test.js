@@ -41,10 +41,12 @@ function createMockDocument() {
     vizTabHeartratePace: createMockElement(),
     vizTabEquipment: createMockElement(),
     vizTabEquipmentTimeline: createMockElement(),
+    vizTabPersonalBests: createMockElement(),
     vizPanelTotalDistance: createMockElement(),
     vizPanelHeartratePace: createMockElement(),
     vizPanelEquipment: createMockElement(),
-    vizPanelEquipmentTimeline: createMockElement()
+    vizPanelEquipmentTimeline: createMockElement(),
+    vizPanelPersonalBests: createMockElement()
   };
 
   return {
@@ -60,8 +62,9 @@ describe('tab navigation helpers', () => {
     expect(getNextVisualizationTab('totalDistance', 1)).toBe('heartratePace');
     expect(getNextVisualizationTab('heartratePace', 1)).toBe('equipment');
     expect(getNextVisualizationTab('equipment', 1)).toBe('equipmentTimeline');
-    expect(getNextVisualizationTab('equipmentTimeline', 1)).toBe('totalDistance');
-    expect(getNextVisualizationTab('totalDistance', -1)).toBe('equipmentTimeline');
+    expect(getNextVisualizationTab('equipmentTimeline', 1)).toBe('personalBests');
+    expect(getNextVisualizationTab('personalBests', 1)).toBe('totalDistance');
+    expect(getNextVisualizationTab('totalDistance', -1)).toBe('personalBests');
     expect(getNextVisualizationTab('unknown', 1)).toBe('totalDistance');
   });
 
@@ -104,9 +107,9 @@ describe('tab navigation helpers', () => {
 
     const nextTab = handleVisualizationTabKeydown(event, 'totalDistance', { onTabChange });
 
-    expect(nextTab).toBe('equipmentTimeline');
+    expect(nextTab).toBe('personalBests');
     expect(event.preventDefault).toHaveBeenCalledTimes(1);
-    expect(onTabChange).toHaveBeenCalledWith('equipmentTimeline', { focusTab: true });
+    expect(onTabChange).toHaveBeenCalledWith('personalBests', { focusTab: true });
   });
 
   it('activates equipmentTimeline tab correctly', () => {

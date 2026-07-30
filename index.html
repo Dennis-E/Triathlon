@@ -448,6 +448,19 @@
           >
             Equipment
           </button>
+          <button
+            id="vizTabEquipmentTimeline"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="vizPanelEquipmentTimeline"
+            tabindex="-1"
+            onclick="setVisualizationTab('equipmentTimeline')"
+            onkeydown="handleVisualizationTabKeydown(event, 'equipmentTimeline')"
+            class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
+          >
+            Equipment Timeline
+          </button>
         </div>
       </div>
       
@@ -648,6 +661,34 @@
         </div>
       </div>
 
+      <div id="vizPanelEquipmentTimeline" role="tabpanel" aria-labelledby="vizTabEquipmentTimeline" class="hidden">
+        <div class="space-y-5">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+            <div class="space-y-1">
+              <h2 class="text-2xl font-bold tracking-tight">Equipment Timeline</h2>
+              <p class="text-xs text-slate-400">Active period per piece of equipment, ordered by most recently used</p>
+            </div>
+            <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+              <button onclick="setEquipmentTimelineFilter('All')" id="equipmentTimelineBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">All</button>
+              <button onclick="setEquipmentTimelineFilter('Shoes')" id="equipmentTimelineBtnShoes" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Shoes</button>
+              <button onclick="setEquipmentTimelineFilter('Bikes')" id="equipmentTimelineBtnBikes" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Bikes</button>
+            </div>
+          </div>
+
+          <div class="relative w-full" id="equipmentTimelineWrapper">
+            <canvas id="equipmentTimelineChart"></canvas>
+            <div id="equipmentTimelineEmptyState" class="hidden flex items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/80 px-6 py-16 text-center text-sm text-slate-400">
+              No equipment assignments available in the current dataset.
+            </div>
+          </div>
+
+          <div class="flex items-center gap-4 text-xs text-slate-400 pt-1">
+            <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm bg-[#8B5CF6]"></span>Shoes</span>
+            <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm bg-[#14B8A6]"></span>Bikes</span>
+          </div>
+        </div>
+      </div>
+
     </div>
 
   </main>
@@ -680,6 +721,8 @@
     let selectedVisualizationTab = 'totalDistance'; // 'totalDistance', 'heartratePace'
     let selectedEquipmentFilter = 'All';
     let selectedEquipmentMetric = 'distance';
+    let selectedEquipmentTimelineFilter = 'All';
+    let equipmentTimelineChartInstance = null;
      let selectedScatterSportFilter = 'Run';
      let scatterChartInstance = null;
      let equipmentChartInstance = null;
@@ -1275,6 +1318,203 @@ datasets: [{
       }
 
       renderEquipmentChart();
+    }
+
+    function setEquipmentTimelineFilter(filter) {
+      selectedEquipmentTimelineFilter = filter;
+
+      document.querySelectorAll('[id^="equipmentTimelineBtn"]').forEach(btn => {
+        btn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200';
+      });
+
+      const activeButton = document.getElementById(`equipmentTimelineBtn${filter}`);
+      if (activeButton) {
+        activeButton.className = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25';
+      }
+
+      renderEquipmentTimeline();
+    }
+
+    function renderEquipmentTimeline() {
+      const canvas = document.getElementById('equipmentTimelineChart');
+      const wrapper = document.getElementById('equipmentTimelineWrapper');
+      const emptyState = document.getElementById('equipmentTimelineEmptyState');
+      if (!canvas) return;
+
+      const entries = window.equipmentUtils.aggregateEquipmentTimeline(
+        processedActivities,
+        selectedEquipmentTimelineFilter
+      );
+
+      if (equipmentTimelineChartInstance) {
+        equipmentTimelineChartInstance.destroy();
+        equipmentTimelineChartInstance = null;
+      }
+
+      if (entries.length === 0) {
+        canvas.classList.add('hidden');
+        if (emptyState) emptyState.classList.remove('hidden');
+        return;
+      }
+
+      canvas.classList.remove('hidden');
+      if (emptyState) emptyState.classList.add('hidden');
+
+      // Dynamic canvas height: 48px per row, min 300px
+      const rowHeight = 48;
+      const chartHeight = Math.max(300, entries.length * rowHeight + 80);
+      canvas.style.height = chartHeight + 'px';
+      if (wrapper) wrapper.style.height = chartHeight + 'px';
+
+      // The overall time span across all equipment
+      const globalMin = Math.min(...entries.map(e => e.firstDate.getTime()));
+      const globalMax = Math.max(...entries.map(e => e.lastDate.getTime()));
+
+      // Labels (equipment names) — top = most recently used (index 0)
+      const labels = entries.map(e => e.name);
+
+      // For each equipment build two segments:
+      //   segment A: invisible spacer from globalMin to firstDate
+      //   segment B: visible bar from firstDate to lastDate
+      const spacerData = entries.map(e => e.firstDate.getTime() - globalMin);
+      const durationData = entries.map(e => Math.max(
+        e.lastDate.getTime() - e.firstDate.getTime(),
+        1000 * 60 * 60 * 24  // minimum 1 day so single-day bars are visible
+      ));
+
+      const barColors = entries.map(e =>
+        e.type === 'Shoes' ? '#8B5CF6' : '#14B8A6'
+      );
+      const barBorderColors = entries.map(e =>
+        e.type === 'Shoes' ? '#A78BFA' : '#2DD4BF'
+      );
+
+      // Custom plugin: draw date labels inside/beside each bar
+      const ganttLabelPlugin = {
+        id: 'ganttLabels',
+        afterDatasetsDraw(chart) {
+          const { ctx, data } = chart;
+          const barMeta = chart.getDatasetMeta(1); // visible bars dataset
+
+          ctx.save();
+          ctx.font = '500 11px sans-serif';
+          ctx.textBaseline = 'middle';
+
+          barMeta.data.forEach((bar, i) => {
+            const entry = entries[i];
+            const barWidth = bar.width;
+            if (barWidth < 20) return; // too narrow to label
+
+            const firstLabel = entry.firstDate.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' });
+            const lastLabel = entry.lastDate.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' });
+            const kmLabel = `${Math.round(entry.totalKm)} km`;
+
+            const centerX = bar.x - bar.width / 2 + bar.width / 2;
+            const barY = bar.y;
+
+            // Draw start date left of bar start
+            const barLeft = bar.x - bar.width;
+            const barRight = bar.x;
+
+            ctx.fillStyle = '#94A3B8';
+            ctx.textAlign = 'right';
+            ctx.fillText(firstLabel, barLeft - 4, barY);
+
+            // Draw km + end date inside or right of bar
+            ctx.fillStyle = '#FFFFFF';
+            ctx.textAlign = 'center';
+            if (barWidth > 80) {
+              ctx.fillText(`${kmLabel}  ·  to ${lastLabel}`, centerX, barY);
+            } else if (barWidth > 40) {
+              ctx.fillText(kmLabel, centerX, barY);
+            }
+          });
+
+          ctx.restore();
+        }
+      };
+
+      equipmentTimelineChartInstance = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        plugins: [ganttLabelPlugin],
+        data: {
+          labels,
+          datasets: [
+            {
+              // Invisible spacer (offset bar)
+              label: 'spacer',
+              data: spacerData,
+              backgroundColor: 'transparent',
+              borderWidth: 0,
+              borderSkipped: false
+            },
+            {
+              // Visible Gantt bar
+              label: 'Active period',
+              data: durationData,
+              backgroundColor: barColors,
+              borderColor: barBorderColors,
+              borderWidth: 1,
+              borderSkipped: false,
+              borderRadius: 4
+            }
+          ]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          layout: { padding: { left: 0, right: 24 } },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#0F172A',
+              titleColor: '#F8FAFC',
+              bodyColor: '#CBD5E1',
+              callbacks: {
+                title: ctx => ctx[0] ? labels[ctx[0].dataIndex] : '',
+                label: ctx => {
+                  if (ctx.datasetIndex !== 1) return null;
+                  const entry = entries[ctx.dataIndex];
+                  const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                  return [
+                    `From: ${fmt(entry.firstDate)}`,
+                    `To:   ${fmt(entry.lastDate)}`,
+                    `Distance: ${entry.totalKm.toFixed(1)} km`,
+                    `Activities: ${entry.activityCount}`
+                  ];
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              stacked: true,
+              type: 'linear',
+              min: 0,
+              max: globalMax - globalMin,
+              grid: { color: '#1E293B' },
+              ticks: {
+                color: '#94A3B8',
+                maxTicksLimit: 8,
+                callback: value => {
+                  const d = new Date(globalMin + value);
+                  return d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' });
+                }
+              }
+            },
+            y: {
+              stacked: true,
+              grid: { display: false },
+              ticks: {
+                color: '#E2E8F0',
+                autoSkip: false,
+                font: { size: 12 }
+              }
+            }
+          }
+        }
+      });
     }
 
     function initScatterDateSlider() {
@@ -2122,6 +2362,8 @@ datasets: [{
           renderHeartratePaceChart();
         } else if (nextTab === 'equipment') {
           renderEquipmentChart();
+        } else if (nextTab === 'equipmentTimeline') {
+          renderEquipmentTimeline();
         }
       }
     }
@@ -2202,7 +2444,8 @@ datasets: [{
       const tabButton = document.getElementById(
         tabName === 'totalDistance' ? 'vizTabTotalDistance' :
         tabName === 'heartratePace' ? 'vizTabHeartratePace' :
-        'vizTabEquipment'
+        tabName === 'equipment' ? 'vizTabEquipment' :
+        'vizTabEquipmentTimeline'
       );
       if (tabButton) tabButton.focus();
     }

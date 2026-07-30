@@ -40,9 +40,11 @@ function createMockDocument() {
     vizTabTotalDistance: createMockElement(),
     vizTabHeartratePace: createMockElement(),
     vizTabEquipment: createMockElement(),
+    vizTabEquipmentTimeline: createMockElement(),
     vizPanelTotalDistance: createMockElement(),
     vizPanelHeartratePace: createMockElement(),
-    vizPanelEquipment: createMockElement()
+    vizPanelEquipment: createMockElement(),
+    vizPanelEquipmentTimeline: createMockElement()
   };
 
   return {
@@ -57,8 +59,9 @@ describe('tab navigation helpers', () => {
   it('cycles to next and previous tabs', () => {
     expect(getNextVisualizationTab('totalDistance', 1)).toBe('heartratePace');
     expect(getNextVisualizationTab('heartratePace', 1)).toBe('equipment');
-    expect(getNextVisualizationTab('equipment', 1)).toBe('totalDistance');
-    expect(getNextVisualizationTab('totalDistance', -1)).toBe('equipment');
+    expect(getNextVisualizationTab('equipment', 1)).toBe('equipmentTimeline');
+    expect(getNextVisualizationTab('equipmentTimeline', 1)).toBe('totalDistance');
+    expect(getNextVisualizationTab('totalDistance', -1)).toBe('equipmentTimeline');
     expect(getNextVisualizationTab('unknown', 1)).toBe('totalDistance');
   });
 
@@ -101,9 +104,22 @@ describe('tab navigation helpers', () => {
 
     const nextTab = handleVisualizationTabKeydown(event, 'totalDistance', { onTabChange });
 
-    expect(nextTab).toBe('equipment');
+    expect(nextTab).toBe('equipmentTimeline');
     expect(event.preventDefault).toHaveBeenCalledTimes(1);
-    expect(onTabChange).toHaveBeenCalledWith('equipment', { focusTab: true });
+    expect(onTabChange).toHaveBeenCalledWith('equipmentTimeline', { focusTab: true });
+  });
+
+  it('activates equipmentTimeline tab correctly', () => {
+    const mockDocument = createMockDocument();
+    const selected = setVisualizationTab('equipmentTimeline', { document: mockDocument });
+
+    expect(selected).toBe('equipmentTimeline');
+    expect(mockDocument.elements.vizTabEquipmentTimeline.getAttribute('aria-selected')).toBe('true');
+    expect(mockDocument.elements.vizTabTotalDistance.getAttribute('aria-selected')).toBe('false');
+    expect(mockDocument.elements.vizTabEquipment.getAttribute('aria-selected')).toBe('false');
+    expect(mockDocument.elements.vizPanelEquipmentTimeline.classList.contains('hidden')).toBe(false);
+    expect(mockDocument.elements.vizPanelEquipment.classList.contains('hidden')).toBe(true);
+    expect(mockDocument.elements.vizPanelTotalDistance.classList.contains('hidden')).toBe(true);
   });
 
   it('ignores unrelated keys', () => {

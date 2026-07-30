@@ -93,6 +93,50 @@ function aggregateEquipmentAvgLength(activities, filter = 'All') {
     .sort((a, b) => b[1] - a[1]);
 }
 
+/**
+ * Aggregates equipment activities into a timeline of first/last usage dates.
+ *
+ * Returns an array of objects sorted by lastDate descending (most recently used first):
+ *   { name, type, firstDate, lastDate, totalKm, activityCount }
+ *
+ * @param {Array} activities - Processed activity objects
+ * @param {string} filter - 'All', 'Shoes', or 'Bikes'
+ * @returns {Array}
+ */
+function aggregateEquipmentTimeline(activities, filter = 'All') {
+  const map = {};
+
+  activities.forEach(activity => {
+    if (!activity.equipment || activity.equipment.trim() === '') return;
+    if (activity.distance <= 0) return;
+
+    const type = getEquipmentType(activity.equipment);
+    if (filter === 'Shoes' && type !== 'Shoes') return;
+    if (filter === 'Bikes' && type !== 'Bikes') return;
+
+    const name = activity.equipment;
+    if (!map[name]) {
+      map[name] = {
+        name,
+        type,
+        firstDate: activity.date,
+        lastDate: activity.date,
+        totalKm: 0,
+        activityCount: 0
+      };
+    }
+
+    const entry = map[name];
+    if (activity.date < entry.firstDate) entry.firstDate = activity.date;
+    if (activity.date > entry.lastDate) entry.lastDate = activity.date;
+    entry.totalKm += activity.distance;
+    entry.activityCount += 1;
+  });
+
+  return Object.values(map)
+    .sort((a, b) => b.lastDate - a.lastDate);
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     SHOE_PATTERN,
@@ -100,7 +144,8 @@ if (typeof module !== 'undefined' && module.exports) {
     aggregateEquipmentDistance,
     aggregateEquipmentPace,
     aggregateEquipmentActivityCount,
-    aggregateEquipmentAvgLength
+    aggregateEquipmentAvgLength,
+    aggregateEquipmentTimeline
   };
 }
 
@@ -111,6 +156,7 @@ if (typeof window !== 'undefined') {
     aggregateEquipmentDistance,
     aggregateEquipmentPace,
     aggregateEquipmentActivityCount,
-    aggregateEquipmentAvgLength
+    aggregateEquipmentAvgLength,
+    aggregateEquipmentTimeline
   };
 }

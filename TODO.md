@@ -1,7 +1,6 @@
 # TODO
 
 Project:
-- data load make independent. only use data that is uploaded - dennis / elisabeth keep separate as button for "use x as datasource" on the side that can be removed when i publish to ingest existing data. I.e. decouple and make generic
 - also language - german and english agnostic he should be able to auto-detect
 - helper tools (relevant export extractor, zip-importer, scatter utils) should this really be in root?
 - package / package-lock?
@@ -23,6 +22,7 @@ Improvements:
 Features:
 - best all time
 - length vs pace
+- Heatmap
 - equipment: von ... bis... first activity to last activity 2024-01 to 2027-03 als roadmap chart
 - Heart-rate trend over time
 - Elevation profile and elevation analysis by sport

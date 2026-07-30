@@ -1,15 +1,17 @@
-const TAB_ORDER = ['totalDistance', 'heartratePace', 'equipment'];
+const TAB_ORDER = ['totalDistance', 'heartratePace', 'equipment', 'equipmentTimeline'];
 
 const TAB_BUTTON_IDS = {
   totalDistance: 'vizTabTotalDistance',
   heartratePace: 'vizTabHeartratePace',
-  equipment: 'vizTabEquipment'
+  equipment: 'vizTabEquipment',
+  equipmentTimeline: 'vizTabEquipmentTimeline'
 };
 
 const TAB_PANEL_IDS = {
   totalDistance: 'vizPanelTotalDistance',
   heartratePace: 'vizPanelHeartratePace',
-  equipment: 'vizPanelEquipment'
+  equipment: 'vizPanelEquipment',
+  equipmentTimeline: 'vizPanelEquipmentTimeline'
 };
 
 const TAB_ACTIVE_CLASS = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25';
@@ -31,17 +33,21 @@ function setVisualizationTab(tabName, options = {}) {
   const totalDistanceBtn = doc.getElementById(TAB_BUTTON_IDS.totalDistance);
   const heartratePaceBtn = doc.getElementById(TAB_BUTTON_IDS.heartratePace);
   const equipmentBtn = doc.getElementById(TAB_BUTTON_IDS.equipment);
+  const equipmentTimelineBtn = doc.getElementById(TAB_BUTTON_IDS.equipmentTimeline);
   const totalDistancePanel = doc.getElementById(TAB_PANEL_IDS.totalDistance);
   const heartratePacePanel = doc.getElementById(TAB_PANEL_IDS.heartratePace);
   const equipmentPanel = doc.getElementById(TAB_PANEL_IDS.equipment);
+  const equipmentTimelinePanel = doc.getElementById(TAB_PANEL_IDS.equipmentTimeline);
 
-  if (!totalDistanceBtn || !heartratePaceBtn || !equipmentBtn || !totalDistancePanel || !heartratePacePanel || !equipmentPanel) {
+  if (!totalDistanceBtn || !heartratePaceBtn || !equipmentBtn || !equipmentTimelineBtn ||
+      !totalDistancePanel || !heartratePacePanel || !equipmentPanel || !equipmentTimelinePanel) {
     return tabName;
   }
 
   const isTotalDistance = tabName === 'totalDistance';
   const isHeartratePace = tabName === 'heartratePace';
   const isEquipment = tabName === 'equipment';
+  const isEquipmentTimeline = tabName === 'equipmentTimeline';
 
   totalDistanceBtn.setAttribute('aria-selected', isTotalDistance ? 'true' : 'false');
   totalDistanceBtn.setAttribute('tabindex', isTotalDistance ? '0' : '-1');
@@ -55,12 +61,20 @@ function setVisualizationTab(tabName, options = {}) {
   equipmentBtn.setAttribute('tabindex', isEquipment ? '0' : '-1');
   equipmentBtn.className = isEquipment ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
 
+  equipmentTimelineBtn.setAttribute('aria-selected', isEquipmentTimeline ? 'true' : 'false');
+  equipmentTimelineBtn.setAttribute('tabindex', isEquipmentTimeline ? '0' : '-1');
+  equipmentTimelineBtn.className = isEquipmentTimeline ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
+
   totalDistancePanel.classList.toggle('hidden', !isTotalDistance);
   heartratePacePanel.classList.toggle('hidden', !isHeartratePace);
   equipmentPanel.classList.toggle('hidden', !isEquipment);
+  equipmentTimelinePanel.classList.toggle('hidden', !isEquipmentTimeline);
 
   if (options.focusTab) {
-    (isTotalDistance ? totalDistanceBtn : (isHeartratePace ? heartratePaceBtn : equipmentBtn)).focus();
+    (isTotalDistance ? totalDistanceBtn :
+     isHeartratePace ? heartratePaceBtn :
+     isEquipment ? equipmentBtn :
+     equipmentTimelineBtn).focus();
   }
 
   return tabName;

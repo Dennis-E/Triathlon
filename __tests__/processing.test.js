@@ -72,6 +72,19 @@ describe('processData', () => {
     expect(result[0].duration).toBe(3600);
   });
 
+  it('should keep equipment and average heart rate in the interim activity objects', () => {
+    const data = [
+      ['Aktivitätsdatum', 'Aktivitätsart', 'Name der Aktivität', 'Aktivitätsausrüstung', 'Bewegungszeit', 'Durchschnittliche Herzfrequenz', 'Distanz'],
+      ['19.07.2026, 14:52:02', 'Lauf', 'Morning run', 'ASICS Novablast 4', '3600', '152', '10000']
+    ];
+
+    const result = processData(data);
+
+    expect(result.length).toBe(1);
+    expect(result[0].equipment).toBe('ASICS Novablast 4');
+    expect(result[0].avgHeartRate).toBe(152);
+  });
+
   it('should skip rows with invalid dates', () => {
     const data = [
       ['Aktivitätsdatum', 'Aktivitätsart', 'Name der Aktivität', 'Bewegungszeit', 'Distanz'],

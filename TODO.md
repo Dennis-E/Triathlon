@@ -1,8 +1,5 @@
 # TODO
 
-- Elisabeth und Benny zip
-- test import function if works properly
-
 Project:
 - data load make independent. only use data that is uploaded - dennis / elisabeth keep separate as button for "use x as datasource" on the side that can be removed when i publish to ingest existing data. I.e. decouple and make generic
 - also language - german and english agnostic he should be able to auto-detect
@@ -17,12 +14,16 @@ Project:
 - Login? Persist data? (Why? What for?)
 
 Improvements:
+- window closing opportunity when import runs into error 
+- when import runs into error possibility to send developer (me) log file
 - bullet size make dynamic (log vs linear, min und max size)
 - ability to zoom into charts, eg heartrate vs pace there are outliers
 - outlier exclusion (dynamic %age or # to exclude)
 
 Features:
 - best all time
+- length vs pace
+- equipment: von ... bis... first activity to last activity 2024-01 to 2027-03 als roadmap chart
 - Heart-rate trend over time
 - Elevation profile and elevation analysis by sport
 - Training load distribution by intensity zones

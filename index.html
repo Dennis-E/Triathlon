@@ -87,41 +87,16 @@
     <div class="flex items-center space-x-4">
       <div id="statusBadge" class="flex items-center space-x-2 text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 rounded-full">
         <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-        <span id="statusText">Loading local CSV...</span>
+        <span id="statusText">Awaiting Strava ZIP upload</span>
       </div>
     </div>
   </header>
-
-  <!-- Error / CORS Warning Alert -->
-  <div id="corsWarning" class="hidden shrink-0 mx-6 mt-6 bg-slate-900 border border-amber-500/30 rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-    <div class="flex items-start space-x-3">
-      <div class="p-2 rounded-lg bg-amber-500/10 text-amber-400 shrink-0">
-        <i data-lucide="alert-triangle" class="w-6 h-6"></i>
-      </div>
-      <div>
-        <h3 class="font-semibold text-amber-400">Local File Access Notice (CORS)</h3>
-        <p class="text-sm text-slate-300 mt-1 max-w-3xl">
-          Browsers restrict direct loading of local files via <code>file://</code> protocol. To automate loading, run this dashboard using a local server (e.g., the <strong>VS Code Live Server</strong> extension, or command <code>python -m http.server</code>).
-        </p>
-        <p class="text-sm text-slate-400 mt-2">
-          <strong>Alternatively:</strong> Select your reduced `activities.csv` extract from your file system directly. No server needed.
-        </p>
-      </div>
-    </div>
-    <div class="shrink-0 flex items-center">
-      <label for="manualCsvFile" class="bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-medium text-sm px-4 py-2 rounded-lg cursor-pointer transition flex items-center space-x-2 shadow-lg shadow-indigo-600/20">
-        <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
-        <span>Select reduced activities.csv</span>
-      </label>
-      <input type="file" id="manualCsvFile" accept=".csv" class="hidden">
-    </div>
-  </div>
 
   <!-- Import Progress Modal -->
   <div id="importProgressModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8 w-full max-w-md mx-4 shadow-xl">
       <div class="flex items-center space-x-3 mb-6">
-        <div class="bg-indigo-600 p-2 rounded-lg text-white animate-spin">
+        <div data-import-icon-wrapper class="bg-indigo-600 p-2 rounded-lg text-white animate-spin">
           <i data-lucide="loader" class="w-5 h-5"></i>
         </div>
         <div>
@@ -150,7 +125,7 @@
       <div id="importProgressError" class="hidden mt-6 flex gap-3">
         <button
           type="button"
-          onclick="document.getElementById('importProgressModal').classList.add('hidden'); showCorsWarning();"
+          onclick="document.getElementById('importProgressModal').classList.add('hidden');"
           class="flex-1 bg-red-600 hover:bg-red-500 text-white font-medium text-sm px-4 py-2 rounded-lg transition"
         >
           Close
@@ -169,8 +144,8 @@
       <p class="text-red-300 text-xs leading-relaxed mt-2">This is an early alpha test: Give me feedback or share your feature requests.</p>
     </div>
 
-    <!-- Strava Ingest Button -->
-    <div class="mb-12">
+    <!-- Import Actions -->
+    <div class="mb-12 flex flex-wrap items-center justify-center gap-3">
       <button
         id="stravaIngestBtn"
         type="button"
@@ -182,7 +157,25 @@
         </svg>
         <span>Strava Ingest</span>
       </button>
-      <div class="mt-3 text-center">
+      <div id="devDataButtons" class="hidden flex flex-wrap items-center gap-3">
+        <button
+          id="devDataBtnD"
+          type="button"
+          onclick="handleDevDataImport('D')"
+          class="inline-flex items-center rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-indigo-500/50 hover:text-white"
+        >
+          use D data
+        </button>
+        <button
+          id="devDataBtnE"
+          type="button"
+          onclick="handleDevDataImport('E')"
+          class="inline-flex items-center rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-indigo-500/50 hover:text-white"
+        >
+          use E data
+        </button>
+      </div>
+      <div class="w-full text-center">
         <a
           href="./strava-export-how-to.html"
           class="text-xs text-indigo-300 hover:text-indigo-200 underline decoration-indigo-500/70 underline-offset-4 transition"
@@ -198,7 +191,7 @@
         <i data-lucide="inbox" class="w-12 h-12 mx-auto text-slate-600 mb-2"></i>
       </div>
       <p>No data available</p>
-      <p class="text-xs text-slate-500 mt-2">Upload your Strava data export to start the analysis</p>
+      <p class="text-xs text-slate-500 mt-2">Upload your Strava ZIP export to start the analysis</p>
     </div>
 
     <!-- Tab Preview Cards -->
@@ -668,6 +661,7 @@
     // Configuration / State
     let rawCsvData = [];
     let processedActivities = [];
+    let importedDataset = null;
     let selectedSportFilter = 'All'; // 'All', 'Run', 'Bike', 'Swim'
     let selectedAggregationLevel = 'weekly'; // 'daily', 'weekly', 'monthly', 'yearly'
     let selectedVisualizationTab = 'totalDistance'; // 'totalDistance', 'heartratePace'
@@ -821,45 +815,125 @@
       return `${y}-${m}-${d}`;
     }
 
-    const DEFAULT_ACTIVITIES_PATHS = [
-      './Data/EE/relevant-export_155559589/activities.csv',
-      './Data/Dennis/relevant-export_39173135/activities.csv'
-    ];
+    const DEV_SAMPLE_DATASETS = {
+      D: {
+        sourceLabel: 'sample data',
+        candidates: [
+          { type: 'csv', path: './Data/Dennis/relevant-export_39173135/activities.csv' },
+          { type: 'csv', path: './Data/Dennis/relevant-export_39173135_regen/activities.csv' },
+          { type: 'zip', path: './Data/Dennis/export_39173135.zip' }
+        ],
+        filePickerDescription: 'Select Dennis sample activities.csv or export ZIP from Data/Dennis/'
+      },
+      E: {
+        sourceLabel: 'sample data',
+        candidates: [
+          { type: 'csv', path: './Data/EE/relevant-export_155559589/activities.csv' },
+          { type: 'zip', path: './Data/EE/export_155559589.zip' }
+        ],
+        filePickerDescription: 'Select EE sample activities.csv or export ZIP from Data/EE/'
+      }
+    };
 
-    // Main local loader
-    async function loadLocalCsv() {
-      for (const path of DEFAULT_ACTIVITIES_PATHS) {
+    function isLocalDevelopment() {
+      return window.location.protocol === 'file:' ||
+        window.location.hostname === '' ||
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+    }
+
+    async function initializeDevelopmentControls() {
+      if (!isLocalDevelopment()) return;
+      const devButtons = document.getElementById('devDataButtons');
+      if (devButtons) {
+        devButtons.classList.remove('hidden');
+      }
+
+      if (window.location.protocol === 'file:') {
+        Object.keys(DEV_SAMPLE_DATASETS).forEach(sampleKey => {
+          const button = document.getElementById(`devDataBtn${sampleKey}`);
+          if (!button) return;
+          button.title = 'Opens a file picker for the local sample file.';
+        });
+        return;
+      }
+
+      await Promise.all(Object.entries(DEV_SAMPLE_DATASETS).map(async ([sampleKey, sample]) => {
+        const button = document.getElementById(`devDataBtn${sampleKey}`);
+        if (!button) return;
+
+        const hasAvailableCandidate = await sampleHasAvailableCandidate(sample);
+        if (!hasAvailableCandidate) {
+          button.disabled = true;
+          button.className = 'inline-flex items-center rounded-xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-600 cursor-not-allowed';
+          button.title = `${sample.sourceLabel} was not found in Data/.`;
+        }
+      }));
+    }
+
+    async function sampleHasAvailableCandidate(sample) {
+      for (const candidate of sample.candidates) {
         try {
-          const response = await fetch(path);
-          if (!response.ok) {
-            throw new Error(`Failed to load: ${response.statusText}`);
+          const response = await fetch(candidate.path, { cache: 'no-store' });
+          if (response.ok) {
+            return true;
           }
-          const text = await response.text();
-          await parseCsvText(text);
-          return;
-        } catch (err) {
-          console.warn(`Could not load reduced activities extract from ${path}.`, err);
+        } catch (error) {
+          // Ignore and try the next local sample candidate.
         }
       }
 
-      showCorsWarning();
+      return false;
     }
 
-    // Show warning panel if automated loading fails
-    function showCorsWarning() {
-      document.getElementById('corsWarning').classList.remove('hidden');
-      updateStatusBadge('offline', 'Awaiting local file selection');
+    function createImportedDataset(csvRows, sourceLabel) {
+      const activities = processData(csvRows);
+      return {
+        kind: 'tri-activities-v1',
+        importedAt: new Date().toISOString(),
+        sourceLabel,
+        rawCsvData: csvRows,
+        activities
+      };
     }
 
-    // After manual CSV upload via the CORS panel, show dashboard
-    function ensureDashboardVisible() {
-      // Only auto-navigate when the user explicitly uploaded a file via the manual picker.
-      // Auto-loading the local CSV in the background should NOT pull the user away from
-      // the landing page — they navigate there by clicking a tab card.
-      if (window._manualUpload) {
-        window._manualUpload = false;
+    function applyImportedDataset(dataset, options = {}) {
+      importedDataset = dataset;
+      rawCsvData = dataset.rawCsvData;
+      processedActivities = dataset.activities;
+
+      updateStatusBadge('success', `Loaded ${processedActivities.length} activities`);
+
+      document.getElementById('previewCardsContainer').classList.remove('hidden');
+      document.getElementById('enterDashboardContainer').classList.remove('hidden');
+      document.getElementById('emptyStateMessage').classList.add('hidden');
+
+      setBtnActive('sportBtnAll');
+      setScatterSportBtnActive('scatterSportBtnRun');
+      renderTimeframeButtons();
+      initScatterDateSlider();
+
+      renderDashboard();
+      renderHeartratePaceChart();
+      renderEquipmentChart();
+
+      if (options.openDashboard) {
         openDashboardTab('totalDistance');
       }
+    }
+
+    function setImportModalVisualState(iconName, spinning) {
+      const modal = document.getElementById('importProgressModal');
+      if (!modal) return;
+
+      const iconWrapper = modal.querySelector('[data-import-icon-wrapper]');
+      if (!iconWrapper) return;
+
+      iconWrapper.classList.toggle('animate-spin', !!spinning);
+      iconWrapper.innerHTML = `<i data-lucide="${iconName}" class="w-5 h-5"></i>`;
+      window.lucide.createIcons({
+        icons: iconWrapper.querySelectorAll('[data-lucide]')
+      });
     }
 
     // Update status bar UI
@@ -881,30 +955,7 @@
       }
     }
 
-    // Listen for manual file uploads
-    document.getElementById('manualCsvFile').addEventListener('change', function(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-      
-      updateStatusBadge('offline', 'Parsing uploaded file...');
-      window._manualUpload = true;
-
-      const reader = new FileReader();
-      reader.onload = async function(evt) {
-        try {
-          await parseCsvText(evt.target.result);
-          // Hide warning since file is successfully loaded
-          document.getElementById('corsWarning').classList.add('hidden');
-        } catch (err) {
-          updateStatusBadge('error', 'Failed to parse CSV file');
-          console.error('CSV parsing error', err);
-        }
-      };
-      reader.readAsText(file);
-    });
-
-    // Parse raw CSV text using PapaParse - now returns a Promise
-    function parseCsvText(csvText) {
+    function importCsvText(csvText, options = {}) {
       return new Promise((resolve, reject) => {
         Papa.parse(csvText, {
           header: false, // We'll process indexes manually to avoid header collisions
@@ -915,9 +966,15 @@
               reject(new Error('CSV is empty or invalid'));
               return;
             }
-            rawCsvData = results.data;
-            processData();
-            resolve();
+
+            try {
+              const dataset = createImportedDataset(results.data, options.sourceLabel || 'Imported data');
+              applyImportedDataset(dataset, options);
+              resolve(dataset);
+            } catch (err) {
+              updateStatusBadge('error', err.message || 'Could not process imported data');
+              reject(err);
+            }
           },
           error: function(err) {
             updateStatusBadge('error', 'CSV parsing failed');
@@ -929,8 +986,12 @@
     }
 
     // Map CSV rows to objects
-    function processData() {
-      const headers = rawCsvData[0];
+    function processData(csvRows) {
+      if (!Array.isArray(csvRows) || csvRows.length < 2) {
+        throw new Error('CSV is empty or invalid');
+      }
+
+      const headers = csvRows[0];
       
       // Dynamic column resolution
       let dateIdx = findHeaderIndex(headers, { type: 'oneOf', headers: ['Aktivitätsdatum', 'Activity Date'] });
@@ -962,14 +1023,13 @@
       const distIdx = distIndices.length > 1 ? distIndices[1] : (distIndices[0] || -1);
 
       if (dateIdx === -1 || sportIdx === -1) {
-        updateStatusBadge('error', 'Could not locate core columns');
-        return;
+        throw new Error('Could not locate core columns');
       }
 
-      processedActivities = [];
+      const nextProcessedActivities = [];
 
-      for (let i = 1; i < rawCsvData.length; i++) {
-        const row = rawCsvData[i];
+      for (let i = 1; i < csvRows.length; i++) {
+        const row = csvRows[i];
         if (row.length <= Math.max(dateIdx, sportIdx)) continue;
 
         const rawDate = row[dateIdx];
@@ -1018,7 +1078,7 @@
           : null;
         const equipment = equipmentIdx !== -1 ? (row[equipmentIdx] || '').trim() : '';
 
-        processedActivities.push({
+        nextProcessedActivities.push({
           id: row[0],
           date: date,
           monday: getMonday(date),
@@ -1033,26 +1093,8 @@
       }
 
       // Sort chronological ascending for line/bar charts
-      processedActivities.sort((a, b) => a.date - b.date);
-
-      updateStatusBadge('success', `Parsed ${processedActivities.length} activities`);
-      
-      // Show preview cards and enter dashboard button now that we have data
-      document.getElementById('previewCardsContainer').classList.remove('hidden');
-      document.getElementById('enterDashboardContainer').classList.remove('hidden');
-      document.getElementById('emptyStateMessage').classList.add('hidden');
-      
-      ensureDashboardVisible();
-
-      // Set initial active controls
-      setBtnActive('sportBtnAll');
-      setScatterSportBtnActive('scatterSportBtnRun');
-      renderTimeframeButtons();
-      initScatterDateSlider();
-      
-      renderDashboard();
-      renderHeartratePaceChart();
-      renderEquipmentChart();
+      nextProcessedActivities.sort((a, b) => a.date - b.date);
+      return nextProcessedActivities;
     }
 
     function renderEquipmentChart() {
@@ -2104,6 +2146,7 @@ datasets: [{
     }
 
     function openDashboardTab(tabName) {
+      if (!importedDataset || processedActivities.length === 0) return;
       document.getElementById('landingPage').classList.add('hidden');
       document.getElementById('dashboardMain').classList.remove('hidden');
       setVisualizationTab(tabName);
@@ -2129,6 +2172,7 @@ datasets: [{
           const errorDiv = document.getElementById('importProgressError');
           modal.classList.remove('hidden');
           errorDiv.classList.add('hidden');
+          setImportModalVisualState('loader', true);
           updateImportProgress(5, 'Extracting ZIP file...');
 
           // Import the ZIP file
@@ -2139,15 +2183,17 @@ datasets: [{
 
           // Parse the CSV
           updateImportProgress(70, 'Processing data...');
-          await parseCsvText(csvText);
+          await importCsvText(csvText, {
+            sourceLabel: 'Strava ZIP import',
+            openDashboard: true
+          });
 
           // Update progress
           updateImportProgress(95, 'Finalizing...');
 
-          // Hide modal and CORS warning after a short delay
+          // Hide modal after a short delay
           setTimeout(() => {
             modal.classList.add('hidden');
-            document.getElementById('corsWarning').classList.add('hidden');
           }, 1000);
         } catch (error) {
           console.error('Import failed:', error);
@@ -2157,6 +2203,96 @@ datasets: [{
         }
       };
       input.click();
+    }
+
+    async function handleDevDataImport(sampleKey) {
+      const sample = DEV_SAMPLE_DATASETS[sampleKey];
+      if (!sample) return;
+
+      const button = document.getElementById(`devDataBtn${sampleKey}`);
+      if (button && button.disabled) {
+        updateStatusBadge('error', `${sample.sourceLabel} is not available locally`);
+        return;
+      }
+
+      updateStatusBadge('offline', `Loading ${sample.sourceLabel}...`);
+
+      let lastError = null;
+
+      for (const candidate of sample.candidates) {
+        try {
+          const response = await fetch(candidate.path, { cache: 'no-store' });
+          if (!response.ok) {
+            throw new Error(`Failed to load ${candidate.path}`);
+          }
+
+          if (candidate.type === 'zip') {
+            const blob = await response.blob();
+            const file = new File([blob], candidate.path.split('/').pop(), { type: 'application/zip' });
+            const csvText = await importStravaZip(file);
+            await importCsvText(csvText, {
+              sourceLabel: sample.sourceLabel,
+              openDashboard: true
+            });
+            return;
+          }
+
+          const csvText = await response.text();
+          await importCsvText(csvText, {
+            sourceLabel: sample.sourceLabel,
+            openDashboard: true
+          });
+          return;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      if (window.location.protocol === 'file:') {
+        await promptForLocalDevSample(sample);
+        return;
+      }
+
+      updateStatusBadge('error', `Failed to load ${sample.sourceLabel}`);
+      console.error(`Development sample import failed for ${sample.sourceLabel}`, lastError);
+    }
+
+    async function promptForLocalDevSample(sample) {
+      updateStatusBadge('offline', sample.filePickerDescription || `Select ${sample.sourceLabel}`);
+
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.csv,.zip';
+
+      const selectedFile = await new Promise(resolve => {
+        input.onchange = event => resolve(event.target.files && event.target.files[0] ? event.target.files[0] : null);
+        input.click();
+      });
+
+      if (!selectedFile) {
+        updateStatusBadge('offline', 'Awaiting Strava ZIP upload');
+        return;
+      }
+
+      try {
+        if (selectedFile.name.toLowerCase().endsWith('.zip')) {
+          const csvText = await importStravaZip(selectedFile);
+          await importCsvText(csvText, {
+            sourceLabel: sample.sourceLabel,
+            openDashboard: true
+          });
+          return;
+        }
+
+        const csvText = await selectedFile.text();
+        await importCsvText(csvText, {
+          sourceLabel: sample.sourceLabel,
+          openDashboard: true
+        });
+      } catch (error) {
+        updateStatusBadge('error', `Failed to load ${sample.sourceLabel}`);
+        console.error(`Local development sample import failed for ${sample.sourceLabel}`, error);
+      }
     }
 
     function updateImportProgress(percent, stage, isError = false) {
@@ -2173,16 +2309,12 @@ datasets: [{
       detailEl.textContent = stage;
 
       if (isError) {
-        modal.querySelector('.bg-indigo-600').classList.remove('animate-spin');
-        modal.querySelector('i[data-lucide="loader"]').setAttribute('data-lucide', 'alert-circle');
-        window.lucide.createIcons();
+        setImportModalVisualState('alert-circle', false);
       }
     }
 
     setVisualizationTab(selectedVisualizationTab);
-
-    // Start loading local CSV on page load
-    loadLocalCsv();
+    initializeDevelopmentControls();
   </script>
 </body>
 </html>

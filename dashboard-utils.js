@@ -133,6 +133,13 @@ function categorizeSport(rawSport) {
   return SPORT_MAP[rawSport.toLowerCase().trim()] || null;
 }
 
+function parseLocalizedNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const normalized = String(value).replace(',', '.').trim();
+  const parsed = parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 /**
  * Process raw CSV data into normalized activity objects
  * @param {Array<Array>} rawCsvData - Raw CSV rows from Papa Parse
@@ -160,9 +167,18 @@ function processData(rawCsvData) {
   if (sportIdx === -1) {
     sportIdx = headers.findIndex(h => h && h.includes('Aktivitätsart'));
   }
-  
+
   const nameIdx = findHeaderIndex(headers, { type: 'oneOf', headers: ['Name der Aktivität', 'Activity Name'] });
+  const equipmentIdx = findHeaderIndex(headers, { type: 'oneOf', headers: ['Aktivitätsausrüstung', 'Ausrüstung', 'Fahrrad', 'Gear', 'Bike'] });
   const durationIdx = findHeaderIndex(headers, { type: 'oneOf', headers: ['Bewegungszeit', 'Moving Time'] });
+  const avgHeartRateIdx = headers.findIndex(header => {
+    if (!header) return false;
+    const normalized = String(header).toLowerCase();
+    return (
+      (normalized.includes('herz') || normalized.includes('heart')) &&
+      (normalized.includes('durch') || normalized.includes('durchschnitt') || normalized.includes('avg') || normalized.includes('average'))
+    );
+  });
 
   // Find 'Distanz' columns
   const distIndices = [];
@@ -219,6 +235,8 @@ function processData(rawCsvData) {
     }
 
     const name = row[nameIdx] || 'Activity';
+    const equipment = equipmentIdx !== -1 ? (row[equipmentIdx] || '').trim() : '';
+    const avgHeartRate = avgHeartRateIdx !== -1 ? parseLocalizedNumber(row[avgHeartRateIdx]) : null;
 
     processedActivities.push({
       id: row[0],
@@ -227,7 +245,9 @@ function processData(rawCsvData) {
       sportRaw: rawSport,
       sport: sportCategory,
       distance: distKm,
+      equipment,
       duration: durationSeconds,
+      avgHeartRate,
       name: name
     });
   }
@@ -389,6 +409,7 @@ if (typeof module !== 'undefined' && module.exports) {
     formatDateLabel,
     formatDuration,
     categorizeSport,
+    parseLocalizedNumber,
     processData,
     parseCsvSimple,
     aggregateByWeek,

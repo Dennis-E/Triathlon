@@ -1,9 +1,5 @@
-# Private/User data (ignore any new uploads/exports in Data/)
-Data/**/*
-
-# Keep the reduced visualization dataset in git
-!Data/Dennis/relevant-export_39173135/
-!Data/Dennis/relevant-export_39173135/**/*
+# Private/User data and development sample exports
+Data/
 
 # OS/IDE files
 .DS_Store

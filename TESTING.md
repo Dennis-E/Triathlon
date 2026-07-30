@@ -292,7 +292,7 @@ Example E2E test (to add later):
 ```javascript
 test('User can import CSV and see dashboard', async ({ page }) => {
   await page.goto('http://localhost:8000');
-  await page.setInputFiles('#manualCsvFile', './test-data/activities.csv');
+  // Manual CSV upload flow was removed. Start from Strava ZIP import instead.
   await page.waitForSelector('#trainingChart');
   const totalKm = await page.textContent('#cardTotalKm');
   expect(parseFloat(totalKm)).toBeGreaterThan(0);

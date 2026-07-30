@@ -2,14 +2,13 @@
 
 A browser-based dashboard for exploring long-term training trends from a reduced Strava activity extract. The app currently focuses on distance, heart-rate/pace, and equipment visualizations.
 
-## Current Dataset
+## Data Input
 
-The repository keeps visualization-ready datasets such as:
+The dashboard starts empty. To use the visualizations, you first import a Strava ZIP export in the browser.
 
-- `Data/EE/relevant-export_155559589/activities.csv`
-- `Data/Dennis/relevant-export_39173135/activities.csv`
+For local development only, the landing page also exposes sample-data buttons that load ignored files from `Data/Dennis/...` and `Data/EE/...` when those folders exist locally. On `localhost` they try the local paths directly. When opened via `file://`, they fall back to a file picker so you can choose the matching sample CSV or ZIP manually.
 
-This reduced file contains only the fields currently needed by the visualizations.
+Each import source is converted into the same reduced interim dataset before the visualizations render.
 
 If a Strava export has no heart-rate values or no equipment assigned to activities, the heart-rate and equipment visualizations will stay empty even though the import succeeded.
 
@@ -45,7 +44,7 @@ npm run extract:relevant -- "C:\path\to\export.zip" "C:\path\to\output-folder"
 
 ## Running The Dashboard
 
-Open `index.html` through a local server so the default dataset can be fetched by the browser.
+Open `index.html` through a local server.
 
 Examples:
 
@@ -55,12 +54,9 @@ python -m http.server
 
 or use VS Code Live Server.
 
-The dashboard auto-loads the first available reduced extract from:
+Then import a Strava ZIP export from the landing page.
 
-- `./Data/EE/relevant-export_155559589/activities.csv`
-- `./Data/Dennis/relevant-export_39173135/activities.csv`
-
-If that is not available through the browser, you can manually select a reduced `activities.csv` file in the UI.
+If you are working locally and have ignored development sample data under `Data/`, you can also use the `use D data` and `use E data` buttons.
 
 ## Tests
 

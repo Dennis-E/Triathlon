@@ -22,6 +22,7 @@ The data import feature allows users to upload their Strava data export ZIP file
 - "Enter Dashboard" button is **hidden** until data is loaded
 - Empty state message shown: "Keine Daten vorhanden" (No data available)
 - Once data is imported, preview cards and dashboard button become visible
+- In local development, optional `use D data` and `use E data` buttons can load ignored sample extracts
 
 ### 4. **Automatic Dashboard Load**
 - After successful import, dashboard automatically navigates to "Total Distance" tab
@@ -57,25 +58,27 @@ Core utility for ZIP extraction and CSV processing:
 
 #### `index.html`
 **New HTML Elements:**
-- Import progress modal (lines 118-160)
-- Empty state message container (lines 143-150)
-- Hidden preview cards container (line 155)
-- Hidden enter dashboard button container (line 359)
+- Import progress modal
+- Empty state message container
+- Hidden preview cards container
+- Hidden enter dashboard button container
+- Development-only sample-data buttons next to the Strava import action
 
 **New JavaScript Functions:**
 - `handleStravaIngest()` - File picker and import orchestration
+- `handleDevDataImport(sampleKey)` - Loads local ignored development sample data from reduced CSV extracts or ZIP fallback candidates, or opens a file picker when running via `file://`
+- `importCsvText(csvText, options)` - Parses imported CSV text and creates the shared interim dataset
+- `applyImportedDataset(dataset, options)` - Makes the interim dataset the active visualization source
 - `updateImportProgress(percent, stage, isError)` - Progress modal updates
 
 **Modified Functions:**
-- `parseCsvText()` - Now returns a Promise for async handling
-- `loadLocalCsv()` - Awaits parseCsvText() to ensure completion
-- `processData()` - Shows/hides preview cards based on data availability
-- Manual CSV file upload handler - Now properly awaits parsing
+- `processData(csvRows)` - Pure transformation from reduced CSV rows to normalized activity objects
 
 **Key Changes:**
 - Added JSZip script reference
-- Converted sync CSV parsing to async with Promise
+- Added a shared interim dataset for all import sources
 - Added progress modal styling and animations
+- Removed production default-data auto-loading
 - Conditional rendering of landing page elements
 
 ## User Flow
@@ -105,9 +108,7 @@ Strava ZIP Export
   ↓
 [Column Filter] Keep only relevant columns (ID, Date, Name, Sport, Equipment, Duration, HR, Distance)
   ↓
-[CSV Parser] Parse filtered CSV using PapaParse
-  ↓
-[Data Processor] Transform to normalized activity objects
+[Interim Dataset] Store reduced CSV rows + normalized activity objects
   ↓
 [Aggregation] Group by week/month/year
   ↓
@@ -179,7 +180,7 @@ A test HTML file is available at `test-import.html`:
 ```bash
 # Open in browser at http://localhost:8000/test-import.html
 # Click "Select ZIP File & Test Import"
-# Select Data/Dennis/export_39173135.zip to test
+# Select a local Strava export ZIP to test
 ```
 
 ## Future Enhancements
@@ -212,7 +213,7 @@ C:\dev\Tri\
 ### Import seems to hang
 - Check browser console (F12) for errors
 - Ensure ZIP file is not corrupted
-- Try with test file: `Data/Dennis/export_39173135.zip`
+- Try with a local Strava export ZIP or a local ignored development sample
 - Reload page and try again
 
 ### Preview cards don't appear after import

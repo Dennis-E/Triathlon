@@ -11,6 +11,42 @@ function calculatePaceMinPerKm(distanceKm, durationSeconds) {
   return (durationSeconds / 60) / distanceKm;
 }
 
+function calculatePaceMinPer100m(distanceKm, durationSeconds) {
+  if (!Number.isFinite(distanceKm) || !Number.isFinite(durationSeconds)) return null;
+  if (distanceKm <= 0 || durationSeconds <= 0) return null;
+  return (durationSeconds / 60) / (distanceKm * 10);
+}
+
+function calculateSpeedKmH(distanceKm, durationSeconds) {
+  if (!Number.isFinite(distanceKm) || !Number.isFinite(durationSeconds)) return null;
+  if (distanceKm <= 0 || durationSeconds <= 0) return null;
+  return distanceKm / (durationSeconds / 3600);
+}
+
+function getSportPerformanceMetric(activity) {
+  if (!activity || !activity.sport) return null;
+
+  if (activity.sport === 'Run') {
+    const value = calculatePaceMinPerKm(activity.distance, activity.duration);
+    if (!Number.isFinite(value) || value <= 0 || value > 30) return null;
+    return { value, type: 'pace_run' };
+  }
+
+  if (activity.sport === 'Swim') {
+    const value = calculatePaceMinPer100m(activity.distance, activity.duration);
+    if (!Number.isFinite(value) || value <= 0 || value > 20) return null;
+    return { value, type: 'pace_swim' };
+  }
+
+  if (activity.sport === 'Bike') {
+    const value = calculateSpeedKmH(activity.distance, activity.duration);
+    if (!Number.isFinite(value) || value <= 0 || value > 80) return null;
+    return { value, type: 'speed_bike' };
+  }
+
+  return null;
+}
+
 function calculateBubbleRadius(durationSeconds, minDurationSeconds, maxDurationSeconds) {
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return 0.4;
   if (!Number.isFinite(minDurationSeconds) || !Number.isFinite(maxDurationSeconds) || minDurationSeconds >= maxDurationSeconds) {
@@ -63,22 +99,23 @@ function getHeartratePacePoints(activities, filters = {}) {
       if (maxDate && activity.date > maxDate) return false;
       if (!Number.isFinite(activity.avgHeartRate) || activity.avgHeartRate <= 0) return false;
 
-      const pace = calculatePaceMinPerKm(activity.distance, activity.duration);
-      if (!Number.isFinite(pace) || pace <= 0) return false;
-      if (pace > 30) return false;
+      const metric = getSportPerformanceMetric(activity);
+      if (!metric) return false;
 
       return true;
     })
     .map(activity => {
-      const pace = calculatePaceMinPerKm(activity.distance, activity.duration);
+      const metric = getSportPerformanceMetric(activity);
       return {
-        x: pace,
+        x: metric.value,
         y: activity.avgHeartRate,
         sport: activity.sport,
+        metricType: metric.type,
         duration: activity.duration,
         name: activity.name,
         date: activity.date,
         distance: activity.distance,
+        avgWatts: activity.avgWatts,
         year: activity.date.getFullYear()
       };
     });
@@ -129,6 +166,9 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     parseLocalizedNumber,
     calculatePaceMinPerKm,
+    calculatePaceMinPer100m,
+    calculateSpeedKmH,
+    getSportPerformanceMetric,
     calculateBubbleRadius,
     linearRegression,
     getHeartratePacePoints,
@@ -140,6 +180,9 @@ if (typeof window !== 'undefined') {
   window.scatterUtils = {
     parseLocalizedNumber,
     calculatePaceMinPerKm,
+    calculatePaceMinPer100m,
+    calculateSpeedKmH,
+    getSportPerformanceMetric,
     calculateBubbleRadius,
     linearRegression,
     getHeartratePacePoints,

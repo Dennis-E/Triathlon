@@ -179,6 +179,14 @@ function processData(rawCsvData) {
       (normalized.includes('durch') || normalized.includes('durchschnitt') || normalized.includes('avg') || normalized.includes('average'))
     );
   });
+  const avgWattsIdx = headers.findIndex(header => {
+    if (!header) return false;
+    const normalized = String(header).toLowerCase();
+    return (
+      (normalized.includes('watt') || normalized.includes('power')) &&
+      (normalized.includes('durch') || normalized.includes('durchschnitt') || normalized.includes('avg') || normalized.includes('average'))
+    );
+  });
 
   // Find 'Distanz' columns
   const distIndices = [];
@@ -237,6 +245,7 @@ function processData(rawCsvData) {
     const name = row[nameIdx] || 'Activity';
     const equipment = equipmentIdx !== -1 ? (row[equipmentIdx] || '').trim() : '';
     const avgHeartRate = avgHeartRateIdx !== -1 ? parseLocalizedNumber(row[avgHeartRateIdx]) : null;
+    const avgWatts = avgWattsIdx !== -1 ? parseLocalizedNumber(row[avgWattsIdx]) : null;
 
     processedActivities.push({
       id: row[0],
@@ -248,6 +257,7 @@ function processData(rawCsvData) {
       equipment,
       duration: durationSeconds,
       avgHeartRate,
+      avgWatts,
       name: name
     });
   }

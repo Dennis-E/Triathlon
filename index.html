@@ -228,10 +228,6 @@
 
     <!-- Empty State Message -->
     <div id="emptyStateMessage" class="text-center text-slate-400 text-sm mt-2 mb-8 max-w-xl">
-      <div class="mb-4">
-        <i data-lucide="image" class="w-12 h-12 mx-auto text-slate-600 mb-2"></i>
-      </div>
-      <p>Preview the dashboards before you import data</p>
       <p class="text-xs text-slate-500 mt-2">These example screenshots show what becomes available after you upload your Strava ZIP export.</p>
     </div>
 
@@ -464,59 +460,54 @@
               <span class="rounded bg-indigo-600 px-2 py-0.5 text-[9px] font-medium text-white">PBs</span>
             </div>
 
-            <!-- Mini PB preview: three sport columns with vertical lines -->
+            <!-- Mini PB preview: three sport columns with zero-baseline line charts + PB markers -->
             <div class="mt-3 flex-1 grid grid-cols-3 gap-2 px-1">
               <!-- Swim mini -->
               <div class="flex flex-col gap-1">
                 <span class="text-[8px] font-semibold text-cyan-400 uppercase">Swim</span>
-                <div class="flex-1 flex flex-col gap-1.5">
-                  <div class="relative h-6 rounded bg-slate-900 overflow-hidden flex items-end px-1 gap-0.5">
-                    <div class="w-px bg-cyan-500/40 rounded-t" style="height:35%"></div>
-                    <div class="w-px bg-cyan-500/55 rounded-t" style="height:55%"></div>
-                    <div class="w-px bg-cyan-500/70 rounded-t" style="height:72%"></div>
-                    <div class="w-px bg-cyan-500/85 rounded-t" style="height:88%"></div>
-                    <div class="w-0.5 bg-cyan-400 rounded-t" style="height:100%"></div>
-                  </div>
-                  <div class="relative h-6 rounded bg-slate-900 overflow-hidden flex items-end px-1 gap-0.5">
-                    <div class="w-px bg-cyan-500/40 rounded-t" style="height:40%"></div>
-                    <div class="w-px bg-cyan-500/60 rounded-t" style="height:68%"></div>
-                    <div class="w-0.5 bg-cyan-400 rounded-t" style="height:100%"></div>
-                  </div>
+                <div class="h-[52px] rounded bg-slate-900 px-1.5 py-1">
+                  <svg width="100%" height="100%" viewBox="0 0 90 44" preserveAspectRatio="none" aria-hidden="true">
+                    <line x1="12" y1="4" x2="12" y2="34" stroke="#1E293B" stroke-width="1" />
+                    <line x1="12" y1="34" x2="88" y2="34" stroke="#1E293B" stroke-width="1" />
+                    <polyline points="16,24 30,20 44,17 58,14 74,11" fill="none" stroke="#22D3EE" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+                    <line x1="16" y1="24" x2="16" y2="34" stroke="#06B6D4" stroke-width="1.7" stroke-opacity="0.45" stroke-linecap="round" />
+                    <line x1="30" y1="20" x2="30" y2="34" stroke="#06B6D4" stroke-width="1.7" stroke-opacity="0.55" stroke-linecap="round" />
+                    <line x1="44" y1="17" x2="44" y2="34" stroke="#06B6D4" stroke-width="1.7" stroke-opacity="0.65" stroke-linecap="round" />
+                    <line x1="58" y1="14" x2="58" y2="34" stroke="#06B6D4" stroke-width="1.7" stroke-opacity="0.75" stroke-linecap="round" />
+                    <line x1="74" y1="11" x2="74" y2="34" stroke="#22D3EE" stroke-width="1.7" stroke-opacity="0.9" stroke-linecap="round" />
+                  </svg>
                 </div>
               </div>
               <!-- Run mini -->
               <div class="flex flex-col gap-1">
                 <span class="text-[8px] font-semibold text-rose-400 uppercase">Run</span>
-                <div class="flex-1 flex flex-col gap-1.5">
-                  <div class="relative h-6 rounded bg-slate-900 overflow-hidden flex items-end px-1 gap-0.5">
-                    <div class="w-px bg-rose-500/40 rounded-t" style="height:30%"></div>
-                    <div class="w-px bg-rose-500/55 rounded-t" style="height:52%"></div>
-                    <div class="w-px bg-rose-500/70 rounded-t" style="height:76%"></div>
-                    <div class="w-0.5 bg-rose-400 rounded-t" style="height:100%"></div>
-                  </div>
-                  <div class="relative h-6 rounded bg-slate-900 overflow-hidden flex items-end px-1 gap-0.5">
-                    <div class="w-px bg-rose-500/40 rounded-t" style="height:38%"></div>
-                    <div class="w-px bg-rose-500/60 rounded-t" style="height:65%"></div>
-                    <div class="w-px bg-rose-500/75 rounded-t" style="height:82%"></div>
-                    <div class="w-0.5 bg-rose-400 rounded-t" style="height:100%"></div>
-                  </div>
+                <div class="h-[52px] rounded bg-slate-900 px-1.5 py-1">
+                  <svg width="100%" height="100%" viewBox="0 0 90 44" preserveAspectRatio="none" aria-hidden="true">
+                    <line x1="12" y1="4" x2="12" y2="34" stroke="#1E293B" stroke-width="1" />
+                    <line x1="12" y1="34" x2="88" y2="34" stroke="#1E293B" stroke-width="1" />
+                    <polyline points="16,26 30,22 44,18 58,15 74,12" fill="none" stroke="#FB7185" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+                    <line x1="16" y1="26" x2="16" y2="34" stroke="#EF4444" stroke-width="1.7" stroke-opacity="0.45" stroke-linecap="round" />
+                    <line x1="30" y1="22" x2="30" y2="34" stroke="#EF4444" stroke-width="1.7" stroke-opacity="0.58" stroke-linecap="round" />
+                    <line x1="44" y1="18" x2="44" y2="34" stroke="#EF4444" stroke-width="1.7" stroke-opacity="0.68" stroke-linecap="round" />
+                    <line x1="58" y1="15" x2="58" y2="34" stroke="#EF4444" stroke-width="1.7" stroke-opacity="0.8" stroke-linecap="round" />
+                    <line x1="74" y1="12" x2="74" y2="34" stroke="#FB7185" stroke-width="1.7" stroke-opacity="0.9" stroke-linecap="round" />
+                  </svg>
                 </div>
               </div>
               <!-- Bike mini -->
               <div class="flex flex-col gap-1">
                 <span class="text-[8px] font-semibold text-teal-400 uppercase">Bike</span>
-                <div class="flex-1 flex flex-col gap-1.5">
-                  <div class="relative h-6 rounded bg-slate-900 overflow-hidden flex items-end px-1 gap-0.5">
-                    <div class="w-px bg-teal-500/40 rounded-t" style="height:45%"></div>
-                    <div class="w-px bg-teal-500/60 rounded-t" style="height:70%"></div>
-                    <div class="w-0.5 bg-teal-400 rounded-t" style="height:100%"></div>
-                  </div>
-                  <div class="relative h-6 rounded bg-slate-900 overflow-hidden flex items-end px-1 gap-0.5">
-                    <div class="w-px bg-teal-500/40 rounded-t" style="height:28%"></div>
-                    <div class="w-px bg-teal-500/55 rounded-t" style="height:58%"></div>
-                    <div class="w-px bg-teal-500/70 rounded-t" style="height:78%"></div>
-                    <div class="w-0.5 bg-teal-400 rounded-t" style="height:100%"></div>
-                  </div>
+                <div class="h-[52px] rounded bg-slate-900 px-1.5 py-1">
+                  <svg width="100%" height="100%" viewBox="0 0 90 44" preserveAspectRatio="none" aria-hidden="true">
+                    <line x1="12" y1="4" x2="12" y2="34" stroke="#1E293B" stroke-width="1" />
+                    <line x1="12" y1="34" x2="88" y2="34" stroke="#1E293B" stroke-width="1" />
+                    <polyline points="16,25 30,21 44,19 58,16 74,13" fill="none" stroke="#2DD4BF" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+                    <line x1="16" y1="25" x2="16" y2="34" stroke="#14B8A6" stroke-width="1.7" stroke-opacity="0.45" stroke-linecap="round" />
+                    <line x1="30" y1="21" x2="30" y2="34" stroke="#14B8A6" stroke-width="1.7" stroke-opacity="0.58" stroke-linecap="round" />
+                    <line x1="44" y1="19" x2="44" y2="34" stroke="#14B8A6" stroke-width="1.7" stroke-opacity="0.68" stroke-linecap="round" />
+                    <line x1="58" y1="16" x2="58" y2="34" stroke="#14B8A6" stroke-width="1.7" stroke-opacity="0.78" stroke-linecap="round" />
+                    <line x1="74" y1="13" x2="74" y2="34" stroke="#2DD4BF" stroke-width="1.7" stroke-opacity="0.9" stroke-linecap="round" />
+                  </svg>
                 </div>
               </div>
             </div>
@@ -1088,11 +1079,75 @@
       return `${m}m`;
     }
 
+    function formatTimePerUnitLabel(minutesValue, unitSuffix) {
+      if (!Number.isFinite(minutesValue) || minutesValue <= 0) return '--';
+      const totalSeconds = Math.round(minutesValue * 60);
+      const min = Math.floor(totalSeconds / 60);
+      const sec = totalSeconds % 60;
+      return `${min}:${String(sec).padStart(2, '0')} ${unitSuffix}`;
+    }
+
     function formatPaceLabel(minPerKm) {
-      if (!Number.isFinite(minPerKm) || minPerKm <= 0) return '--';
-      const min = Math.floor(minPerKm);
-      const sec = Math.round((minPerKm - min) * 60);
-      return `${min}:${String(sec).padStart(2, '0')} /km`;
+      return formatTimePerUnitLabel(minPerKm, '/km');
+    }
+
+    function formatSwimPaceLabel(minPer100m) {
+      return formatTimePerUnitLabel(minPer100m, '/100m');
+    }
+
+    function paceMinPerKmToSpeedKmh(minPerKm) {
+      if (!Number.isFinite(minPerKm) || minPerKm <= 0) return null;
+      return 60 / minPerKm;
+    }
+
+    function formatSpeedLabel(kmh) {
+      if (!Number.isFinite(kmh) || kmh <= 0) return '--';
+      return `${kmh.toFixed(1)} km/h`;
+    }
+
+    function formatPerformanceValue(value, metricType, options = {}) {
+      const compact = !!options.compact;
+      if (!Number.isFinite(value) || value <= 0) return '--';
+      if (metricType === 'speed_bike') {
+        return compact ? `${value.toFixed(1)} km/h` : formatSpeedLabel(value);
+      }
+      if (metricType === 'pace_swim') {
+        return compact ? formatSwimPaceLabel(value).replace(' /100m', '') : formatSwimPaceLabel(value);
+      }
+      return compact ? formatPaceLabel(value).replace(' /km', '') : formatPaceLabel(value);
+    }
+
+    function getPerformanceMetaForSport(sport) {
+      if (sport === 'Run') {
+        return {
+          metricType: 'pace_run',
+          axisTitle: 'Pace (mm:ss /km)',
+          tooltipLabel: 'Pace',
+          reverseXAxis: true
+        };
+      }
+      if (sport === 'Swim') {
+        return {
+          metricType: 'pace_swim',
+          axisTitle: 'Pace (mm:ss /100m)',
+          tooltipLabel: 'Pace',
+          reverseXAxis: true
+        };
+      }
+      if (sport === 'Bike') {
+        return {
+          metricType: 'speed_bike',
+          axisTitle: 'Speed (km/h)',
+          tooltipLabel: 'Speed',
+          reverseXAxis: false
+        };
+      }
+      return {
+        metricType: null,
+        axisTitle: 'Performance (sport-specific units)',
+        tooltipLabel: 'Performance',
+        reverseXAxis: false
+      };
     }
 
     function formatShortDate(date) {
@@ -1317,6 +1372,12 @@
         return (normalized.includes('herz') || normalized.includes('heart')) &&
           (normalized.includes('durch') || normalized.includes('avg') || normalized.includes('durchschnitt') || normalized.includes('average'));
       });
+      const avgWattsIdx = headers.findIndex(h => {
+        if (!h) return false;
+        const normalized = String(h).toLowerCase();
+        return (normalized.includes('watt') || normalized.includes('power')) &&
+          (normalized.includes('durch') || normalized.includes('avg') || normalized.includes('durchschnitt') || normalized.includes('average'));
+      });
 
       // Find 'Distanz' columns (index 17 is usually the dot-formatted meters)
       const distIndices = [];
@@ -1380,6 +1441,9 @@
         const avgHeartRate = avgHeartRateIdx !== -1
           ? window.scatterUtils.parseLocalizedNumber(row[avgHeartRateIdx])
           : null;
+        const avgWatts = avgWattsIdx !== -1
+          ? window.scatterUtils.parseLocalizedNumber(row[avgWattsIdx])
+          : null;
         const equipment = equipmentIdx !== -1 ? (row[equipmentIdx] || '').trim() : '';
 
         nextProcessedActivities.push({
@@ -1392,6 +1456,7 @@
           equipment,
           duration: durationSeconds,
           avgHeartRate: avgHeartRate,
+          avgWatts: avgWatts,
           name: name
         });
       }
@@ -1406,18 +1471,18 @@
       const emptyState = document.getElementById('equipmentEmptyState');
       if (!canvas) return;
 
-let sortedEntries;
-if (selectedEquipmentMetric === 'distance') {
-  sortedEntries = window.equipmentUtils.aggregateEquipmentDistance(processedActivities, selectedEquipmentFilter);
-} else if (selectedEquipmentMetric === 'pace') {
-  sortedEntries = window.equipmentUtils.aggregateEquipmentPace(processedActivities, selectedEquipmentFilter);
-} else if (selectedEquipmentMetric === 'count') {
-  sortedEntries = window.equipmentUtils.aggregateEquipmentActivityCount(processedActivities, selectedEquipmentFilter);
-} else if (selectedEquipmentMetric === 'avgLength') {
-  sortedEntries = window.equipmentUtils.aggregateEquipmentAvgLength(processedActivities, selectedEquipmentFilter);
-} else {
-  sortedEntries = [];
-}
+      let sortedEntries;
+      if (selectedEquipmentMetric === 'distance') {
+        sortedEntries = window.equipmentUtils.aggregateEquipmentDistance(processedActivities, selectedEquipmentFilter);
+      } else if (selectedEquipmentMetric === 'pace') {
+        sortedEntries = window.equipmentUtils.aggregateEquipmentPace(processedActivities, selectedEquipmentFilter);
+      } else if (selectedEquipmentMetric === 'count') {
+        sortedEntries = window.equipmentUtils.aggregateEquipmentActivityCount(processedActivities, selectedEquipmentFilter);
+      } else if (selectedEquipmentMetric === 'avgLength') {
+        sortedEntries = window.equipmentUtils.aggregateEquipmentAvgLength(processedActivities, selectedEquipmentFilter);
+      } else {
+        sortedEntries = [];
+      }
 
       if (equipmentChartInstance) {
         equipmentChartInstance.destroy();
@@ -1449,11 +1514,17 @@ if (selectedEquipmentMetric === 'distance') {
 
             chart.getDatasetMeta(0).data.forEach((bar, index) => {
                 const value = dataset.data[index];
-let label;
+                const equipmentName = chart.data.labels[index];
+                const equipmentType = window.equipmentUtils.getEquipmentType(equipmentName);
+                let label;
                 if (selectedEquipmentMetric === 'distance') {
                   label = `${value.toFixed(1)} km`;
                 } else if (selectedEquipmentMetric === 'pace') {
-                  label = formatPaceLabel(value);
+                  if (selectedEquipmentFilter === 'Bikes' || equipmentType === 'Bikes') {
+                    label = formatSpeedLabel(paceMinPerKmToSpeedKmh(value));
+                  } else {
+                    label = formatPaceLabel(value);
+                  }
                 } else if (selectedEquipmentMetric === 'count') {
                   label = `${value} activities`;
                 } else if (selectedEquipmentMetric === 'avgLength') {
@@ -1497,7 +1568,16 @@ datasets: [{
               callbacks: {
                 label: context => selectedEquipmentMetric === 'distance'
                   ? `${context.raw.toFixed(1)} km`
-                  : formatPaceLabel(context.raw)
+                  : selectedEquipmentMetric === 'pace'
+                    ? (() => {
+                        const equipmentName = context.label;
+                        const equipmentType = window.equipmentUtils.getEquipmentType(equipmentName);
+                        if (selectedEquipmentFilter === 'Bikes' || equipmentType === 'Bikes') {
+                          return formatSpeedLabel(paceMinPerKmToSpeedKmh(context.raw));
+                        }
+                        return formatPaceLabel(context.raw);
+                      })()
+                    : `${context.raw}`
               }
             }
           },
@@ -1508,7 +1588,11 @@ datasets: [{
                 color: '#94A3B8',
                 callback: value => selectedEquipmentMetric === 'distance'
                   ? `${value} km`
-                  : formatPaceLabel(value).replace(' /km', '')
+                  : selectedEquipmentMetric === 'pace'
+                    ? (selectedEquipmentFilter === 'Bikes'
+                        ? (Number.isFinite(value) && value > 0 ? paceMinPerKmToSpeedKmh(value).toFixed(1) : '--')
+                        : formatPaceLabel(value).replace(' /km', ''))
+                    : value
               }
             },
             y: {
@@ -2236,6 +2320,7 @@ datasets: [{
 
        renderScatterTrendControls(regressionDatasets);
        const ctx = canvas.getContext('2d');
+       const scatterMeta = getPerformanceMetaForSport(selectedScatterSportFilter);
        scatterChartInstance = new Chart(ctx, {
          type: 'bubble',
          data: {
@@ -2260,36 +2345,47 @@ datasets: [{
                    if (!first || !first.raw || !first.raw.meta) return first.dataset.label;
                    return first.raw.meta.name;
                  },
-                 label: function(context) {
-                   if (context.dataset.type === 'line') return context.dataset.label;
-                   const meta = context.raw.meta;
-                   return [
-                     `Pace: ${formatPaceLabel(meta.x)}`,
-                     `Heartrate: ${meta.y.toFixed(0)} bpm`,
-                     `Distance: ${meta.distance.toFixed(1)} km`,
-                     `Duration: ${formatDuration(meta.duration)}`,
-                     `Date: ${formatShortDate(meta.date)}`
-                   ];
-                 }
-               }
-             }
-           },
-           scales: {
-             x: {
-               reverse: true,
-               title: {
-                 display: true,
-                 text: 'Pace (min/km)',
-                 color: '#94A3B8'
-               },
-               grid: { color: '#1E293B' },
-               ticks: {
-                 color: '#64748B',
-                 callback: function(value) {
-                   return formatPaceLabel(value).replace(' /km', '');
-                 }
-               }
-             },
+                  label: function(context) {
+                    if (context.dataset.type === 'line') return context.dataset.label;
+                    const meta = context.raw.meta;
+                    const metricType = meta.metricType || scatterMeta.metricType || 'pace_run';
+                    const performanceLabel = scatterMeta.tooltipLabel || 'Performance';
+                    const details = [
+                      `${performanceLabel}: ${formatPerformanceValue(meta.x, metricType)}`,
+                      `Heartrate: ${meta.y.toFixed(0)} bpm`,
+                      `Distance: ${meta.distance.toFixed(1)} km`,
+                      `Duration: ${formatDuration(meta.duration)}`,
+                      `Date: ${formatShortDate(meta.date)}`
+                    ];
+                    if (meta.sport === 'Bike' && Number.isFinite(meta.avgWatts) && meta.avgWatts > 0) {
+                      details.splice(2, 0, `Avg Watts: ${Math.round(meta.avgWatts)} W`);
+                    }
+                    return [
+                      ...details
+                    ];
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                reverse: scatterMeta.reverseXAxis,
+                title: {
+                  display: true,
+                  text: scatterMeta.axisTitle,
+                  color: '#94A3B8'
+                },
+                grid: { color: '#1E293B' },
+                ticks: {
+                  color: '#64748B',
+                  callback: function(value) {
+                    if (selectedScatterSportFilter === 'All') {
+                      return Number.isFinite(value) ? Number(value).toFixed(1) : value;
+                    }
+                    return formatPerformanceValue(value, scatterMeta.metricType, { compact: true });
+                  }
+                }
+              },
              y: {
                title: {
                  display: true,
@@ -2747,7 +2843,21 @@ datasets: [{
     const PB_SPORT_COLOR = { Swim: '#06B6D4', Run: '#EF4444', Bike: '#14B8A6' };
     const PB_MAX_RESULTS = 10;
 
-    // Returns array of PB events (each one beats the previous best pace)
+    function getPbMetricForActivity(activity, sport) {
+      if (!activity || !Number.isFinite(activity.distance) || !Number.isFinite(activity.duration) || activity.distance <= 0 || activity.duration <= 0) return null;
+      if (sport === 'Swim') {
+        const value = window.scatterUtils.calculatePaceMinPer100m(activity.distance, activity.duration);
+        return Number.isFinite(value) && value > 0 ? { value, metricType: 'pace_swim', better: 'lower' } : null;
+      }
+      if (sport === 'Bike') {
+        const value = window.scatterUtils.calculateSpeedKmH(activity.distance, activity.duration);
+        return Number.isFinite(value) && value > 0 ? { value, metricType: 'speed_bike', better: 'higher' } : null;
+      }
+      const value = window.scatterUtils.calculatePaceMinPerKm(activity.distance, activity.duration);
+      return Number.isFinite(value) && value > 0 ? { value, metricType: 'pace_run', better: 'lower' } : null;
+    }
+
+    // Returns array of PB events (each one beats the previous best total duration)
     function computePbsForDistance(activities, sport, km, tol) {
       const lo = km * (1 - tol);
       const hi = km * (1 + tol);
@@ -2755,13 +2865,23 @@ datasets: [{
         .filter(a => a.sport === sport && a.distance >= lo && a.distance <= hi && a.duration > 0)
         .sort((a, b) => a.date - b.date);
 
-      let bestPace = Infinity;
+      let bestDuration = Infinity;
       const pbs = [];
       for (const act of candidates) {
-        const pace = (act.duration / 60) / act.distance; // min/km
-        if (pace < bestPace) {
-          bestPace = pace;
-          pbs.push({ date: act.date, pace, duration: act.duration, distance: act.distance, name: act.name });
+        const metric = getPbMetricForActivity(act, sport);
+        if (!metric) continue;
+        const isBetter = act.duration < bestDuration;
+        if (isBetter) {
+          bestDuration = act.duration;
+          pbs.push({
+            date: act.date,
+            metricValue: metric.value,
+            metricType: metric.metricType,
+            duration: act.duration,
+            distance: act.distance,
+            avgWatts: act.avgWatts,
+            name: act.name
+          });
         }
       }
       return pbs.slice(0, PB_MAX_RESULTS);
@@ -2799,14 +2919,13 @@ datasets: [{
       }
 
       // SVG coordinate system (viewBox units)
-      const VB_W     = 300;
-      const PAD_L    = 2;
-      const PAD_R    = 2;
-      const DRAW_W   = VB_W - PAD_L - PAD_R;
-      const SVG_H    = 44;
-      const BASE_Y   = 36;   // y of the baseline
-      const LINE_MIN = 5;
-      const LINE_MAX = BASE_Y - 4;
+      const VB_W      = 300;
+      const PAD_L     = 24;
+      const PAD_R     = 4;
+      const DRAW_W    = VB_W - PAD_L - PAD_R;
+      const SVG_H     = 56;
+      const CHART_TOP = 6;
+      const X_AXIS_Y  = 40;
 
       function tToX(t) {
         return PAD_L + ((t - axisStart) / axisSpan) * DRAW_W;
@@ -2827,7 +2946,12 @@ datasets: [{
         ttDate.textContent  = pb.date.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' });
         ttTime.textContent  = 'Time: ' + formatDurationHms(pb.duration);
         ttDist.textContent  = 'Dist: ' + pb.distance.toFixed(2) + ' km';
-        ttPace.textContent  = 'Pace: ' + pb.pace.toFixed(2) + ' min/km';
+        const metricLabel = pb.metricType === 'speed_bike' ? 'Speed' : 'Pace';
+        let metricText = `${metricLabel}: ${formatPerformanceValue(pb.metricValue, pb.metricType)}`;
+        if (pb.metricType === 'speed_bike' && Number.isFinite(pb.avgWatts) && pb.avgWatts > 0) {
+          metricText += ` | Avg Watts: ${Math.round(pb.avgWatts)} W`;
+        }
+        ttPace.textContent  = metricText;
         ttRank.textContent  = rank === total ? 'Current PB' : 'PB #' + rank + ' of ' + total;
         tooltip.classList.remove('hidden');
         movePbTooltip(e);
@@ -2873,9 +2997,10 @@ datasets: [{
           const best   = pbs[pbs.length - 1];
           const header = document.createElement('div');
           header.className = 'flex items-center justify-between';
+          const metricLabel = best.metricType === 'speed_bike' ? 'Current PB speed' : 'Current PB pace';
           header.innerHTML =
             '<span class="text-xs font-semibold text-slate-300">' + distDef.label + '</span>' +
-            '<span class="text-[11px] font-mono text-slate-400" title="Current PB: ' + best.pace.toFixed(2) + ' min/km">' + formatDurationHms(best.duration) + '</span>';
+            '<span class="text-[11px] font-mono text-slate-400" title="' + metricLabel + ': ' + formatPerformanceValue(best.metricValue, best.metricType) + '">' + formatDurationHms(best.duration) + '</span>';
           block.appendChild(header);
 
           // SVG
@@ -2887,24 +3012,34 @@ datasets: [{
           svg.style.overflow = 'visible';
           svg.style.cursor   = 'default';
 
-          // Baseline
+          // X-axis baseline
           const baseline = document.createElementNS('http://www.w3.org/2000/svg', 'line');
           baseline.setAttribute('x1', PAD_L);
-          baseline.setAttribute('y1', BASE_Y);
+          baseline.setAttribute('y1', X_AXIS_Y);
           baseline.setAttribute('x2', VB_W - PAD_R);
-          baseline.setAttribute('y2', BASE_Y);
+          baseline.setAttribute('y2', X_AXIS_Y);
           baseline.setAttribute('stroke', '#1E293B');
           baseline.setAttribute('stroke-width', '1');
           svg.appendChild(baseline);
+
+          // Y-axis
+          const yAxis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          yAxis.setAttribute('x1', PAD_L);
+          yAxis.setAttribute('y1', CHART_TOP);
+          yAxis.setAttribute('x2', PAD_L);
+          yAxis.setAttribute('y2', X_AXIS_Y);
+          yAxis.setAttribute('stroke', '#1E293B');
+          yAxis.setAttribute('stroke-width', '1');
+          svg.appendChild(yAxis);
 
           // Year tick marks + labels
           yearTicks.forEach(function(tick) {
             const x        = tToX(tick.t);
             const tickLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
             tickLine.setAttribute('x1', x);
-            tickLine.setAttribute('y1', BASE_Y);
+            tickLine.setAttribute('y1', X_AXIS_Y);
             tickLine.setAttribute('x2', x);
-            tickLine.setAttribute('y2', BASE_Y + 3);
+            tickLine.setAttribute('y2', X_AXIS_Y + 3);
             tickLine.setAttribute('stroke', '#334155');
             tickLine.setAttribute('stroke-width', '0.8');
             svg.appendChild(tickLine);
@@ -2915,31 +3050,72 @@ datasets: [{
               label.setAttribute('x', x);
               label.setAttribute('y', SVG_H - 0.5);
               label.setAttribute('text-anchor', 'middle');
-              label.setAttribute('font-size', '5.5');
-              label.setAttribute('fill', '#475569');
+              label.setAttribute('font-size', '8.5');
+              label.setAttribute('fill', '#CBD5E1');
               label.setAttribute('font-family', 'ui-monospace, monospace');
               label.textContent = tick.year;
               svg.appendChild(label);
             }
           });
 
-          // PB lines
-          const paceMax   = pbs[0].pace;
-          const paceMin   = pbs[pbs.length - 1].pace;
-          const paceRange = paceMax - paceMin || 1;
+          // PB line chart + vertical PB markers (Y axis = total duration)
+          const durationMax = Math.max(...pbs.map(pb => pb.duration));
+          const yMax    = Math.max(durationMax, 1);
+          const ySpan   = X_AXIS_Y - CHART_TOP - 2;
+
+          function durationToY(durationSeconds) {
+            const normalized = Math.max(0, Math.min(1, durationSeconds / yMax));
+            return X_AXIS_Y - normalized * ySpan;
+          }
+
+          // Y-axis labels (top = slowest PB duration, bottom fixed at zero)
+          const yTopLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          yTopLabel.setAttribute('x', PAD_L - 2);
+          yTopLabel.setAttribute('y', CHART_TOP + 1);
+          yTopLabel.setAttribute('text-anchor', 'end');
+          yTopLabel.setAttribute('dominant-baseline', 'hanging');
+          yTopLabel.setAttribute('font-size', '6.8');
+          yTopLabel.setAttribute('fill', '#E2E8F0');
+          yTopLabel.setAttribute('font-family', 'ui-monospace, monospace');
+          yTopLabel.textContent = formatDurationHms(durationMax);
+          svg.appendChild(yTopLabel);
+
+          const yBottomLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          yBottomLabel.setAttribute('x', PAD_L - 2);
+          yBottomLabel.setAttribute('y', X_AXIS_Y - 1);
+          yBottomLabel.setAttribute('text-anchor', 'end');
+          yBottomLabel.setAttribute('dominant-baseline', 'auto');
+          yBottomLabel.setAttribute('font-size', '6.8');
+          yBottomLabel.setAttribute('fill', '#CBD5E1');
+          yBottomLabel.setAttribute('font-family', 'ui-monospace, monospace');
+          yBottomLabel.textContent = '0:00';
+          svg.appendChild(yBottomLabel);
+
+          const trendLine = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+          const points = pbs.map(function(pb) {
+            return tToX(pb.date.getTime()).toFixed(2) + ',' + durationToY(pb.duration).toFixed(2);
+          }).join(' ');
+          trendLine.setAttribute('points', points);
+          trendLine.setAttribute('fill', 'none');
+          trendLine.setAttribute('stroke', color);
+          trendLine.setAttribute('stroke-opacity', '0.9');
+          trendLine.setAttribute('stroke-width', '1.8');
+          trendLine.setAttribute('stroke-linecap', 'round');
+          trendLine.setAttribute('stroke-linejoin', 'round');
+          svg.appendChild(trendLine);
 
           pbs.forEach(function(pb, i) {
             const x        = tToX(pb.date.getTime());
-            const lineH    = LINE_MIN + ((paceMax - pb.pace) / paceRange) * (LINE_MAX - LINE_MIN);
-            const y1       = BASE_Y - lineH;
-            const y2       = BASE_Y;
+            const y1       = durationToY(pb.duration);
+            const y2       = X_AXIS_Y;
             const isLatest = i === pbs.length - 1;
             const opacity  = 0.30 + 0.70 * (i / Math.max(pbs.length - 1, 1));
+            const markerStrokeWidth = 1.8;
 
             // Wide transparent hit zone
             const hit = document.createElementNS('http://www.w3.org/2000/svg', 'line');
             hit.setAttribute('x1', x);
-            hit.setAttribute('y1', y1 - 2);
+            hit.setAttribute('y1', CHART_TOP);
             hit.setAttribute('x2', x);
             hit.setAttribute('y2', y2);
             hit.setAttribute('stroke', 'transparent');
@@ -2954,17 +3130,17 @@ datasets: [{
             line.setAttribute('x2', x);
             line.setAttribute('y2', y2);
             line.setAttribute('stroke', color);
-            line.setAttribute('stroke-width', isLatest ? '2.5' : '1.5');
+            line.setAttribute('stroke-width', String(markerStrokeWidth));
             line.setAttribute('stroke-linecap', 'round');
             line.setAttribute('opacity', opacity.toFixed(2));
             line.style.pointerEvents = 'none';
             svg.appendChild(line);
 
-            // Dot for current PB
+            // Dot for current PB on trend line
             if (isLatest) {
               const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
               dot.setAttribute('cx', x);
-              dot.setAttribute('cy', BASE_Y);
+              dot.setAttribute('cy', y1);
               dot.setAttribute('r', '2.5');
               dot.setAttribute('fill', color);
               dot.style.pointerEvents = 'none';
@@ -2976,13 +3152,11 @@ datasets: [{
             const rank   = i + 1;
             const total  = pbs.length;
             hit.addEventListener('mouseenter', function(e) {
-              line.setAttribute('stroke-width', isLatest ? '3.5' : '2.5');
               line.setAttribute('opacity', '1');
               showPbTooltip(e, pbSnap, rank, total, color);
             });
             hit.addEventListener('mousemove', movePbTooltip);
             hit.addEventListener('mouseleave', function() {
-              line.setAttribute('stroke-width', isLatest ? '2.5' : '1.5');
               line.setAttribute('opacity', opacity.toFixed(2));
               hidePbTooltip();
             });

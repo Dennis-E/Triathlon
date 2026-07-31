@@ -1,7 +1,6 @@
 # TODO
 
 Project:
-- also language - german and english agnostic he should be able to auto-detect
 - helper tools (relevant export extractor, zip-importer, scatter utils) should this really be in root?
 - package / package-lock?
 - not mvp in html header in browser header
@@ -20,12 +19,10 @@ Improvements:
 - outlier exclusion (dynamic %age or # to exclude)
 
 Features:
-- best all time
 - length vs pace
 - Heatmap
 - Heart-rate trend over time
 - Elevation profile and elevation analysis by sport
 - Training load distribution by intensity zones
 - Season comparison across multiple years
-- Real chart screenshots on the landing page
 - Trainer view? Manage multiple athlete profiles

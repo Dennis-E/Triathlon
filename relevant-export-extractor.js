@@ -12,6 +12,7 @@ const REQUIRED_ACTIVITY_COLUMNS = [
   { outputHeader: 'Bewegungszeit', type: 'oneOf', headers: ['Bewegungszeit', 'Moving Time'], required: false },
   { outputHeader: 'Distanz', type: 'occurrence', headers: ['Distanz', 'Distance'], occurrence: 1, required: true },
   { outputHeader: 'Durchschnittliche Herzfrequenz', type: 'predicate', required: false },
+  { outputHeader: 'Durchschnittliche Wattzahl', type: 'predicatePower', required: false },
   { outputHeader: 'Distanz', type: 'occurrence', headers: ['Distanz', 'Distance'], occurrence: 2, required: true }
 ];
 
@@ -118,6 +119,16 @@ function findHeaderIndex(headers, column) {
       if (!header) return false;
       const normalized = String(header).toLowerCase();
       return (normalized.includes('herz') || normalized.includes('heart')) &&
+        (normalized.includes('durch') || normalized.includes('durchschnitt') || normalized.includes('avg') || normalized.includes('average'));
+    });
+    return index === -1 ? null : index;
+  }
+
+  if (column.type === 'predicatePower') {
+    const index = headers.findIndex(header => {
+      if (!header) return false;
+      const normalized = String(header).toLowerCase();
+      return (normalized.includes('watt') || normalized.includes('power')) &&
         (normalized.includes('durch') || normalized.includes('durchschnitt') || normalized.includes('avg') || normalized.includes('average'));
     });
     return index === -1 ? null : index;

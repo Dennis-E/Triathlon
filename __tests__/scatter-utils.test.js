@@ -1,6 +1,9 @@
 const {
   parseLocalizedNumber,
   calculatePaceMinPerKm,
+  calculatePaceMinPer100m,
+  calculateSpeedKmH,
+  getSportPerformanceMetric,
   calculateBubbleRadius,
   linearRegression,
   getHeartratePacePoints,
@@ -18,6 +21,35 @@ describe('scatter utils', () => {
     expect(calculatePaceMinPerKm(10, 3600)).toBe(6);
     expect(calculatePaceMinPerKm(0, 3600)).toBeNull();
     expect(calculatePaceMinPerKm(10, 0)).toBeNull();
+  });
+
+  it('calculates swim pace min/100m', () => {
+    expect(calculatePaceMinPer100m(1, 1200)).toBe(2);
+    expect(calculatePaceMinPer100m(0, 1200)).toBeNull();
+    expect(calculatePaceMinPer100m(1, 0)).toBeNull();
+  });
+
+  it('calculates bike speed km/h', () => {
+    expect(calculateSpeedKmH(40, 3600)).toBe(40);
+    expect(calculateSpeedKmH(0, 3600)).toBeNull();
+    expect(calculateSpeedKmH(40, 0)).toBeNull();
+  });
+
+  it('returns sport-specific performance metric metadata', () => {
+    const run = getSportPerformanceMetric({ sport: 'Run', distance: 10, duration: 3600 });
+    const swim = getSportPerformanceMetric({ sport: 'Swim', distance: 1, duration: 1200 });
+    const bike = getSportPerformanceMetric({ sport: 'Bike', distance: 40, duration: 3600 });
+
+    expect(run).toEqual({ value: 6, type: 'pace_run' });
+    expect(swim).toEqual({ value: 2, type: 'pace_swim' });
+    expect(bike).toEqual({ value: 40, type: 'speed_bike' });
+  });
+
+  it('returns null for unsupported or invalid sport performance metrics', () => {
+    expect(getSportPerformanceMetric({ sport: 'Yoga', distance: 10, duration: 3600 })).toBeNull();
+    expect(getSportPerformanceMetric({ sport: 'Run', distance: 0, duration: 3600 })).toBeNull();
+    expect(getSportPerformanceMetric({ sport: 'Swim', distance: 1, duration: 0 })).toBeNull();
+    expect(getSportPerformanceMetric({ sport: 'Bike', distance: 40, duration: 30 })).toBeNull(); // >80 km/h guard
   });
 
   it('calculates scaled bubble radius', () => {
@@ -56,6 +88,7 @@ describe('scatter utils', () => {
         distance: 40,
         duration: 3600,
         avgHeartRate: 140,
+        avgWatts: 210,
         name: 'B'
       },
       {
@@ -77,6 +110,78 @@ describe('scatter utils', () => {
     expect(points).toHaveLength(1);
     expect(points[0].x).toBeCloseTo(6, 5);
     expect(points[0].y).toBe(150);
+    expect(points[0].metricType).toBe('pace_run');
+  });
+
+  it('uses sport-specific performance metrics', () => {
+    const activities = [
+      {
+        date: new Date(2025, 0, 10),
+        sport: 'Swim',
+        distance: 1,
+        duration: 1200,
+        avgHeartRate: 132,
+        name: 'Swim A'
+      },
+      {
+        date: new Date(2025, 0, 11),
+        sport: 'Bike',
+        distance: 40,
+        duration: 3600,
+        avgHeartRate: 140,
+        avgWatts: 210,
+        name: 'Bike B'
+      }
+    ];
+
+    const swimPoints = getHeartratePacePoints(activities, { sport: 'Swim' });
+    const bikePoints = getHeartratePacePoints(activities, { sport: 'Bike' });
+
+    expect(swimPoints).toHaveLength(1);
+    expect(swimPoints[0].x).toBeCloseTo(2, 5);
+    expect(swimPoints[0].metricType).toBe('pace_swim');
+
+    expect(bikePoints).toHaveLength(1);
+    expect(bikePoints[0].x).toBeCloseTo(40, 5);
+    expect(bikePoints[0].metricType).toBe('speed_bike');
+    expect(bikePoints[0].avgWatts).toBe(210);
+  });
+
+  it('returns mixed metric types when filtering all sports', () => {
+    const activities = [
+      {
+        date: new Date(2025, 0, 10),
+        sport: 'Run',
+        distance: 10,
+        duration: 3600,
+        avgHeartRate: 150,
+        name: 'Run A'
+      },
+      {
+        date: new Date(2025, 0, 11),
+        sport: 'Swim',
+        distance: 1,
+        duration: 1200,
+        avgHeartRate: 132,
+        name: 'Swim B'
+      },
+      {
+        date: new Date(2025, 0, 12),
+        sport: 'Bike',
+        distance: 40,
+        duration: 3600,
+        avgHeartRate: 140,
+        avgWatts: 220,
+        name: 'Bike C'
+      }
+    ];
+
+    const points = getHeartratePacePoints(activities, { sport: 'All' });
+    const metricTypes = points.map(p => p.metricType).sort();
+    expect(metricTypes).toEqual(['pace_run', 'pace_swim', 'speed_bike']);
+
+    const bikePoint = points.find(p => p.sport === 'Bike');
+    expect(bikePoint.avgWatts).toBe(220);
   });
 
   it('builds yearly regression datasets', () => {

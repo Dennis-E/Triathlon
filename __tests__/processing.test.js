@@ -72,10 +72,10 @@ describe('processData', () => {
     expect(result[0].duration).toBe(3600);
   });
 
-  it('should keep equipment and average heart rate in the interim activity objects', () => {
+  it('should keep equipment, average heart rate, and average watts in the interim activity objects', () => {
     const data = [
-      ['Aktivitätsdatum', 'Aktivitätsart', 'Name der Aktivität', 'Aktivitätsausrüstung', 'Bewegungszeit', 'Durchschnittliche Herzfrequenz', 'Distanz'],
-      ['19.07.2026, 14:52:02', 'Lauf', 'Morning run', 'ASICS Novablast 4', '3600', '152', '10000']
+      ['Aktivitätsdatum', 'Aktivitätsart', 'Name der Aktivität', 'Aktivitätsausrüstung', 'Bewegungszeit', 'Durchschnittliche Herzfrequenz', 'Durchschnittliche Wattzahl', 'Distanz'],
+      ['19.07.2026, 14:52:02', 'Lauf', 'Morning run', 'ASICS Novablast 4', '3600', '152', '245', '10000']
     ];
 
     const result = processData(data);
@@ -83,6 +83,46 @@ describe('processData', () => {
     expect(result.length).toBe(1);
     expect(result[0].equipment).toBe('ASICS Novablast 4');
     expect(result[0].avgHeartRate).toBe(152);
+    expect(result[0].avgWatts).toBe(245);
+  });
+
+  it('should parse english average power headers into avgWatts', () => {
+    const data = [
+      ['Activity Date', 'Activity Type', 'Activity Name', 'Moving Time', 'Average Heart Rate', 'Average Power', 'Distance'],
+      ['19.07.2026, 14:52:02', 'Bike', 'Bike workout', '3600', '145', '231', '40000']
+    ];
+
+    const result = processData(data);
+
+    expect(result.length).toBe(1);
+    expect(result[0].sport).toBe('Bike');
+    expect(result[0].avgHeartRate).toBe(145);
+    expect(result[0].avgWatts).toBe(231);
+  });
+
+  it('should parse english average watts header into avgWatts', () => {
+    const data = [
+      ['Activity Date', 'Activity Type', 'Activity Name', 'Moving Time', 'Average Heart Rate', 'Average Watts', 'Distance'],
+      ['19.07.2026, 14:52:02', 'Bike', 'Bike workout', '3600', '145', '228', '40000']
+    ];
+
+    const result = processData(data);
+
+    expect(result.length).toBe(1);
+    expect(result[0].sport).toBe('Bike');
+    expect(result[0].avgWatts).toBe(228);
+  });
+
+  it('should set avgWatts to null when no power column exists', () => {
+    const data = [
+      ['Aktivitätsdatum', 'Aktivitätsart', 'Name der Aktivität', 'Bewegungszeit', 'Distanz'],
+      ['19.07.2026, 14:52:02', 'Lauf', 'Morning run', '3600', '10000']
+    ];
+
+    const result = processData(data);
+
+    expect(result.length).toBe(1);
+    expect(result[0].avgWatts).toBeNull();
   });
 
   it('should skip rows with invalid dates', () => {

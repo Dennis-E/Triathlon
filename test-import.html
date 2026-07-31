@@ -80,11 +80,17 @@
 
         try {
           log('Starting ZIP extraction...', 'info');
-          const csvText = await importStravaZip(file, (progress) => {
+          const importResult = await importStravaZip(file, (progress) => {
             log(`${progress.stage} (${progress.percent}%)`, 'info');
           });
 
+          const csvText = importResult && importResult.csvText ? importResult.csvText : '';
+          const fitCount = importResult && importResult.fitBestEffortsByActivityId
+            ? Object.keys(importResult.fitBestEffortsByActivityId).length
+            : 0;
+
           log(`✓ Successfully extracted CSV (${csvText.length} characters)`, 'success');
+          log(`FIT rolling-effort summaries: ${fitCount}`, 'info');
 
           // Show first few lines
           const lines = csvText.split('\n').slice(0, 3);

@@ -22,6 +22,8 @@ Features:
 - length vs pace
 - Heatmap
 - Heart-rate trend over time
+- in PB: Most Elevation records
+- Watt on bike development?
 - Elevation profile and elevation analysis by sport
 - Training load distribution by intensity zones
 - Season comparison across multiple years

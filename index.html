@@ -851,7 +851,7 @@
           <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
             <div class="space-y-1">
               <h2 class="text-2xl font-bold tracking-tight">Personal Bests</h2>
-              <p class="text-xs text-slate-400">Each vertical line marks a new PB — up to the 10 fastest results per distance, sorted shortest to longest</p>
+              <p class="text-xs text-slate-400">Each vertical line marks a new PB — includes interim-distance estimates from longer activities and up to the 10 best results per target</p>
             </div>
             <div class="flex items-center gap-4 text-xs text-slate-400">
               <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-0.5 bg-[#06B6D4]"></span>Swim</span>
@@ -938,6 +938,7 @@
     // Configuration / State
     let rawCsvData = [];
     let processedActivities = [];
+    let fitBestEffortsByActivityId = {};
     let importedDataset = null;
     let selectedSportFilter = 'All'; // 'All', 'Run', 'Bike', 'Swim'
     let selectedAggregationLevel = 'weekly'; // 'daily', 'weekly', 'monthly', 'yearly'
@@ -1163,17 +1164,17 @@
       D: {
         sourceLabel: 'sample data',
         candidates: [
+          { type: 'zip', path: './Data/Dennis/export_39173135.zip' },
           { type: 'csv', path: './Data/Dennis/relevant-export_39173135/activities.csv' },
-          { type: 'csv', path: './Data/Dennis/relevant-export_39173135_regen/activities.csv' },
-          { type: 'zip', path: './Data/Dennis/export_39173135.zip' }
+          { type: 'csv', path: './Data/Dennis/relevant-export_39173135_regen/activities.csv' }
         ],
         filePickerDescription: 'Select Dennis sample activities.csv or export ZIP from Data/Dennis/'
       },
       E: {
         sourceLabel: 'sample data',
         candidates: [
-          { type: 'csv', path: './Data/EE/relevant-export_155559589/activities.csv' },
-          { type: 'zip', path: './Data/EE/export_155559589.zip' }
+          { type: 'zip', path: './Data/EE/export_155559589.zip' },
+          { type: 'csv', path: './Data/EE/relevant-export_155559589/activities.csv' }
         ],
         filePickerDescription: 'Select EE sample activities.csv or export ZIP from Data/EE/'
       }
@@ -1237,7 +1238,8 @@
         importedAt: new Date().toISOString(),
         sourceLabel,
         rawCsvData: csvRows,
-        activities
+        activities,
+        fitBestEffortsByActivityId: {}
       };
     }
 
@@ -1245,6 +1247,7 @@
       importedDataset = dataset;
       rawCsvData = dataset.rawCsvData;
       processedActivities = dataset.activities;
+      fitBestEffortsByActivityId = dataset.fitBestEffortsByActivityId || {};
 
       updateStatusBadge('success', `Loaded ${processedActivities.length} activities`);
 
@@ -1329,6 +1332,9 @@
 
             try {
               const dataset = createImportedDataset(results.data, options.sourceLabel || 'Imported data');
+              if (options.fitBestEffortsByActivityId && typeof options.fitBestEffortsByActivityId === 'object') {
+                dataset.fitBestEffortsByActivityId = options.fitBestEffortsByActivityId;
+              }
               applyImportedDataset(dataset, options);
               resolve(dataset);
             } catch (err) {
@@ -2843,45 +2849,150 @@ datasets: [{
 
     const PB_SPORT_COLOR = { Swim: '#06B6D4', Run: '#EF4444', Bike: '#14B8A6' };
     const PB_MAX_RESULTS = 10;
+    const PB_BIKE_POWER_DURATIONS = [
+      { label: '5m', seconds: 5 * 60, tol: 0.20 },
+      { label: '10m', seconds: 10 * 60, tol: 0.20 },
+      { label: '20m', seconds: 20 * 60, tol: 0.20 },
+      { label: '60m', seconds: 60 * 60, tol: 0.20 }
+    ];
 
-    function getPbMetricForActivity(activity, sport) {
-      if (!activity || !Number.isFinite(activity.distance) || !Number.isFinite(activity.duration) || activity.distance <= 0 || activity.duration <= 0) return null;
+    function getPbMetricForEffort(sport, distanceKm, durationSeconds) {
+      if (!Number.isFinite(distanceKm) || !Number.isFinite(durationSeconds) || distanceKm <= 0 || durationSeconds <= 0) return null;
       if (sport === 'Swim') {
-        const value = window.scatterUtils.calculatePaceMinPer100m(activity.distance, activity.duration);
+        const value = window.scatterUtils.calculatePaceMinPer100m(distanceKm, durationSeconds);
         return Number.isFinite(value) && value > 0 ? { value, metricType: 'pace_swim', better: 'lower' } : null;
       }
       if (sport === 'Bike') {
-        const value = window.scatterUtils.calculateSpeedKmH(activity.distance, activity.duration);
+        const value = window.scatterUtils.calculateSpeedKmH(distanceKm, durationSeconds);
         return Number.isFinite(value) && value > 0 ? { value, metricType: 'speed_bike', better: 'higher' } : null;
       }
-      const value = window.scatterUtils.calculatePaceMinPerKm(activity.distance, activity.duration);
+      const value = window.scatterUtils.calculatePaceMinPerKm(distanceKm, durationSeconds);
       return Number.isFinite(value) && value > 0 ? { value, metricType: 'pace_run', better: 'lower' } : null;
     }
 
-    // Returns array of PB events (each one beats the previous best total duration)
+    // Returns array of PB events for a target distance. Also includes interim
+    // estimates from longer activities, based on average pace/speed.
     function computePbsForDistance(activities, sport, km, tol) {
       const lo = km * (1 - tol);
       const hi = km * (1 + tol);
       const candidates = activities
-        .filter(a => a.sport === sport && a.distance >= lo && a.distance <= hi && a.duration > 0)
+        .filter(a => a.sport === sport && a.duration > 0 && a.distance >= lo)
+        .map(a => {
+          const activityId = a && a.id != null ? String(a.id) : null;
+          const fitEfforts = activityId ? fitBestEffortsByActivityId[activityId] : null;
+          const fitDistanceEffort = fitEfforts && Array.isArray(fitEfforts.distanceEfforts)
+            ? fitEfforts.distanceEfforts.find(e => Math.abs((e.targetKm || 0) - km) < 0.0001)
+            : null;
+
+          const fitWindowSpan = fitDistanceEffort
+            ? fitDistanceEffort.endKm - fitDistanceEffort.startKm
+            : null;
+          const isFitWindowPlausible = !!fitDistanceEffort &&
+            Number.isFinite(fitDistanceEffort.durationSec) && fitDistanceEffort.durationSec > 0 &&
+            Number.isFinite(fitDistanceEffort.startKm) && Number.isFinite(fitDistanceEffort.endKm) &&
+            Number.isFinite(fitWindowSpan) && fitWindowSpan > 0 &&
+            Math.abs(fitWindowSpan - km) <= Math.max(0.15, km * 0.15) &&
+            fitDistanceEffort.endKm <= Math.max(km * 1.5, a.distance * 1.5);
+
+          if (isFitWindowPlausible) {
+            const metricFit = getPbMetricForEffort(sport, km, fitDistanceEffort.durationSec);
+            if (!metricFit) return null;
+            return {
+              date: a.date,
+              metricValue: metricFit.value,
+              metricType: metricFit.metricType,
+              duration: fitDistanceEffort.durationSec,
+              distance: km,
+              avgWatts: a.avgWatts,
+              name: a.name,
+              sourceDistance: a.distance,
+              isInterimEstimated: false,
+              intervalStartKm: fitDistanceEffort.startKm,
+              intervalEndKm: fitDistanceEffort.endKm,
+              effortSource: 'fit-rolling'
+            };
+          }
+
+          const isExactDistance = a.distance <= hi;
+          const modeledDuration = isExactDistance
+            ? a.duration
+            : a.duration * (km / a.distance);
+          const metricModeled = getPbMetricForEffort(sport, km, modeledDuration);
+          if (!metricModeled) return null;
+          return {
+            date: a.date,
+            metricValue: metricModeled.value,
+            metricType: metricModeled.metricType,
+            duration: modeledDuration,
+            distance: km,
+            avgWatts: a.avgWatts,
+            name: a.name,
+            sourceDistance: a.distance,
+            isInterimEstimated: !isExactDistance,
+            intervalStartKm: null,
+            intervalEndKm: null,
+            effortSource: !isExactDistance ? 'modeled' : 'full-activity'
+          };
+        })
+        .filter(Boolean)
         .sort((a, b) => a.date - b.date);
 
       let bestDuration = Infinity;
       const pbs = [];
-      for (const act of candidates) {
-        const metric = getPbMetricForActivity(act, sport);
-        if (!metric) continue;
-        const isBetter = act.duration < bestDuration;
+      for (const cand of candidates) {
+        const isBetter = cand.duration < bestDuration;
         if (isBetter) {
-          bestDuration = act.duration;
+          bestDuration = cand.duration;
+          pbs.push(cand);
+        }
+      }
+      return pbs.slice(0, PB_MAX_RESULTS);
+    }
+
+    function computeBikePowerPbsForDuration(activities, targetSeconds, tol) {
+      const candidates = activities
+        .filter(a => a.sport === 'Bike')
+        .map(a => {
+          const activityId = a && a.id != null ? String(a.id) : null;
+          const fitEfforts = activityId ? fitBestEffortsByActivityId[activityId] : null;
+          const fitPowerEffort = fitEfforts && Array.isArray(fitEfforts.powerEfforts)
+            ? fitEfforts.powerEfforts.find(e => e.targetSeconds === targetSeconds)
+            : null;
+
+          if (fitPowerEffort && Number.isFinite(fitPowerEffort.avgPower) && fitPowerEffort.avgPower > 0) {
+            return {
+              date: a.date,
+              duration: targetSeconds,
+              watts: fitPowerEffort.avgPower,
+              name: a.name,
+              intervalStartKm: fitPowerEffort.startKm,
+              intervalEndKm: fitPowerEffort.endKm,
+              intervalStartSec: fitPowerEffort.startSec,
+              intervalEndSec: fitPowerEffort.endSec,
+              effortSource: 'fit-rolling'
+            };
+          }
+          return null;
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.date - b.date);
+
+      const pbs = [];
+      let bestWatts = -Infinity;
+      for (const act of candidates) {
+        if (act.watts > bestWatts) {
+          bestWatts = act.watts;
           pbs.push({
             date: act.date,
-            metricValue: metric.value,
-            metricType: metric.metricType,
             duration: act.duration,
-            distance: act.distance,
-            avgWatts: act.avgWatts,
-            name: act.name
+            watts: act.watts,
+            name: act.name,
+            targetSeconds,
+            intervalStartKm: act.intervalStartKm,
+            intervalEndKm: act.intervalEndKm,
+            intervalStartSec: act.intervalStartSec,
+            intervalEndSec: act.intervalEndSec,
+            effortSource: act.effortSource
           });
         }
       }
@@ -2906,17 +3017,22 @@ datasets: [{
       const globalTMin = allSportMs.length ? Math.min(...allSportMs) : Date.now() - 1;
       const globalTMax = allSportMs.length ? Math.max(...allSportMs) : Date.now();
 
-      // Snap to Jan 1 of first/last year so tick labels align cleanly
-      const firstYear  = new Date(globalTMin).getFullYear();
-      const lastYear   = new Date(globalTMax).getFullYear();
-      const axisStart  = new Date(firstYear, 0, 1).getTime();
-      const axisEnd    = new Date(lastYear + 1, 0, 1).getTime();
+      // Use the real first activity as left bound (no leading empty space),
+      // and extend to today on the right.
+      const today = Date.now();
+      const axisStart  = globalTMin;
+      const axisEnd    = Math.max(globalTMax, today);
       const axisSpan   = axisEnd - axisStart || 1;
 
-      // Jan-1 tick positions for every year in range
+      // Jan-1 tick positions within the visible axis range
       const yearTicks = [];
-      for (let y = firstYear; y <= lastYear + 1; y++) {
-        yearTicks.push({ year: y, t: new Date(y, 0, 1).getTime() });
+      const firstYear = new Date(axisStart).getFullYear();
+      const lastYear = new Date(axisEnd).getFullYear();
+      for (let y = firstYear; y <= lastYear; y++) {
+        const tickTime = new Date(y, 0, 1).getTime();
+        if (tickTime >= axisStart && tickTime <= axisEnd) {
+          yearTicks.push({ year: y, t: tickTime });
+        }
       }
 
       // SVG coordinate system (viewBox units)
@@ -2947,7 +3063,13 @@ datasets: [{
         ttTitle.style.color = color;
         ttDate.textContent  = pb.date.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' });
         ttTime.textContent  = 'Time: ' + formatDurationHms(pb.duration);
-        ttDist.textContent  = 'Dist: ' + pb.distance.toFixed(2) + ' km';
+        const hasWindow = Number.isFinite(pb.intervalStartKm) && Number.isFinite(pb.intervalEndKm);
+        const sourceDistanceSuffix = hasWindow
+          ? ` (${pb.intervalStartKm.toFixed(2)} km to ${pb.intervalEndKm.toFixed(2)} km)`
+          : (pb.isInterimEstimated && Number.isFinite(pb.sourceDistance)
+            ? ` (from ${pb.sourceDistance.toFixed(2)} km activity)`
+            : '');
+        ttDist.textContent  = 'Dist: ' + pb.distance.toFixed(2) + ' km' + sourceDistanceSuffix;
         const metricLabel = pb.metricType === 'speed_bike' ? 'Speed' : 'Pace';
         const metricText = `${metricLabel}: ${formatPerformanceValue(pb.metricValue, pb.metricType)}`;
         if (pb.metricType === 'speed_bike') {
@@ -2977,6 +3099,23 @@ datasets: [{
 
       function hidePbTooltip() {
         tooltip.classList.add('hidden');
+      }
+
+      function showPowerPbTooltip(e, pb, rank, total, color, durationLabel) {
+        ttTitle.textContent = pb.name || 'Activity';
+        ttTitle.style.color = color;
+        ttDate.textContent = pb.date.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' });
+        const seconds = Number.isFinite(pb.targetSeconds) ? pb.targetSeconds : pb.duration;
+        ttTime.textContent = 'Duration: ' + formatDurationHms(seconds);
+        ttDist.textContent = Number.isFinite(pb.intervalStartKm) && Number.isFinite(pb.intervalEndKm)
+          ? 'Window: ' + pb.intervalStartKm.toFixed(2) + ' km to ' + pb.intervalEndKm.toFixed(2) + ' km'
+          : 'Window: n/a';
+        ttPace.textContent = 'Power: ' + Math.round(pb.watts) + ' W';
+        ttWatts.classList.add('hidden');
+        ttWatts.textContent = '';
+        ttRank.textContent = (durationLabel ? durationLabel + ' - ' : '') + (rank === total ? 'Current PB' : 'PB #' + rank + ' of ' + total);
+        tooltip.classList.remove('hidden');
+        movePbTooltip(e);
       }
 
       // ── Per-sport columns ─────────────────────────────────────────────────────
@@ -3181,6 +3320,183 @@ datasets: [{
           container.appendChild(block);
         });
 
+        if (sport === 'Bike') {
+          const powerSection = document.createElement('div');
+          powerSection.className = 'space-y-2';
+
+          const powerTitle = document.createElement('p');
+          powerTitle.className = 'text-xs font-semibold text-slate-300';
+          powerTitle.textContent = 'Average power PB progression by duration';
+          powerSection.appendChild(powerTitle);
+
+          let powerCards = 0;
+          PB_BIKE_POWER_DURATIONS.forEach(function(durationDef) {
+            const pbs = computeBikePowerPbsForDuration(activities, durationDef.seconds, durationDef.tol);
+            if (pbs.length === 0) return;
+            powerCards++;
+
+            const best = pbs[pbs.length - 1];
+            const block = document.createElement('div');
+            block.className = 'bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-1.5';
+
+            const header = document.createElement('div');
+            header.className = 'flex items-center justify-between';
+            header.innerHTML =
+              '<span class="text-xs font-semibold text-slate-300">' + durationDef.label + '</span>' +
+              '<span class="text-[11px] font-mono text-slate-400">' + Math.round(best.watts) + ' W</span>';
+            block.appendChild(header);
+
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('width', '100%');
+            svg.setAttribute('height', SVG_H);
+            svg.setAttribute('viewBox', '0 0 ' + VB_W + ' ' + SVG_H);
+            svg.setAttribute('preserveAspectRatio', 'none');
+            svg.style.overflow = 'visible';
+
+            const baseline = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            baseline.setAttribute('x1', PAD_L);
+            baseline.setAttribute('y1', X_AXIS_Y);
+            baseline.setAttribute('x2', VB_W - PAD_R);
+            baseline.setAttribute('y2', X_AXIS_Y);
+            baseline.setAttribute('stroke', '#1E293B');
+            baseline.setAttribute('stroke-width', '1');
+            svg.appendChild(baseline);
+
+            const yAxis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            yAxis.setAttribute('x1', PAD_L);
+            yAxis.setAttribute('y1', CHART_TOP);
+            yAxis.setAttribute('x2', PAD_L);
+            yAxis.setAttribute('y2', X_AXIS_Y);
+            yAxis.setAttribute('stroke', '#1E293B');
+            yAxis.setAttribute('stroke-width', '1');
+            svg.appendChild(yAxis);
+
+            yearTicks.forEach(function(tick) {
+              const x = tToX(tick.t);
+              const tickLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+              tickLine.setAttribute('x1', x);
+              tickLine.setAttribute('y1', X_AXIS_Y);
+              tickLine.setAttribute('x2', x);
+              tickLine.setAttribute('y2', X_AXIS_Y + 3);
+              tickLine.setAttribute('stroke', '#334155');
+              tickLine.setAttribute('stroke-width', '0.8');
+              svg.appendChild(tickLine);
+
+              const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+              label.setAttribute('x', x);
+              label.setAttribute('y', SVG_H - 0.5);
+              label.setAttribute('text-anchor', 'middle');
+              label.setAttribute('font-size', '8.5');
+              label.setAttribute('fill', '#CBD5E1');
+              label.setAttribute('font-family', 'ui-monospace, monospace');
+              label.textContent = tick.year;
+              svg.appendChild(label);
+            });
+
+            const maxWatts = Math.max(...pbs.map(pb => pb.watts));
+            const minWatts = Math.min(...pbs.map(pb => pb.watts));
+            const yTopWatts = Math.max(maxWatts, 1);
+            const yBottomWatts = Math.max(0, minWatts * 0.85);
+            const yRange = Math.max(1, yTopWatts - yBottomWatts);
+            const ySpan = X_AXIS_Y - CHART_TOP - 2;
+
+            function wattsToY(watts) {
+              const normalized = (watts - yBottomWatts) / yRange;
+              return X_AXIS_Y - Math.max(0, Math.min(1, normalized)) * ySpan;
+            }
+
+            const yTopLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            yTopLabel.setAttribute('x', PAD_L - 2);
+            yTopLabel.setAttribute('y', CHART_TOP + 1);
+            yTopLabel.setAttribute('text-anchor', 'end');
+            yTopLabel.setAttribute('dominant-baseline', 'hanging');
+            yTopLabel.setAttribute('font-size', '6.8');
+            yTopLabel.setAttribute('fill', '#E2E8F0');
+            yTopLabel.setAttribute('font-family', 'ui-monospace, monospace');
+            yTopLabel.textContent = Math.round(yTopWatts) + 'W';
+            svg.appendChild(yTopLabel);
+
+            const yBottomLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            yBottomLabel.setAttribute('x', PAD_L - 2);
+            yBottomLabel.setAttribute('y', X_AXIS_Y - 1);
+            yBottomLabel.setAttribute('text-anchor', 'end');
+            yBottomLabel.setAttribute('font-size', '6.8');
+            yBottomLabel.setAttribute('fill', '#CBD5E1');
+            yBottomLabel.setAttribute('font-family', 'ui-monospace, monospace');
+            yBottomLabel.textContent = Math.round(yBottomWatts) + 'W';
+            svg.appendChild(yBottomLabel);
+
+            const trendLine = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+            const points = pbs.map(function(pb) {
+              return tToX(pb.date.getTime()).toFixed(2) + ',' + wattsToY(pb.watts).toFixed(2);
+            }).join(' ');
+            trendLine.setAttribute('points', points);
+            trendLine.setAttribute('fill', 'none');
+            trendLine.setAttribute('stroke', color);
+            trendLine.setAttribute('stroke-opacity', '0.9');
+            trendLine.setAttribute('stroke-width', '1.8');
+            trendLine.setAttribute('stroke-linecap', 'round');
+            trendLine.setAttribute('stroke-linejoin', 'round');
+            svg.appendChild(trendLine);
+
+            pbs.forEach(function(pb, i) {
+              const x = tToX(pb.date.getTime());
+              const y1 = wattsToY(pb.watts);
+              const y2 = X_AXIS_Y;
+              const opacity = 0.30 + 0.70 * (i / Math.max(pbs.length - 1, 1));
+
+              const hit = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+              hit.setAttribute('x1', x);
+              hit.setAttribute('y1', CHART_TOP);
+              hit.setAttribute('x2', x);
+              hit.setAttribute('y2', y2);
+              hit.setAttribute('stroke', 'transparent');
+              hit.setAttribute('stroke-width', '10');
+              hit.style.cursor = 'pointer';
+              svg.appendChild(hit);
+
+              const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+              line.setAttribute('x1', x);
+              line.setAttribute('y1', y1);
+              line.setAttribute('x2', x);
+              line.setAttribute('y2', y2);
+              line.setAttribute('stroke', color);
+              line.setAttribute('stroke-width', '1.8');
+              line.setAttribute('stroke-linecap', 'round');
+              line.setAttribute('opacity', opacity.toFixed(2));
+              line.style.pointerEvents = 'none';
+              svg.appendChild(line);
+
+              const pbSnap = pb;
+              const rank = i + 1;
+              const total = pbs.length;
+              hit.addEventListener('mouseenter', function(e) {
+                line.setAttribute('opacity', '1');
+                showPowerPbTooltip(e, pbSnap, rank, total, color, durationDef.label);
+              });
+              hit.addEventListener('mousemove', movePbTooltip);
+              hit.addEventListener('mouseleave', function() {
+                line.setAttribute('opacity', opacity.toFixed(2));
+                hidePbTooltip();
+              });
+            });
+
+            block.appendChild(svg);
+
+            const footer = document.createElement('p');
+            footer.className = 'text-[10px] text-slate-600';
+            footer.textContent = pbs.length + ' PB' + (pbs.length > 1 ? 's' : '') + ' set';
+            block.appendChild(footer);
+
+            powerSection.appendChild(block);
+          });
+
+          if (powerCards > 0) {
+            anyData = true;
+            container.appendChild(powerSection);
+          }
+        }
+
         if (!anyData) {
           const empty = document.createElement('p');
           empty.className = 'text-xs text-slate-600 italic';
@@ -3359,16 +3675,17 @@ datasets: [{
           updateImportProgress(5, 'Extracting ZIP file...');
 
           // Import the ZIP file
-          const csvText = await importStravaZip(file, (progress) => {
+          const importResult = await importStravaZip(file, (progress) => {
             const percent = progress.percent || 50;
             updateImportProgress(percent, progress.stage);
           });
 
           // Parse the CSV
           updateImportProgress(70, 'Processing data...');
-          await importCsvText(csvText, {
+          await importCsvText(importResult.csvText, {
             sourceLabel: 'Strava ZIP import',
-            openDashboard: true
+            openDashboard: true,
+            fitBestEffortsByActivityId: importResult.fitBestEffortsByActivityId || {}
           });
 
           // Update progress
@@ -3424,10 +3741,11 @@ datasets: [{
           if (candidate.type === 'zip') {
             const blob = await response.blob();
             const file = new File([blob], candidate.path.split('/').pop(), { type: 'application/zip' });
-            const csvText = await importStravaZip(file);
-            await importCsvText(csvText, {
+            const importResult = await importStravaZip(file);
+            await importCsvText(importResult.csvText, {
               sourceLabel: sample.sourceLabel,
-              openDashboard: true
+              openDashboard: true,
+              fitBestEffortsByActivityId: importResult.fitBestEffortsByActivityId || {}
             });
             return;
           }
@@ -3471,10 +3789,11 @@ datasets: [{
 
       try {
         if (selectedFile.name.toLowerCase().endsWith('.zip')) {
-          const csvText = await importStravaZip(selectedFile);
-          await importCsvText(csvText, {
+          const importResult = await importStravaZip(selectedFile);
+          await importCsvText(importResult.csvText, {
             sourceLabel: sample.sourceLabel,
-            openDashboard: true
+            openDashboard: true,
+            fitBestEffortsByActivityId: importResult.fitBestEffortsByActivityId || {}
           });
           return;
         }

@@ -162,6 +162,19 @@ function extractRelevantColumns(csvText) {
       },
     },
     {
+      outputHeader: 'Durchschnittliche Wattzahl',
+      type: 'predicatePower',
+      required: false,
+      predicate: (header) => {
+        if (!header) return false;
+        const normalized = String(header).toLowerCase();
+        return (
+          (normalized.includes('watt') || normalized.includes('power')) &&
+          (normalized.includes('durch') || normalized.includes('durchschnitt') || normalized.includes('avg') || normalized.includes('average'))
+        );
+      },
+    },
+    {
       outputHeader: 'Distanz',
       type: 'occurrence',
       headers: ['Distanz', 'Distance'],
@@ -195,7 +208,7 @@ function extractRelevantColumns(csvText) {
           break;
         }
       }
-    } else if (colDef.type === 'predicate') {
+    } else if (colDef.type === 'predicate' || colDef.type === 'predicatePower') {
       for (let i = 0; i < headers.length; i++) {
         if (colDef.predicate(headers[i])) {
           index = i;
@@ -337,4 +350,13 @@ async function importStravaZip(zipFile, progressCallback = null) {
     console.error('Strava ZIP import error:', error);
     throw error;
   }
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    extractRelevantColumns,
+    parseCsvBasic,
+    serializeCsvBasic,
+    importStravaZip
+  };
 }

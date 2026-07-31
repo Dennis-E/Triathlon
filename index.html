@@ -912,6 +912,7 @@
     <p id="pbTooltipTime"  class="text-slate-300 font-mono mt-1"></p>
     <p id="pbTooltipDist"  class="text-slate-400"></p>
     <p id="pbTooltipPace"  class="text-slate-400"></p>
+    <p id="pbTooltipWatts" class="hidden text-slate-400"></p>
     <p id="pbTooltipRank"  class="text-[10px] text-slate-500 mt-1 border-t border-slate-800 pt-1"></p>
   </div>
 
@@ -2938,6 +2939,7 @@ datasets: [{
       const ttTime   = document.getElementById('pbTooltipTime');
       const ttDist   = document.getElementById('pbTooltipDist');
       const ttPace   = document.getElementById('pbTooltipPace');
+      const ttWatts  = document.getElementById('pbTooltipWatts');
       const ttRank   = document.getElementById('pbTooltipRank');
 
       function showPbTooltip(e, pb, rank, total, color) {
@@ -2947,9 +2949,15 @@ datasets: [{
         ttTime.textContent  = 'Time: ' + formatDurationHms(pb.duration);
         ttDist.textContent  = 'Dist: ' + pb.distance.toFixed(2) + ' km';
         const metricLabel = pb.metricType === 'speed_bike' ? 'Speed' : 'Pace';
-        let metricText = `${metricLabel}: ${formatPerformanceValue(pb.metricValue, pb.metricType)}`;
-        if (pb.metricType === 'speed_bike' && Number.isFinite(pb.avgWatts) && pb.avgWatts > 0) {
-          metricText += ` | Avg Watts: ${Math.round(pb.avgWatts)} W`;
+        const metricText = `${metricLabel}: ${formatPerformanceValue(pb.metricValue, pb.metricType)}`;
+        if (pb.metricType === 'speed_bike') {
+          ttWatts.classList.remove('hidden');
+          ttWatts.textContent = Number.isFinite(pb.avgWatts) && pb.avgWatts > 0
+            ? `Avg Watts: ${Math.round(pb.avgWatts)} W`
+            : 'Avg Watts: n/a';
+        } else {
+          ttWatts.classList.add('hidden');
+          ttWatts.textContent = '';
         }
         ttPace.textContent  = metricText;
         ttRank.textContent  = rank === total ? 'Current PB' : 'PB #' + rank + ' of ' + total;

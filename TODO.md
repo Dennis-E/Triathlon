@@ -3,7 +3,7 @@
 Project:
 - helper tools (relevant export extractor, zip-importer, scatter utils) should this really be in root?
 - package / package-lock?
-- not mvp in html header in browser header
+- Don't show "MVP" in HTML page title (browser tab/header)
 - counter - first 100 views for free and share feedback
 - include payment option (visual first / buy coffee / later real)
 - Online hosting

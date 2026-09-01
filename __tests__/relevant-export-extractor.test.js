@@ -6,7 +6,7 @@ const {
   parseCsv,
   reduceActivitiesRows,
   extractRelevantExport
-} = require('../relevant-export-extractor');
+} = require('../scripts/relevant-export-extractor');
 
 describe('reduceActivitiesRows', () => {
   it('keeps only the columns used by the current visualizations', () => {

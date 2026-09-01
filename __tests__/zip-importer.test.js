@@ -1,4 +1,4 @@
-const { extractRelevantColumns, parseCsvBasic } = require('../zip-importer');
+const { extractRelevantColumns, parseCsvBasic } = require('../src/zip-importer');
 
 describe('zip importer relevant column extraction', () => {
   it('keeps Average Watts when present in original ZIP activities.csv headers', () => {

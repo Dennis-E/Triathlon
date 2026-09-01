@@ -6,7 +6,7 @@
 const {
   buildYearlyRegressionDatasets,
   getHeartratePacePoints
-} = require('../scatter-utils');
+} = require('../src/scatter-utils');
 
 describe('Heartrate vs Pace Visualization - Year Data and Trend Lines', () => {
   

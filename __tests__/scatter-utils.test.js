@@ -8,7 +8,7 @@ const {
   linearRegression,
   getHeartratePacePoints,
   buildYearlyRegressionDatasets
-} = require('../scatter-utils');
+} = require('../src/scatter-utils');
 
 describe('scatter utils', () => {
   it('parses localized numbers', () => {

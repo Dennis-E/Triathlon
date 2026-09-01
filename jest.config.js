@@ -2,7 +2,7 @@ module.exports = {
   testEnvironment: 'node',
   testMatch: ['**/__tests__/**/*.test.js'],
   collectCoverageFrom: [
-    'dashboard-utils.js',
+    'src/dashboard-utils.js',
     '!node_modules/**',
     '!**/__tests__/**'
   ],

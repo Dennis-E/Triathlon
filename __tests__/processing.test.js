@@ -10,7 +10,7 @@ const {
   calculateTotalsByCategory,
   calculateMetrics,
   formatDateIso
-} = require('../dashboard-utils');
+} = require('../src/dashboard-utils');
 
 describe('parseCsvSimple', () => {
   it('should parse simple CSV text into 2D array', () => {

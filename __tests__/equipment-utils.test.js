@@ -6,7 +6,7 @@ const {
   aggregateEquipmentAvgLength,
   aggregateEquipmentTimeline,
   getEquipmentTimelineActivities
-} = require('../equipment-utils');
+} = require('../src/equipment-utils');
 
 describe('equipment utils', () => {
   it('detects shoe vs bike equipment', () => {

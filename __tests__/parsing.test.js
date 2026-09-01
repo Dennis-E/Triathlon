@@ -11,7 +11,7 @@ const {
   formatDuration,
   categorizeSport,
   SPORT_MAP
-} = require('../dashboard-utils');
+} = require('../src/dashboard-utils');
 
 describe('parseGermanDate', () => {
   it('should correctly parse German date format with time', () => {

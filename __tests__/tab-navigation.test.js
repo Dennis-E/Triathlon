@@ -2,7 +2,7 @@ const {
   getNextVisualizationTab,
   setVisualizationTab,
   handleVisualizationTabKeydown
-} = require('../tab-navigation');
+} = require('../src/tab-navigation');
 
 function createMockElement() {
   const attributes = {};

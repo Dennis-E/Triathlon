@@ -11,9 +11,9 @@ const {
   aggregateByWeek,
   calculateTotalsByCategory,
   calculateMetrics
-} = require('../dashboard-utils');
-const { reduceActivitiesRows } = require('../relevant-export-extractor');
-const { aggregateEquipmentDistance } = require('../equipment-utils');
+} = require('../src/dashboard-utils');
+const { reduceActivitiesRows } = require('../scripts/relevant-export-extractor');
+const { aggregateEquipmentDistance } = require('../src/equipment-utils');
 
 describe('Complete CSV Import Workflow', () => {
   let testCsvData;

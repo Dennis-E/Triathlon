@@ -2837,12 +2837,14 @@ datasets: [{
         { label: '5km',   km: 5.0,    tol: 0.05 },
         { label: '10km',  km: 10.0,   tol: 0.05 },
         { label: 'HM',    km: 21.0975, tol: 0.03 },
-        { label: 'M',     km: 42.195,  tol: 0.03 }
+        { label: 'M',     km: 42.195,  tol: 0.03 },
+        { label: '50k',   km: 50.0,    tol: 0.05 }
       ],
       Bike: [
         { label: '20km',  km: 20.0,   tol: 0.10 },
         { label: '40km',  km: 40.0,   tol: 0.10 },
         { label: '90km',  km: 90.0,   tol: 0.10 },
+        { label: '100km', km: 100.0,  tol: 0.10 },
         { label: '180km', km: 180.0,  tol: 0.10 }
       ]
     };
@@ -3152,12 +3154,17 @@ datasets: [{
 
           // SVG
           const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-          svg.setAttribute('width', '100%');
-          svg.setAttribute('height', SVG_H);
+          // Responsive SVG: use viewBox and preserveAspectRatio to avoid non-uniform scaling
           svg.setAttribute('viewBox', '0 0 ' + VB_W + ' ' + SVG_H);
-          svg.setAttribute('preserveAspectRatio', 'none');
+          svg.setAttribute('width', '100%');
+          // Do not force a fixed height attribute; allow the browser to size keeping aspect ratio
+          svg.removeAttribute('height');
+          // Preserve aspect ratio (uniform scaling) so text and axis labels don't stretch
+          svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
           svg.style.overflow = 'visible';
           svg.style.cursor   = 'default';
+          svg.style.display  = 'block';
+          svg.style.height   = 'auto';
 
           // X-axis baseline
           const baseline = document.createElementNS('http://www.w3.org/2000/svg', 'line');

@@ -3,32 +3,43 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>How to Export Strava Data</title>
+  <title>TriAnalytics - How to Export Strava Data</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="min-h-full bg-slate-950 text-slate-100 font-sans antialiased">
-  <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur px-6 py-4">
-    <div class="max-w-4xl mx-auto flex items-center justify-between gap-4">
-      <h1 class="text-lg font-bold tracking-tight">How to create a Strava data export</h1>
-      <a href="./index.html" class="text-sm text-indigo-300 hover:text-indigo-200 underline underline-offset-4">Back to dashboard</a>
+<body class="min-h-full bg-slate-950 text-slate-100 font-sans antialiased flex flex-col">
+  <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur px-6 py-4 shrink-0">
+    <div class="max-w-5xl mx-auto flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-cyan-400 shadow-lg shadow-indigo-600/25">
+          <svg viewBox="0 0 64 64" class="h-6 w-6 text-white" aria-hidden="true" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M14 46L25 18L34 36L43 23L50 46H14Z" fill="currentColor" opacity="0.9"/>
+            <path d="M17 50H47" stroke="white" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="25" cy="18" r="4.5" fill="white"/>
+            <circle cx="43" cy="23" r="4.5" fill="white"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight">TriAnalytics</h1>
+          <p class="text-[11px] text-slate-400">How to create a Strava data export</p>
+        </div>
+      </div>
+      <a href="../index.html" class="text-sm text-indigo-300 hover:text-indigo-200 underline underline-offset-4">Back to dashboard</a>
     </div>
   </header>
 
-  <main class="max-w-4xl mx-auto px-6 py-8">
+  <main class="max-w-5xl mx-auto px-6 py-8 flex-1 w-full">
     <div class="rounded-2xl border border-slate-800 bg-slate-900 p-6 md:p-8 shadow-xl">
       <p class="text-slate-300 text-sm leading-relaxed">
-        Follow these steps to generate your Strava export and use it with this dashboard.
+        Follow these steps to generate your Strava export and use it with TriAnalytics.
       </p>
 
       <ol class="mt-6 space-y-4 text-sm text-slate-200 list-decimal list-inside">
-        <li>Open <a href="https://www.strava.com/settings/account" target="_blank" rel="noopener noreferrer" class="text-indigo-300 hover:text-indigo-200 underline underline-offset-4">Strava Account Settings</a> and sign in.</li>
-        <li>Scroll down to <span class="font-semibold text-white">Download or Delete Your Account</span>.</li>
-        <li>Click <span class="font-semibold text-white">Get Started</span> under <span class="font-semibold text-white">Download Request</span>.</li>
-        <li>Request your archive and confirm the process in Strava.</li>
-        <li>Wait for Strava to send you an email with the download link (can take minutes to hours).</li>
-        <li>Download the ZIP archive from the email link.</li>
-        <li>Go back to this dashboard and click <span class="font-semibold text-white">Strava Ingest</span>.</li>
-        <li>Select the ZIP file you downloaded and wait until the import is complete.</li>
+        <li>Open <a href="https://www.strava.com/account" target="_blank" rel="noopener noreferrer" class="text-indigo-300 hover:text-indigo-200 underline underline-offset-4">Strava</a> and sign in.</li>
+        <li>Go to <span class="font-semibold text-white">Settings</span> and choose <span class="font-semibold text-white">Download Your Account</span>.</li>
+        <li>Click <span class="font-semibold text-white">Request Download</span>.</li>
+        <li>Wait for Strava to email you a link to your data export.</li>
+        <li>Download the ZIP file from the email and return to the dashboard.</li>
+        <li>Click <span class="font-semibold text-white">Strava Ingest</span> and select the ZIP file you downloaded.</li>
       </ol>
 
       <div class="mt-8 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
@@ -38,5 +49,22 @@
       </div>
     </div>
   </main>
+
+  <footer class="border-t border-slate-900 bg-slate-950/70 px-6 py-4 shrink-0">
+    <div class="max-w-5xl mx-auto flex flex-col items-center gap-2 text-center text-[11px] text-slate-500">
+      <div class="flex items-center justify-center gap-2 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-3 py-2">
+        <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-400">
+          <svg viewBox="0 0 64 64" class="h-4 w-4 text-white" aria-hidden="true" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M14 46L25 18L34 36L43 23L50 46H14Z" fill="currentColor" opacity="0.9"/>
+            <path d="M17 50H47" stroke="white" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="25" cy="18" r="4.5" fill="white"/>
+            <circle cx="43" cy="23" r="4.5" fill="white"/>
+          </svg>
+        </div>
+        <span class="text-xs font-semibold tracking-wide text-indigo-200">TriAnalytics</span>
+      </div>
+      <p>TriAnalytics • Local Offline Processing (No internet transmission of your personal files)</p>
+    </div>
+  </footer>
 </body>
 </html>

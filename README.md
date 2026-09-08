@@ -1,69 +1,74 @@
-# Training Dashboard
+# Welcome to my Triathlon Data Visualization Tool!
 
-A browser-based dashboard for exploring long-term training trends from a reduced Strava activity extract. The app currently focuses on distance, heart-rate/pace, and equipment visualizations.
+This dashboard helps you explore your training history from your Strava data in a simple, browser-based view. Upload your Strava export ZIP and turn your activities into clear charts for training volume, pacing, equipment, and performance trends.
 
-## Data Input
+Hosted page: https://example.invalid/Triathlon/
 
-The dashboard starts empty. To use the visualizations, you first import a Strava ZIP export in the browser.
+## How it works
 
-For local development only, the landing page also exposes sample-data buttons that load ignored files from `Data/Dennis/...` and `Data/EE/...` when those folders exist locally. On `localhost` they try the local paths directly. When opened via `file://`, they fall back to a file picker so you can choose the matching sample CSV or ZIP manually.
+1. Go to the hosted page.
+2. Click the Strava Ingest button.
+3. Upload your Strava ZIP export.
+4. Explore the dashboard with your own data.
 
-Each import source is converted into the same reduced interim dataset before the visualizations render.
+Your data stays in the browser. No login is required, and your files are processed locally on your device.
 
-If a Strava export has no heart-rate values or no equipment assigned to activities, the heart-rate and equipment visualizations will stay empty even though the import succeeded.
-
-## Current Visualizations
+## Available visualizations
 
 - Total distance over time
-- Sport split across running, cycling, and swimming
-- Heart-rate vs pace scatter view
-- Equipment-based summaries
+  - View training volume by day, week, month, or year
+  - Filter by sport: All Sports, Run, Bike, Swim
+  - Change the timeframe to focus on recent or long-term trends
 
-## Data Columns Used
+- Heart-rate vs pace
+  - Compare effort and pace across sessions
+  - Filter by sport: All, Run, Bike, Swim
+  - Narrow the date range to review a specific period
 
-The dashboard currently reads these columns from `activities.csv`:
+- Equipment mileage
+  - See kilometers by shoe or bike
+  - Switch between distance, pace, activity count, and average session length
+  - Filter by equipment category: All, Shoes, Bikes
 
-- `Aktivitäts-ID`
-- `Aktivitätsdatum`
-- `Name der Aktivität`
-- `Aktivitätsart`
-- `Aktivitätsausrüstung`
-- `Bewegungszeit`
-- `Durchschnittliche Herzfrequenz`
-- `Distanz`
+- Equipment timeline
+  - Track when each piece of equipment was active
+  - Toggle between continuous and activity views
+  - Filter by All, Shoes, or Bikes
 
-## Reduced Extract Generator
+- Personal Bests
+  - Explore new bests for Swim, Run, and Bike
+  - Compare progress across target distances and training phases
 
-The repo includes `relevant-export-extractor.js` to create the reduced `activities.csv` from a Strava export folder or ZIP.
+## Features and filters
 
-Example:
+The dashboard currently includes the following filters and controls:
 
-```bash
-npm run extract:relevant -- "C:\path\to\export.zip" "C:\path\to\output-folder"
-```
+- Sport filters: All Sports, Run, Bike, Swim
+- Time aggregation: Daily, Weekly, Monthly, Yearly
+- Timeframe selectors for different look-back windows
+- Heart-rate/pace date range controls
+- Equipment metrics: Distance, Pace, Activity Count, Avg Length
+- Equipment category filters: All, Shoes, Bikes
+- Equipment timeline mode toggle: Continuous, Activities
 
-## Running The Dashboard
+## Alpha version
 
-Open `index.html` through a local server.
+This project is currently in alpha. I am actively developing it and improving it based on real usage and feedback.
 
-Examples:
+I would be very happy to receive your feedback, ideas, and feature requests. If you have suggestions for better charts, new views, or additional analysis, I would love to hear from you. Development will continue as I iterate on the tool and expand the experience.
+
+## Local development
+
+If you want to run the project locally:
 
 ```bash
 python -m http.server
 ```
 
-or use VS Code Live Server.
+Then open the app in your browser and import your Strava ZIP export from the landing page.
 
-Then import a Strava ZIP export from the landing page.
+For local testing, the app can also load anonymized sample datasets labeled as Person 1 and Person 2.
 
-If you are working locally and have ignored development sample data under `Data/`, you can also use the `use D data` and `use E data` buttons.
+## Contributing and feedback
 
-## Tests
-
-Run the test suite with:
-
-```bash
-npm test -- --runInBand
-```
-
-The repository also includes test fixture data in `test-data/` for integration tests.
+If you want to share feedback or suggest improvements, please contact me through the app feedback link or open an issue in this repository.

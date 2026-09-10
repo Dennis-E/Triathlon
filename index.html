@@ -19,6 +19,7 @@
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.344.0/dist/umd/lucide.min.js"></script>
   <!-- ZIP Importer Utility -->
   <script src="./src/zip-importer.js"></script>
+  <script src="./src/analysis-counter.js"></script>
   <style>
     /* Custom scrollbar for modern feel */
     ::-webkit-scrollbar {
@@ -201,19 +202,20 @@
     </div>
 
     <!-- Import Actions -->
-    <div class="mb-12 flex flex-wrap items-center justify-center gap-3">
-      <button
-        id="stravaIngestBtn"
-        type="button"
-        onclick="handleStravaIngest()"
-        class="inline-flex items-center space-x-2.5 bg-[#FC4C02] hover:bg-[#e04402] active:bg-[#c73d02] text-white font-semibold px-6 py-3 rounded-xl shadow-lg shadow-orange-600/20 transition text-sm"
-      >
-        <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L8.22 0 3 9.828h4.172"/>
-        </svg>
-        <span>Strava Ingest</span>
-      </button>
-      <div id="devDataButtons" class="hidden flex flex-wrap items-center gap-3">
+    <div class="mb-12 flex flex-col items-center gap-3">
+      <div class="flex flex-wrap items-center justify-center gap-3">
+        <button
+          id="stravaIngestBtn"
+          type="button"
+          onclick="handleStravaIngest()"
+          class="inline-flex items-center space-x-2.5 bg-[#FC4C02] hover:bg-[#e04402] active:bg-[#c73d02] text-white font-semibold px-6 py-3 rounded-xl shadow-lg shadow-orange-600/20 transition text-sm"
+        >
+          <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L8.22 0 3 9.828h4.172"/>
+          </svg>
+          <span>Strava Ingest</span>
+        </button>
+        <div id="devDataButtons" class="hidden flex flex-wrap items-center gap-3">
         <button
           id="devDataBtnD"
           type="button"
@@ -240,7 +242,9 @@
         >
           How to create a Strava data export
         </a>
+        </div>
       </div>
+      <p id="analysisCounter" class="hidden text-xs text-slate-500" aria-live="polite"></p>
     </div>
 
     <!-- Empty State Message -->
@@ -3722,6 +3726,7 @@ datasets: [{
             openDashboard: true,
             fitBestEffortsByActivityId: importResult.fitBestEffortsByActivityId || {}
           });
+          recordCompletedAnalysis();
 
           // Update progress
           updateImportProgress(95, 'Finalizing...');
@@ -3739,6 +3744,38 @@ datasets: [{
       };
       input.click();
     }
+
+    const ANALYSIS_COUNTER_API_BASE_URL = '';
+    const analysisCounterClient = AnalysisCounter.createAnalysisCounter({
+      apiBaseUrl: ANALYSIS_COUNTER_API_BASE_URL
+    });
+
+    function setAnalysisCounter(count) {
+      const counter = document.getElementById('analysisCounter');
+      if (!counter || !Number.isSafeInteger(count) || count < 0) return;
+      counter.textContent = `${count.toLocaleString()} analyses completed`;
+      counter.classList.remove('hidden');
+    }
+
+    async function loadAnalysisCounter() {
+      if (!analysisCounterClient.isConfigured()) return;
+      try {
+        setAnalysisCounter(await analysisCounterClient.getCount());
+      } catch (error) {
+        console.warn('Could not load analysis counter', error);
+      }
+    }
+
+    async function recordCompletedAnalysis() {
+      if (!analysisCounterClient.isConfigured()) return;
+      try {
+        setAnalysisCounter(await analysisCounterClient.recordAnalysis());
+      } catch (error) {
+        console.warn('Could not record completed analysis', error);
+      }
+    }
+
+    loadAnalysisCounter();
 
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape') {

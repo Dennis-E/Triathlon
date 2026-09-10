@@ -55,7 +55,7 @@ The dashboard currently includes the following filters and controls:
 
 This project is currently in alpha. I am actively developing it and improving it based on real usage and feedback.
 
-I would be very happy to receive your feedback, ideas, and feature requests. If you have suggestions for better charts, new views, or additional analysis, I would love to hear from you. Development will continue as I iterate on the tool and expand the experience.
+I would be very happy to receive your feedback, ideas, and feature requests at noreply@example.invalid. If you have suggestions for better charts, new views, or additional analysis, I would love to hear from you. Development will continue as I iterate on the tool and expand the experience.
 
 ## Local development
 

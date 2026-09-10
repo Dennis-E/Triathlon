@@ -89,6 +89,18 @@ async function extractActivitiesCsvFromZip(zipFile) {
   throw new Error('Could not find activities.csv in ZIP file. Make sure you exported data from Strava.');
 }
 
+async function importStravaZip(zipFile, onProgress) {
+  const reportProgress = typeof onProgress === 'function' ? onProgress : () => {};
+  reportProgress({ percent: 10, stage: 'Reading activities.csv...' });
+  const csvText = await extractActivitiesCsvFromZip(zipFile);
+  reportProgress({ percent: 65, stage: 'Preparing activity data...' });
+
+  return {
+    csvText,
+    fitBestEffortsByActivityId: {}
+  };
+}
+
 function normalizeSportForFit(rawSport) {
   if (!rawSport) return null;
   const normalized = String(rawSport).toLowerCase().trim();
@@ -343,6 +355,7 @@ function extractRelevantColumns(csvText) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    importStravaZip,
     parseCsvBasic,
     serializeCsvBasic,
     extractRelevantColumns

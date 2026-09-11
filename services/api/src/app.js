@@ -1,10 +1,7 @@
 const express = require('express');
 const { timingSafeEqual } = require('crypto');
 
-const DEFAULT_ALLOWED_ORIGINS = [
-  'https://example.invalid',
-  'http://localhost:8000'
-];
+const DEFAULT_ALLOWED_ORIGINS = ['http://localhost:8000'];
 
 function parseAllowedOrigins(value) {
   return new Set((value || DEFAULT_ALLOWED_ORIGINS.join(','))

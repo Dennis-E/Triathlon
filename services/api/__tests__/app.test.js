@@ -27,7 +27,8 @@ function createFirestore(initialCount = 0) {
 }
 
 describe('analysis counter API', () => {
-  const allowedOrigins = new Set(['https://example.invalid']);
+  const allowedOrigin = 'https://app.example';
+  const allowedOrigins = new Set([allowedOrigin]);
   const clientKeys = ['k2026-09.test-key'];
   const eventId = '123e4567-e89b-42d3-a456-426614174000';
 
@@ -37,9 +38,9 @@ describe('analysis counter API', () => {
 
     await request(app)
       .get('/v1/analyses/count')
-      .set('Origin', 'https://example.invalid')
+      .set('Origin', allowedOrigin)
       .expect(200, { count: 0 })
-      .expect('Access-Control-Allow-Origin', 'https://example.invalid');
+      .expect('Access-Control-Allow-Origin', allowedOrigin);
   });
 
   it('increments and returns the counter after a completed analysis', async () => {
@@ -48,7 +49,7 @@ describe('analysis counter API', () => {
 
     await request(app)
       .post('/v1/analyses')
-      .set('Origin', 'https://example.invalid')
+      .set('Origin', allowedOrigin)
       .set('X-Analysis-Key', clientKeys[0])
       .set('X-Analysis-Event-Id', eventId)
       .expect(201, { count: 5 });
@@ -70,7 +71,7 @@ describe('analysis counter API', () => {
 
     await request(app)
       .options('/v1/analyses')
-      .set('Origin', 'https://example.invalid')
+      .set('Origin', allowedOrigin)
       .expect(204)
       .expect('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
       .expect('Access-Control-Allow-Headers', 'Content-Type, X-Analysis-Key, X-Analysis-Event-Id');

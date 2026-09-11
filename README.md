@@ -2,11 +2,9 @@
 
 This dashboard helps you explore your training history from your Strava data in a simple, browser-based view. Upload your Strava export ZIP and turn your activities into clear charts for training volume, pacing, equipment, and performance trends.
 
-Hosted page: https://example.invalid/Triathlon/
-
 ## How it works
 
-1. Go to the hosted page.
+1. Open the app.
 2. Click the Strava Ingest button.
 3. Upload your Strava ZIP export.
 4. Explore the dashboard with your own data.
@@ -53,9 +51,7 @@ The dashboard currently includes the following filters and controls:
 
 ## Alpha version
 
-This project is currently in alpha. I am actively developing it and improving it based on real usage and feedback.
-
-I would be very happy to receive your feedback, ideas, and feature requests at noreply@example.invalid. If you have suggestions for better charts, new views, or additional analysis, I would love to hear from you. Development will continue as I iterate on the tool and expand the experience.
+This project is currently in alpha.
 
 ## Local development
 
@@ -67,8 +63,6 @@ python -m http.server
 
 Then open the app in your browser and import your Strava ZIP export from the landing page.
 
-For local testing, the app can also load anonymized sample datasets labeled as Person 1 and Person 2.
-
 ## Contributing and feedback
 
-If you want to share feedback or suggest improvements, please contact me through the app feedback link or open an issue in this repository.
+Please use your team's established feedback channel for questions and suggestions.

@@ -180,9 +180,6 @@
         <img src="assets/logo.png" alt="TriAnalytica logo" class="h-16 w-auto">
       </div>
       <p class="text-slate-400 text-sm leading-relaxed">Import your Strava data export and analyze directly in the browser. No login, no data storage.</p>
-      <a href="mailto:noreply@example.invalid?subject=TriAnalytica%20-%20Feedback%20%2F%20Feature%20request" class="mt-3 inline-flex text-xs font-semibold text-red-300 underline decoration-red-400/70 underline-offset-4 transition hover:text-red-200">
-        Please share your feedback and feature requests.
-      </a>
     </div>
 
     <!-- Import Actions -->
@@ -199,24 +196,6 @@
           </svg>
           <span>Strava Ingest</span>
         </button>
-        <div id="devDataButtons" class="hidden flex flex-wrap items-center gap-3">
-        <button
-          id="devDataBtnD"
-          type="button"
-          onclick="handleDevDataImport('D')"
-          class="inline-flex items-center rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-indigo-500/50 hover:text-white"
-        >
-          use D data
-        </button>
-        <button
-          id="devDataBtnE"
-          type="button"
-          onclick="handleDevDataImport('E')"
-          class="inline-flex items-center rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-indigo-500/50 hover:text-white"
-        >
-          use E data
-        </button>
-      </div>
       <div class="w-full text-center">
         <a
           href="./docs/strava-export-how-to.html"
@@ -925,12 +904,6 @@
     <div class="flex flex-col items-center gap-2">
       <div class="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 shadow-lg shadow-red-500/10">
         <p class="text-xs font-semibold tracking-wide text-red-200">Alpha version - Feedback is welcome as development continues.</p>
-        <a
-          href="mailto:noreply@example.invalid?subject=TriAnalytica%20-%20Alpha%20version%20-%20Feedback%20%2F%20Feature%20request"
-          class="mt-2 inline-flex items-center rounded-lg border border-red-500 bg-red-500/10 px-3 py-1.5 text-[11px] font-semibold text-red-300 hover:bg-red-500/20 transition"
-        >
-          Feedback / Feature request
-        </a>
       </div>
       <p>TriAnalytica • Local Offline Processing (No internet transmission of your personal files)</p>
     </div>
@@ -1163,77 +1136,6 @@
       const m = String(date.getMonth() + 1).padStart(2, '0');
       const d = String(date.getDate()).padStart(2, '0');
       return `${y}-${m}-${d}`;
-    }
-
-    const DEV_SAMPLE_DATASETS = {
-      D: {
-        sourceLabel: 'sample data',
-        candidates: [
-          { type: 'zip', path: './Data/Dennis/export_39173135.zip' },
-          { type: 'csv', path: './Data/Dennis/relevant-export_39173135/activities.csv' },
-          { type: 'csv', path: './Data/Dennis/relevant-export_39173135_regen/activities.csv' }
-        ],
-        filePickerDescription: 'Select Dennis sample activities.csv or export ZIP from Data/Dennis/'
-      },
-      E: {
-        sourceLabel: 'sample data',
-        candidates: [
-          { type: 'zip', path: './Data/EE/export_155559589.zip' },
-          { type: 'csv', path: './Data/EE/relevant-export_155559589/activities.csv' }
-        ],
-        filePickerDescription: 'Select EE sample activities.csv or export ZIP from Data/EE/'
-      }
-    };
-
-    function isLocalDevelopment() {
-      return window.location.protocol === 'file:' ||
-        window.location.hostname === '' ||
-        window.location.hostname === 'localhost' ||
-        window.location.hostname === '127.0.0.1';
-    }
-
-    async function initializeDevelopmentControls() {
-      if (!isLocalDevelopment()) return;
-      const devButtons = document.getElementById('devDataButtons');
-      if (devButtons) {
-        devButtons.classList.remove('hidden');
-      }
-
-      if (window.location.protocol === 'file:') {
-        Object.keys(DEV_SAMPLE_DATASETS).forEach(sampleKey => {
-          const button = document.getElementById(`devDataBtn${sampleKey}`);
-          if (!button) return;
-          button.title = 'Opens a file picker for the local sample file.';
-        });
-        return;
-      }
-
-      await Promise.all(Object.entries(DEV_SAMPLE_DATASETS).map(async ([sampleKey, sample]) => {
-        const button = document.getElementById(`devDataBtn${sampleKey}`);
-        if (!button) return;
-
-        const hasAvailableCandidate = await sampleHasAvailableCandidate(sample);
-        if (!hasAvailableCandidate) {
-          button.disabled = true;
-          button.className = 'inline-flex items-center rounded-xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-600 cursor-not-allowed';
-          button.title = `${sample.sourceLabel} was not found in Data/.`;
-        }
-      }));
-    }
-
-    async function sampleHasAvailableCandidate(sample) {
-      for (const candidate of sample.candidates) {
-        try {
-          const response = await fetch(candidate.path, { cache: 'no-store' });
-          if (response.ok) {
-            return true;
-          }
-        } catch (error) {
-          // Ignore and try the next local sample candidate.
-        }
-      }
-
-      return false;
     }
 
     function createImportedDataset(csvRows, sourceLabel) {
@@ -3764,98 +3666,6 @@ datasets: [{
       }
     });
 
-    async function handleDevDataImport(sampleKey) {
-      const sample = DEV_SAMPLE_DATASETS[sampleKey];
-      if (!sample) return;
-
-      const button = document.getElementById(`devDataBtn${sampleKey}`);
-      if (button && button.disabled) {
-        updateStatusBadge('error', `${sample.sourceLabel} is not available locally`);
-        return;
-      }
-
-      updateStatusBadge('offline', `Loading ${sample.sourceLabel}...`);
-
-      let lastError = null;
-
-      for (const candidate of sample.candidates) {
-        try {
-          const response = await fetch(candidate.path, { cache: 'no-store' });
-          if (!response.ok) {
-            throw new Error(`Failed to load ${candidate.path}`);
-          }
-
-          if (candidate.type === 'zip') {
-            const blob = await response.blob();
-            const file = new File([blob], candidate.path.split('/').pop(), { type: 'application/zip' });
-            const importResult = await importStravaZip(file);
-            await importCsvText(importResult.csvText, {
-              sourceLabel: sample.sourceLabel,
-              openDashboard: true,
-              fitBestEffortsByActivityId: importResult.fitBestEffortsByActivityId || {}
-            });
-            return;
-          }
-
-          const csvText = await response.text();
-          await importCsvText(csvText, {
-            sourceLabel: sample.sourceLabel,
-            openDashboard: true
-          });
-          return;
-        } catch (error) {
-          lastError = error;
-        }
-      }
-
-      if (window.location.protocol === 'file:') {
-        await promptForLocalDevSample(sample);
-        return;
-      }
-
-      updateStatusBadge('error', `Failed to load ${sample.sourceLabel}`);
-      console.error(`Development sample import failed for ${sample.sourceLabel}`, lastError);
-    }
-
-    async function promptForLocalDevSample(sample) {
-      updateStatusBadge('offline', sample.filePickerDescription || `Select ${sample.sourceLabel}`);
-
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.csv,.zip';
-
-      const selectedFile = await new Promise(resolve => {
-        input.onchange = event => resolve(event.target.files && event.target.files[0] ? event.target.files[0] : null);
-        input.click();
-      });
-
-      if (!selectedFile) {
-        updateStatusBadge('offline', 'Awaiting Strava ZIP upload');
-        return;
-      }
-
-      try {
-        if (selectedFile.name.toLowerCase().endsWith('.zip')) {
-          const importResult = await importStravaZip(selectedFile);
-          await importCsvText(importResult.csvText, {
-            sourceLabel: sample.sourceLabel,
-            openDashboard: true,
-            fitBestEffortsByActivityId: importResult.fitBestEffortsByActivityId || {}
-          });
-          return;
-        }
-
-        const csvText = await selectedFile.text();
-        await importCsvText(csvText, {
-          sourceLabel: sample.sourceLabel,
-          openDashboard: true
-        });
-      } catch (error) {
-        updateStatusBadge('error', `Failed to load ${sample.sourceLabel}`);
-        console.error(`Local development sample import failed for ${sample.sourceLabel}`, error);
-      }
-    }
-
     function updateImportProgress(percent, stage, isError = false) {
       const modal = document.getElementById('importProgressModal');
       const bar = document.getElementById('importProgressBar');
@@ -3875,7 +3685,6 @@ datasets: [{
     }
 
     setVisualizationTab(selectedVisualizationTab);
-    initializeDevelopmentControls();
   </script>
 </body>
 </html>

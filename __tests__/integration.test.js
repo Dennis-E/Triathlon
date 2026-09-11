@@ -3,8 +3,6 @@
  * Tests for complete workflows: CSV import -> parsing -> processing -> calculations
  */
 
-const fs = require('fs');
-const path = require('path');
 const {
   processData,
   parseCsvSimple,
@@ -15,18 +13,26 @@ const {
 const { reduceActivitiesRows } = require('../scripts/relevant-export-extractor');
 const { aggregateEquipmentDistance } = require('../src/equipment-utils');
 
+const TEST_CSV = [
+  'Aktivitätsdatum,Aktivitätsart,Name der Aktivität,Bewegungszeit,Distanz',
+  '"14.07.2026, 14:52:02",Lauf,Test Run,3600,10000',
+  '"15.07.2026, 06:30:00",Radfahrt,Test Ride,1800,15000',
+  '"16.07.2026, 10:15:00",Schwimmen,Test Swim,1200,2000'
+].join('\n');
+
+function getTestCsvData() {
+  return parseCsvSimple(TEST_CSV);
+}
+
 describe('Complete CSV Import Workflow', () => {
   let testCsvData;
   let processedActivities;
 
   beforeAll(() => {
-    // Load test CSV data
-    const csvPath = path.join(__dirname, '../test-data/activities.csv');
-    const csvText = fs.readFileSync(csvPath, 'utf-8');
-    testCsvData = parseCsvSimple(csvText);
+    testCsvData = getTestCsvData();
   });
 
-  it('should load test CSV file successfully', () => {
+  it('should load test CSV data successfully', () => {
     expect(testCsvData).toBeDefined();
     expect(testCsvData.length).toBeGreaterThan(1); // Has header + data
   });
@@ -98,10 +104,7 @@ describe('CSV Import with Different Filters', () => {
   let processedActivities;
 
   beforeAll(() => {
-    const csvPath = path.join(__dirname, '../test-data/activities.csv');
-    const csvText = fs.readFileSync(csvPath, 'utf-8');
-    const testCsvData = parseCsvSimple(csvText);
-    processedActivities = processData(testCsvData);
+    processedActivities = processData(getTestCsvData());
   });
 
   it('should filter activities by sport', () => {
@@ -137,10 +140,7 @@ describe('End-to-End Dashboard Metrics', () => {
   let allMetrics;
 
   beforeAll(() => {
-    const csvPath = path.join(__dirname, '../test-data/activities.csv');
-    const csvText = fs.readFileSync(csvPath, 'utf-8');
-    const testCsvData = parseCsvSimple(csvText);
-    const processedActivities = processData(testCsvData);
+    const processedActivities = processData(getTestCsvData());
     allMetrics = calculateMetrics(processedActivities, 52);
   });
 

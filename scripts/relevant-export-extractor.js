@@ -137,9 +137,12 @@ function findHeaderIndex(headers, column) {
   if (column.type === 'predicateElevation') {
     const index = headers.findIndex(header => {
       if (!header) return false;
-      const normalized = String(header).toLowerCase();
+      const normalized = String(header).replace(/^\uFEFF/, '').trim().toLowerCase()
+        .replace(/[()\[\]_-]+/g, ' ').replace(/\s+/g, ' ');
       return normalized.includes('höhenmeter') || normalized.includes('elevation gain') ||
-        (normalized.includes('elevation') && normalized.includes('gain'));
+        normalized.includes('höhenzunahme') || normalized.includes('höhenunterschied') ||
+        normalized.includes('total elevation') || normalized.includes('elevation ascent') ||
+        normalized === 'ascent' || normalized.includes('ascent m');
     });
     return index === -1 ? null : index;
   }

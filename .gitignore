@@ -1,6 +1,7 @@
 # Private/User data and development sample exports
 Data/
 TODO.md
+private-data/
 
 # OS/IDE files
 .DS_Store

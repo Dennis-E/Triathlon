@@ -140,6 +140,33 @@ function parseLocalizedNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function isElevationHeader(header) {
+  const normalized = String(header || '')
+    .replace(/^\uFEFF/, '')
+    .trim()
+    .toLowerCase()
+    .replace(/[()\[\]_-]+/g, ' ')
+    .replace(/\s+/g, ' ');
+  return normalized.includes('höhenmeter') || normalized.includes('elevation gain') ||
+    normalized.includes('höhenzunahme') || normalized.includes('höhenunterschied') ||
+    normalized.includes('total elevation') || normalized.includes('elevation ascent') ||
+    normalized === 'ascent' || normalized.includes('ascent m');
+}
+
+function parseElevationNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  let normalized = String(value).trim().replace(/\s/g, '');
+  if (normalized.includes(',') && normalized.includes('.')) {
+    normalized = normalized.lastIndexOf(',') > normalized.lastIndexOf('.')
+      ? normalized.replace(/\./g, '').replace(',', '.')
+      : normalized.replace(/,/g, '');
+  } else if (normalized.includes(',')) {
+    normalized = normalized.replace(',', '.');
+  }
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 /**
  * Process raw CSV data into normalized activity objects
  * @param {Array<Array>} rawCsvData - Raw CSV rows from Papa Parse
@@ -187,12 +214,7 @@ function processData(rawCsvData) {
       (normalized.includes('durch') || normalized.includes('durchschnitt') || normalized.includes('avg') || normalized.includes('average'))
     );
   });
-  const elevationIdx = headers.findIndex(header => {
-    if (!header) return false;
-    const normalized = String(header).toLowerCase();
-    return normalized.includes('höhenmeter') || normalized.includes('elevation gain') ||
-      (normalized.includes('elevation') && normalized.includes('gain'));
-  });
+  const elevationIdx = headers.findIndex(isElevationHeader);
 
   // Find 'Distanz' columns
   const distIndices = [];
@@ -252,7 +274,7 @@ function processData(rawCsvData) {
     const equipment = equipmentIdx !== -1 ? (row[equipmentIdx] || '').trim() : '';
     const avgHeartRate = avgHeartRateIdx !== -1 ? parseLocalizedNumber(row[avgHeartRateIdx]) : null;
     const avgWatts = avgWattsIdx !== -1 ? parseLocalizedNumber(row[avgWattsIdx]) : null;
-    const elevationGain = elevationIdx !== -1 ? parseLocalizedNumber(row[elevationIdx]) : null;
+    const elevationGain = elevationIdx !== -1 ? parseElevationNumber(row[elevationIdx]) : null;
 
     processedActivities.push({
       id: row[0],

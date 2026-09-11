@@ -849,37 +849,58 @@
 
             <!-- Swim column -->
             <div class="space-y-2">
-              <div class="flex items-center gap-2">
+              <div class="sticky top-0 z-10 flex items-center gap-2 border-b border-slate-800 bg-slate-900/95 py-2 backdrop-blur">
                 <span class="inline-block w-2.5 h-2.5 rounded-full bg-[#06B6D4]"></span>
                 <h3 class="text-sm font-semibold text-[#06B6D4] uppercase tracking-wider">Swim</h3>
               </div>
+              <p class="pt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Distance records</p>
               <div id="pbSwimContainer" class="space-y-4"></div>
+              <div class="border-t border-dashed border-slate-700 pt-3">
+                <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Elevation</p>
+                <p class="mt-2 text-xs italic text-slate-600">Not applicable for swimming.</p>
+              </div>
+              <div class="border-t border-dashed border-slate-700 pt-3">
+                <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Longest</p>
+                <div id="pbSwimLongestContainer" class="mt-2 space-y-4"></div>
+              </div>
             </div>
 
             <!-- Run column -->
             <div class="space-y-2">
-              <div class="flex items-center gap-2">
+              <div class="sticky top-0 z-10 flex items-center gap-2 border-b border-slate-800 bg-slate-900/95 py-2 backdrop-blur">
                 <span class="inline-block w-2.5 h-2.5 rounded-full bg-[#EF4444]"></span>
                 <h3 class="text-sm font-semibold text-[#EF4444] uppercase tracking-wider">Run</h3>
               </div>
+              <p class="pt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Distance records</p>
               <div id="pbRunContainer" class="space-y-4"></div>
+              <div class="border-t border-dashed border-slate-700 pt-3">
+                <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Elevation</p>
+                <div id="pbRunElevationContainer" class="mt-2 space-y-4"></div>
+              </div>
+              <div class="border-t border-dashed border-slate-700 pt-3">
+                <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Longest</p>
+                <div id="pbRunLongestContainer" class="mt-2 space-y-4"></div>
+              </div>
             </div>
 
             <!-- Bike column -->
             <div class="space-y-2">
-              <div class="flex items-center gap-2">
+              <div class="sticky top-0 z-10 flex items-center gap-2 border-b border-slate-800 bg-slate-900/95 py-2 backdrop-blur">
                 <span class="inline-block w-2.5 h-2.5 rounded-full bg-[#14B8A6]"></span>
                 <h3 class="text-sm font-semibold text-[#14B8A6] uppercase tracking-wider">Bike</h3>
               </div>
+              <p class="pt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Distance records</p>
               <div id="pbBikeContainer" class="space-y-4"></div>
+              <div class="border-t border-dashed border-slate-700 pt-3">
+                <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Elevation</p>
+                <div id="pbBikeElevationContainer" class="mt-2 space-y-4"></div>
+              </div>
+              <div class="border-t border-dashed border-slate-700 pt-3">
+                <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Longest</p>
+                <div id="pbBikeLongestContainer" class="mt-2 space-y-4"></div>
+              </div>
             </div>
 
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div id="pbRunElevationContainer"></div>
-            <div id="pbBikeElevationContainer"></div>
-            <div id="pbSwimDistanceContainer"></div>
           </div>
 
           <div id="pbEmptyState" class="hidden flex items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/80 px-6 py-16 text-center text-sm text-slate-400">
@@ -1264,6 +1285,37 @@
       });
     }
 
+    function normalizeMetricHeader(header) {
+      return String(header || '')
+        .replace(/^\uFEFF/, '')
+        .trim()
+        .toLowerCase()
+        .replace(/[()\[\]_-]+/g, ' ')
+        .replace(/\s+/g, ' ');
+    }
+
+    function isElevationHeader(header) {
+      const normalized = normalizeMetricHeader(header);
+      return normalized.includes('höhenmeter') || normalized.includes('elevation gain') ||
+        normalized.includes('höhenzunahme') || normalized.includes('höhenunterschied') ||
+        normalized.includes('total elevation') || normalized.includes('elevation ascent') ||
+        normalized === 'ascent' || normalized.includes('ascent m');
+    }
+
+    function parseMetricNumber(value) {
+      if (value === null || value === undefined || value === '') return null;
+      let normalized = String(value).trim().replace(/\s/g, '');
+      if (normalized.includes(',') && normalized.includes('.')) {
+        normalized = normalized.lastIndexOf(',') > normalized.lastIndexOf('.')
+          ? normalized.replace(/\./g, '').replace(',', '.')
+          : normalized.replace(/,/g, '');
+      } else if (normalized.includes(',')) {
+        normalized = normalized.replace(',', '.');
+      }
+      const parsed = Number.parseFloat(normalized);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
     // Map CSV rows to objects
     function processData(csvRows) {
       if (!Array.isArray(csvRows) || csvRows.length < 2) {
@@ -1298,12 +1350,7 @@
         return (normalized.includes('watt') || normalized.includes('power')) &&
           (normalized.includes('durch') || normalized.includes('avg') || normalized.includes('durchschnitt') || normalized.includes('average'));
       });
-      const elevationIdx = headers.findIndex(h => {
-        if (!h) return false;
-        const normalized = String(h).toLowerCase();
-        return normalized.includes('höhenmeter') || normalized.includes('elevation gain') ||
-          (normalized.includes('elevation') && normalized.includes('gain'));
-      });
+      const elevationIdx = headers.findIndex(h => isElevationHeader(h));
 
       // Find 'Distanz' columns (index 17 is usually the dot-formatted meters)
       const distIndices = [];
@@ -1371,7 +1418,7 @@
           ? window.scatterUtils.parseLocalizedNumber(row[avgWattsIdx])
           : null;
         const elevationGain = elevationIdx !== -1
-          ? window.scatterUtils.parseLocalizedNumber(row[elevationIdx])
+          ? parseMetricNumber(row[elevationIdx])
           : null;
         const equipment = equipmentIdx !== -1 ? (row[equipmentIdx] || '').trim() : '';
 
@@ -3074,7 +3121,7 @@ datasets: [{
         if (records.length === 0) {
           const empty = document.createElement('p');
           empty.className = 'text-xs text-slate-600 italic';
-          empty.textContent = 'No matching activities found.';
+          empty.textContent = sport === 'Swim' ? 'No matching activities found.' : 'No elevation data found.';
           block.appendChild(empty);
           container.appendChild(block);
           return;
@@ -3118,6 +3165,15 @@ datasets: [{
         records.forEach(item => {
           const x = tToX(item.activity.date.getTime());
           const y = valueToY(item.value);
+          const hit = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          hit.setAttribute('x1', x);
+          hit.setAttribute('y1', CHART_TOP);
+          hit.setAttribute('x2', x);
+          hit.setAttribute('y2', X_AXIS_Y);
+          hit.setAttribute('stroke', 'transparent');
+          hit.setAttribute('stroke-width', '12');
+          hit.style.cursor = 'pointer';
+
           const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
           line.setAttribute('x1', x);
           line.setAttribute('y1', y);
@@ -3126,10 +3182,30 @@ datasets: [{
           line.setAttribute('stroke', color);
           line.setAttribute('stroke-width', '1.8');
           line.setAttribute('opacity', '0.75');
-          const label = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-          label.textContent = item.activity.name + ' - ' + item.activity.date.toLocaleDateString('en-GB') + ' - ' + metricLabel + ': ' + formatValue(item.value);
-          line.appendChild(label);
+          line.style.pointerEvents = 'none';
           svg.appendChild(line);
+
+          const record = item;
+          hit.addEventListener('mouseenter', function(e) {
+            line.setAttribute('opacity', '1');
+            ttTitle.textContent = record.activity.name || 'Activity';
+            ttTitle.style.color = color;
+            ttDate.textContent = record.activity.date.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' });
+            ttTime.textContent = metricLabel + ': ' + formatValue(record.value);
+            ttDist.textContent = 'Distance: ' + record.activity.distance.toFixed(2) + ' km';
+            ttPace.textContent = '';
+            ttWatts.classList.add('hidden');
+            ttWatts.textContent = '';
+            ttRank.textContent = 'Record ' + (records.indexOf(record) + 1) + ' of ' + records.length;
+            tooltip.classList.remove('hidden');
+            movePbTooltip(e);
+          });
+          hit.addEventListener('mousemove', movePbTooltip);
+          hit.addEventListener('mouseleave', function() {
+            line.setAttribute('opacity', '0.75');
+            hidePbTooltip();
+          });
+          svg.appendChild(hit);
         });
 
         block.appendChild(svg);
@@ -3139,10 +3215,6 @@ datasets: [{
         block.appendChild(footer);
         container.appendChild(block);
       }
-
-      renderRecordCard('pbRunElevationContainer', 'Most elevation (Run)', 'Run', 'Elevation', a => a.elevationGain, value => Math.round(value) + ' m');
-      renderRecordCard('pbBikeElevationContainer', 'Most elevation (Bike)', 'Bike', 'Elevation', a => a.elevationGain, value => Math.round(value) + ' m');
-      renderRecordCard('pbSwimDistanceContainer', 'Longest swim', 'Swim', 'Distance', a => a.distance, value => value.toFixed(2) + ' km');
 
       // ── Per-sport columns ─────────────────────────────────────────────────────
       ['Swim', 'Run', 'Bike'].forEach(function(sport) {
@@ -3535,6 +3607,12 @@ datasets: [{
           container.appendChild(empty);
         }
       });
+
+      renderRecordCard('pbSwimLongestContainer', 'Longest swim', 'Swim', 'Distance', a => a.distance, value => value.toFixed(2) + ' km');
+      renderRecordCard('pbRunElevationContainer', 'Most elevation (Run)', 'Run', 'Elevation', a => a.elevationGain, value => Math.round(value) + ' m');
+      renderRecordCard('pbBikeElevationContainer', 'Most elevation (Bike)', 'Bike', 'Elevation', a => a.elevationGain, value => Math.round(value) + ' m');
+      renderRecordCard('pbRunLongestContainer', 'Longest run', 'Run', 'Distance', a => a.distance, value => value.toFixed(2) + ' km');
+      renderRecordCard('pbBikeLongestContainer', 'Longest bike', 'Bike', 'Distance', a => a.distance, value => value.toFixed(2) + ' km');
 
       // Show/hide overall empty state
       const hasAnyPb = processedActivities.some(function(a) { return ['Swim','Run','Bike'].includes(a.sport); });

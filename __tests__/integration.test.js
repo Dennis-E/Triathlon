@@ -71,6 +71,16 @@ describe('Complete CSV Import Workflow', () => {
     expect(result[0].elevationGain).toBe(245.5);
   });
 
+  it('should parse Strava elevation gain header and localized number', () => {
+    const data = [
+      ['Aktivitätsdatum', 'Aktivitätsart', 'Name der Aktivität', 'Bewegungszeit', 'Distanz', 'Höhenzunahme'],
+      ['19.07.2026, 14:52:02', 'Radfahrt', 'Hill Ride', '3600', '10000', '1.234,5']
+    ];
+
+    const result = processData(data);
+    expect(result[0].elevationGain).toBe(1234.5);
+  });
+
   it('should have valid dates', () => {
     processedActivities.forEach(activity => {
       expect(activity.date instanceof Date).toBe(true);

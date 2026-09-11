@@ -1,4 +1,4 @@
-# Welcome to my Triathlon Data Visualization Tool!
+# Welcome to TriAnalytica - my Triathlon Data Visualization Tool!
 
 This dashboard helps you explore your training history from your Strava data in a simple, browser-based view. Upload your Strava export ZIP and turn your activities into clear charts for training volume, pacing, equipment, and performance trends.
 

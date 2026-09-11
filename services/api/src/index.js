@@ -5,5 +5,5 @@ const port = Number(process.env.PORT) || 8080;
 const app = createApp({ firestore: new Firestore() });
 
 app.listen(port, () => {
-  console.log(`TriAnalytics API listening on port ${port}`);
+  console.log(`TriAnalytica API listening on port ${port}`);
 });

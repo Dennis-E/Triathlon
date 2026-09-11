@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TriAnalytics</title>
+  <title>TriAnalytica</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Chart.js -->
@@ -77,18 +77,8 @@
   <!-- Header -->
   <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur px-6 py-4 flex items-center justify-between shrink-0">
     <button type="button" onclick="goToLanding()" class="flex items-center space-x-3 hover:opacity-80 transition-opacity cursor-pointer">
-      <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-cyan-400 shadow-lg shadow-indigo-600/25">
-        <svg viewBox="0 0 64 64" class="h-7 w-7 text-white" aria-hidden="true" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M14 46L25 18L34 36L43 23L50 46H14Z" fill="currentColor" opacity="0.9"/>
-          <path d="M17 50H47" stroke="white" stroke-width="3" stroke-linecap="round"/>
-          <circle cx="25" cy="18" r="4.5" fill="white"/>
-          <circle cx="43" cy="23" r="4.5" fill="white"/>
-        </svg>
-      </div>
-      <div class="text-left">
-        <h1 class="font-bold text-lg leading-tight tracking-tight">TriAnalytics</h1>
-        <p class="text-xs text-slate-400">Triathlon Performance Insights</p>
-      </div>
+      <img src="assets/logo.png" alt="TriAnalytica logo" class="h-9 w-auto">
+      <p class="hidden sm:block text-xs text-slate-400">Triathlon Performance Insights</p>
     </button>
     <div class="flex items-center space-x-4">
       <div id="statusBadge" class="flex items-center space-x-2 text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 rounded-full">
@@ -187,15 +177,7 @@
     <!-- Hero -->
     <div class="text-center max-w-2xl mb-10 mt-4">
       <div class="mb-4 flex items-center justify-center gap-3">
-        <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-400 shadow-lg shadow-indigo-600/25">
-          <svg viewBox="0 0 64 64" class="h-7 w-7 text-white" aria-hidden="true" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M14 46L25 18L34 36L43 23L50 46H14Z" fill="currentColor" opacity="0.9"/>
-            <path d="M17 50H47" stroke="white" stroke-width="3" stroke-linecap="round"/>
-            <circle cx="25" cy="18" r="4.5" fill="white"/>
-            <circle cx="43" cy="23" r="4.5" fill="white"/>
-          </svg>
-        </div>
-        <h2 class="text-3xl font-bold tracking-tight">TriAnalytics</h2>
+        <img src="assets/logo.png" alt="TriAnalytica logo" class="h-16 w-auto">
       </div>
       <p class="text-slate-400 text-sm leading-relaxed">Import your Strava data export and analyze directly in the browser. No login, no data storage.</p>
       <p class="text-red-300 text-xs leading-relaxed mt-2">This is an early alpha test: Give me feedback or share your feature requests.</p>
@@ -940,26 +922,18 @@
   <footer class="border-t border-slate-900 bg-slate-950/70 py-3 px-6 text-center text-[11px] text-slate-500 shrink-0">
     <div class="flex flex-col items-center gap-2">
       <div class="flex items-center justify-center gap-2 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 shadow-lg shadow-indigo-500/10">
-        <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-400">
-          <svg viewBox="0 0 64 64" class="h-4 w-4 text-white" aria-hidden="true" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M14 46L25 18L34 36L43 23L50 46H14Z" fill="currentColor" opacity="0.9"/>
-            <path d="M17 50H47" stroke="white" stroke-width="3" stroke-linecap="round"/>
-            <circle cx="25" cy="18" r="4.5" fill="white"/>
-            <circle cx="43" cy="23" r="4.5" fill="white"/>
-          </svg>
-        </div>
-        <span class="text-xs font-semibold tracking-wide text-indigo-200">TriAnalytics</span>
+        <img src="assets/logo.png" alt="TriAnalytica logo" class="h-5 w-auto">
       </div>
       <div class="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 shadow-lg shadow-red-500/10">
         <p class="text-xs font-semibold tracking-wide text-red-200">Alpha version - Feedback is welcome as development continues.</p>
         <a
-          href="mailto:noreply@example.invalid?subject=TriAnalytics%20-%20Alpha%20version%20-%20Feedback%20%2F%20Feature%20request"
+          href="mailto:noreply@example.invalid?subject=TriAnalytica%20-%20Alpha%20version%20-%20Feedback%20%2F%20Feature%20request"
           class="mt-2 inline-flex items-center rounded-lg border border-red-500 bg-red-500/10 px-3 py-1.5 text-[11px] font-semibold text-red-300 hover:bg-red-500/20 transition"
         >
           Feedback / Feature request
         </a>
       </div>
-      <p>TriAnalytics • Local Offline Processing (No internet transmission of your personal files)</p>
+      <p>TriAnalytica • Local Offline Processing (No internet transmission of your personal files)</p>
     </div>
   </footer>
 

@@ -1,5 +1,5 @@
 {
-  "name": "tri",
+  "name": "trianalytica",
   "version": "1.0.0",
   "description": "A web-based application where youth athletes can upload their Strava data export and explore visualizations of their long-term training effort. The focus is on endurance sports (running, cycling, swimming, etc.) and on building healthy, sustainable training habits, not on social or commercial aspects of Strava.",
   "main": "index.js",

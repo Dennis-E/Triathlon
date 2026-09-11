@@ -187,6 +187,12 @@ function processData(rawCsvData) {
       (normalized.includes('durch') || normalized.includes('durchschnitt') || normalized.includes('avg') || normalized.includes('average'))
     );
   });
+  const elevationIdx = headers.findIndex(header => {
+    if (!header) return false;
+    const normalized = String(header).toLowerCase();
+    return normalized.includes('höhenmeter') || normalized.includes('elevation gain') ||
+      (normalized.includes('elevation') && normalized.includes('gain'));
+  });
 
   // Find 'Distanz' columns
   const distIndices = [];
@@ -246,6 +252,7 @@ function processData(rawCsvData) {
     const equipment = equipmentIdx !== -1 ? (row[equipmentIdx] || '').trim() : '';
     const avgHeartRate = avgHeartRateIdx !== -1 ? parseLocalizedNumber(row[avgHeartRateIdx]) : null;
     const avgWatts = avgWattsIdx !== -1 ? parseLocalizedNumber(row[avgWattsIdx]) : null;
+    const elevationGain = elevationIdx !== -1 ? parseLocalizedNumber(row[elevationIdx]) : null;
 
     processedActivities.push({
       id: row[0],
@@ -258,6 +265,7 @@ function processData(rawCsvData) {
       duration: durationSeconds,
       avgHeartRate,
       avgWatts,
+      elevationGain,
       name: name
     });
   }

@@ -9,6 +9,18 @@ const {
 } = require('../scripts/relevant-export-extractor');
 
 describe('reduceActivitiesRows', () => {
+  it('keeps elevation gain when it is available in the source export', () => {
+    const rows = [
+      ['Aktivitäts-ID', 'Aktivitätsdatum', 'Name der Aktivität', 'Aktivitätsart', 'Bewegungszeit', 'Distanz', 'Distanz', 'Höhenmeter'],
+      ['1', '19.07.2026, 14:52:02', 'Trail run', 'Lauf', '3600', '10,00', '10000', '245,5']
+    ];
+
+    const reduced = reduceActivitiesRows(rows);
+
+    expect(reduced[0]).toContain('Höhenmeter');
+    expect(reduced[1][reduced[0].indexOf('Höhenmeter')]).toBe('245,5');
+  });
+
   it('keeps only the columns used by the current visualizations', () => {
     const rows = [
       [

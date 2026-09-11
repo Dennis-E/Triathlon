@@ -36,6 +36,7 @@ Your data stays in the browser. No login is required, and your files are process
 - Personal Bests
   - Explore new bests for Swim, Run, and Bike
   - Compare progress across target distances and training phases
+  - Track most elevation for running and cycling, plus longest swim distance
 
 ## Features and filters
 

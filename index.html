@@ -876,6 +876,12 @@
 
           </div>
 
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div id="pbRunElevationContainer"></div>
+            <div id="pbBikeElevationContainer"></div>
+            <div id="pbSwimDistanceContainer"></div>
+          </div>
+
           <div id="pbEmptyState" class="hidden flex items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/80 px-6 py-16 text-center text-sm text-slate-400">
             No activities found. Import your Strava data to see your personal bests.
           </div>
@@ -1292,6 +1298,12 @@
         return (normalized.includes('watt') || normalized.includes('power')) &&
           (normalized.includes('durch') || normalized.includes('avg') || normalized.includes('durchschnitt') || normalized.includes('average'));
       });
+      const elevationIdx = headers.findIndex(h => {
+        if (!h) return false;
+        const normalized = String(h).toLowerCase();
+        return normalized.includes('höhenmeter') || normalized.includes('elevation gain') ||
+          (normalized.includes('elevation') && normalized.includes('gain'));
+      });
 
       // Find 'Distanz' columns (index 17 is usually the dot-formatted meters)
       const distIndices = [];
@@ -1358,6 +1370,9 @@
         const avgWatts = avgWattsIdx !== -1
           ? window.scatterUtils.parseLocalizedNumber(row[avgWattsIdx])
           : null;
+        const elevationGain = elevationIdx !== -1
+          ? window.scatterUtils.parseLocalizedNumber(row[elevationIdx])
+          : null;
         const equipment = equipmentIdx !== -1 ? (row[equipmentIdx] || '').trim() : '';
 
         nextProcessedActivities.push({
@@ -1371,6 +1386,7 @@
           duration: durationSeconds,
           avgHeartRate: avgHeartRate,
           avgWatts: avgWatts,
+          elevationGain: elevationGain,
           name: name
         });
       }
@@ -3026,6 +3042,107 @@ datasets: [{
         tooltip.classList.remove('hidden');
         movePbTooltip(e);
       }
+
+      function renderRecordCard(containerId, title, sport, metricLabel, getValue, formatValue) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        container.innerHTML = '';
+
+        const candidates = activities
+          .filter(a => a.sport === sport)
+          .map(a => ({ activity: a, value: getValue(a) }))
+          .filter(item => Number.isFinite(item.value) && item.value > 0);
+        const records = [];
+        let bestValue = -Infinity;
+        candidates.forEach(item => {
+          if (item.value > bestValue) {
+            bestValue = item.value;
+            records.push(item);
+          }
+        });
+
+        const block = document.createElement('div');
+        block.className = 'bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-1.5';
+        const color = PB_SPORT_COLOR[sport];
+        const header = document.createElement('div');
+        header.className = 'flex items-center justify-between gap-2';
+        header.innerHTML = '<span class="text-xs font-semibold text-slate-300">' + title + '</span>' +
+          '<span class="text-[11px] font-mono text-slate-400">' +
+          (records.length ? formatValue(records[records.length - 1].value) : 'n/a') + '</span>';
+        block.appendChild(header);
+
+        if (records.length === 0) {
+          const empty = document.createElement('p');
+          empty.className = 'text-xs text-slate-600 italic';
+          empty.textContent = 'No matching activities found.';
+          block.appendChild(empty);
+          container.appendChild(block);
+          return;
+        }
+
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 ' + VB_W + ' ' + SVG_H);
+        svg.setAttribute('width', '100%');
+        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        svg.style.overflow = 'visible';
+        svg.style.display = 'block';
+
+        const baseline = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        baseline.setAttribute('x1', PAD_L);
+        baseline.setAttribute('y1', X_AXIS_Y);
+        baseline.setAttribute('x2', VB_W - PAD_R);
+        baseline.setAttribute('y2', X_AXIS_Y);
+        baseline.setAttribute('stroke', '#1E293B');
+        svg.appendChild(baseline);
+
+        const maxValue = Math.max(records[records.length - 1].value, 1);
+        const valueToY = value => X_AXIS_Y - (value / maxValue) * (X_AXIS_Y - CHART_TOP - 2);
+        const topLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        topLabel.setAttribute('x', PAD_L - 2);
+        topLabel.setAttribute('y', CHART_TOP + 1);
+        topLabel.setAttribute('text-anchor', 'end');
+        topLabel.setAttribute('font-size', '6.8');
+        topLabel.setAttribute('fill', '#E2E8F0');
+        topLabel.setAttribute('font-family', 'ui-monospace, monospace');
+        topLabel.textContent = formatValue(maxValue);
+        svg.appendChild(topLabel);
+
+        const points = records.map(item => tToX(item.activity.date.getTime()).toFixed(2) + ',' + valueToY(item.value).toFixed(2)).join(' ');
+        const trendLine = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+        trendLine.setAttribute('points', points);
+        trendLine.setAttribute('fill', 'none');
+        trendLine.setAttribute('stroke', color);
+        trendLine.setAttribute('stroke-width', '1.8');
+        svg.appendChild(trendLine);
+
+        records.forEach(item => {
+          const x = tToX(item.activity.date.getTime());
+          const y = valueToY(item.value);
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', x);
+          line.setAttribute('y1', y);
+          line.setAttribute('x2', x);
+          line.setAttribute('y2', X_AXIS_Y);
+          line.setAttribute('stroke', color);
+          line.setAttribute('stroke-width', '1.8');
+          line.setAttribute('opacity', '0.75');
+          const label = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+          label.textContent = item.activity.name + ' - ' + item.activity.date.toLocaleDateString('en-GB') + ' - ' + metricLabel + ': ' + formatValue(item.value);
+          line.appendChild(label);
+          svg.appendChild(line);
+        });
+
+        block.appendChild(svg);
+        const footer = document.createElement('p');
+        footer.className = 'text-[10px] text-slate-600';
+        footer.textContent = records.length + ' record' + (records.length > 1 ? 's' : '') + ' set';
+        block.appendChild(footer);
+        container.appendChild(block);
+      }
+
+      renderRecordCard('pbRunElevationContainer', 'Most elevation (Run)', 'Run', 'Elevation', a => a.elevationGain, value => Math.round(value) + ' m');
+      renderRecordCard('pbBikeElevationContainer', 'Most elevation (Bike)', 'Bike', 'Elevation', a => a.elevationGain, value => Math.round(value) + ' m');
+      renderRecordCard('pbSwimDistanceContainer', 'Longest swim', 'Swim', 'Distance', a => a.distance, value => value.toFixed(2) + ' km');
 
       // ── Per-sport columns ─────────────────────────────────────────────────────
       ['Swim', 'Run', 'Bike'].forEach(function(sport) {

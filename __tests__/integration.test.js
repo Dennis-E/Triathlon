@@ -61,6 +61,16 @@ describe('Complete CSV Import Workflow', () => {
     expect(processedActivities[0]).toHaveProperty('name');
   });
 
+  it('should parse optional elevation gain', () => {
+    const data = [
+      ['Aktivitätsdatum', 'Aktivitätsart', 'Name der Aktivität', 'Bewegungszeit', 'Distanz', 'Höhenmeter'],
+      ['19.07.2026, 14:52:02', 'Lauf', 'Hill Run', '3600', '10000', '245,5']
+    ];
+
+    const result = processData(data);
+    expect(result[0].elevationGain).toBe(245.5);
+  });
+
   it('should have valid dates', () => {
     processedActivities.forEach(activity => {
       expect(activity.date instanceof Date).toBe(true);

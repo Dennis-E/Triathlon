@@ -134,6 +134,16 @@ function findHeaderIndex(headers, column) {
     return index === -1 ? null : index;
   }
 
+  if (column.type === 'predicateElevation') {
+    const index = headers.findIndex(header => {
+      if (!header) return false;
+      const normalized = String(header).toLowerCase();
+      return normalized.includes('höhenmeter') || normalized.includes('elevation gain') ||
+        (normalized.includes('elevation') && normalized.includes('gain'));
+    });
+    return index === -1 ? null : index;
+  }
+
   return null;
 }
 
@@ -158,14 +168,19 @@ function reduceActivitiesRows(rows) {
     };
   });
 
+  const elevationIndex = findHeaderIndex(headers, { type: 'predicateElevation' });
+
   const reducedRows = [selectedColumns.map(column => column.outputHeader)];
+  if (elevationIndex !== null) reducedRows[0].push('Höhenmeter');
 
   for (let rowIndex = 1; rowIndex < rows.length; rowIndex++) {
     const row = rows[rowIndex];
-    reducedRows.push(selectedColumns.map(column => {
+    const reducedRow = selectedColumns.map(column => {
       if (column.index === null || column.index >= row.length) return '';
       return row[column.index];
-    }));
+    });
+    if (elevationIndex !== null) reducedRow.push(elevationIndex >= row.length ? '' : row[elevationIndex]);
+    reducedRows.push(reducedRow);
   }
 
   return reducedRows;

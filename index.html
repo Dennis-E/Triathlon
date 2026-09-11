@@ -844,63 +844,63 @@
             </div>
           </div>
 
-          <!-- Three-column layout: Swim | Run | Bike -->
-          <div id="pbColumnsContainer" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <!-- Shared three-column grid: Swim | Run | Bike -->
+          <div id="pbColumnsContainer" class="grid grid-cols-1 lg:grid-cols-3 gap-x-6 gap-y-3">
+            <div class="sticky top-0 z-20 flex items-center gap-2 border-b border-slate-700 bg-slate-900 py-3 shadow-lg shadow-slate-950/80">
+              <span class="inline-block w-2.5 h-2.5 rounded-full bg-[#06B6D4]"></span>
+              <h3 class="text-sm font-semibold text-[#06B6D4] uppercase tracking-wider">Swim</h3>
+            </div>
+            <div class="sticky top-0 z-20 flex items-center gap-2 border-b border-slate-700 bg-slate-900 py-3 shadow-lg shadow-slate-950/80">
+              <span class="inline-block w-2.5 h-2.5 rounded-full bg-[#EF4444]"></span>
+              <h3 class="text-sm font-semibold text-[#EF4444] uppercase tracking-wider">Run</h3>
+            </div>
+            <div class="sticky top-0 z-20 flex items-center gap-2 border-b border-slate-700 bg-slate-900 py-3 shadow-lg shadow-slate-950/80">
+              <span class="inline-block w-2.5 h-2.5 rounded-full bg-[#14B8A6]"></span>
+              <h3 class="text-sm font-semibold text-[#14B8A6] uppercase tracking-wider">Bike</h3>
+            </div>
 
-            <!-- Swim column -->
             <div class="space-y-2">
-              <div class="sticky top-0 z-10 flex items-center gap-2 border-b border-slate-800 bg-slate-900/95 py-2 backdrop-blur">
-                <span class="inline-block w-2.5 h-2.5 rounded-full bg-[#06B6D4]"></span>
-                <h3 class="text-sm font-semibold text-[#06B6D4] uppercase tracking-wider">Swim</h3>
-              </div>
-              <p class="pt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Distance records</p>
+              <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Distance records</p>
               <div id="pbSwimContainer" class="space-y-4"></div>
-              <div class="border-t border-dashed border-slate-700 pt-3">
-                <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Elevation</p>
-                <p class="mt-2 text-xs italic text-slate-600">Not applicable for swimming.</p>
-              </div>
-              <div class="border-t border-dashed border-slate-700 pt-3">
-                <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Longest</p>
-                <div id="pbSwimLongestContainer" class="mt-2 space-y-4"></div>
-              </div>
             </div>
-
-            <!-- Run column -->
             <div class="space-y-2">
-              <div class="sticky top-0 z-10 flex items-center gap-2 border-b border-slate-800 bg-slate-900/95 py-2 backdrop-blur">
-                <span class="inline-block w-2.5 h-2.5 rounded-full bg-[#EF4444]"></span>
-                <h3 class="text-sm font-semibold text-[#EF4444] uppercase tracking-wider">Run</h3>
-              </div>
-              <p class="pt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Distance records</p>
+              <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Distance records</p>
               <div id="pbRunContainer" class="space-y-4"></div>
-              <div class="border-t border-dashed border-slate-700 pt-3">
-                <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Elevation</p>
-                <div id="pbRunElevationContainer" class="mt-2 space-y-4"></div>
-              </div>
-              <div class="border-t border-dashed border-slate-700 pt-3">
-                <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Longest</p>
-                <div id="pbRunLongestContainer" class="mt-2 space-y-4"></div>
-              </div>
             </div>
-
-            <!-- Bike column -->
             <div class="space-y-2">
-              <div class="sticky top-0 z-10 flex items-center gap-2 border-b border-slate-800 bg-slate-900/95 py-2 backdrop-blur">
-                <span class="inline-block w-2.5 h-2.5 rounded-full bg-[#14B8A6]"></span>
-                <h3 class="text-sm font-semibold text-[#14B8A6] uppercase tracking-wider">Bike</h3>
-              </div>
-              <p class="pt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Distance records</p>
+              <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Distance records</p>
               <div id="pbBikeContainer" class="space-y-4"></div>
-              <div class="border-t border-dashed border-slate-700 pt-3">
-                <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Elevation</p>
-                <div id="pbBikeElevationContainer" class="mt-2 space-y-4"></div>
-              </div>
-              <div class="border-t border-dashed border-slate-700 pt-3">
-                <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Longest</p>
-                <div id="pbBikeLongestContainer" class="mt-2 space-y-4"></div>
-              </div>
             </div>
 
+            <div class="col-span-full border-t border-dashed border-slate-600"></div>
+
+            <div class="space-y-2">
+              <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Elevation</p>
+              <p class="text-xs italic text-slate-600">Not applicable for swimming.</p>
+            </div>
+            <div class="space-y-2">
+              <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Elevation</p>
+              <div id="pbRunElevationContainer" class="space-y-4"></div>
+            </div>
+            <div class="space-y-2">
+              <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Elevation</p>
+              <div id="pbBikeElevationContainer" class="space-y-4"></div>
+            </div>
+
+            <div class="col-span-full border-t border-dashed border-slate-600"></div>
+
+            <div class="space-y-2">
+              <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Longest</p>
+              <div id="pbSwimLongestContainer" class="space-y-4"></div>
+            </div>
+            <div class="space-y-2">
+              <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Longest</p>
+              <div id="pbRunLongestContainer" class="space-y-4"></div>
+            </div>
+            <div class="space-y-2">
+              <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Longest</p>
+              <div id="pbBikeLongestContainer" class="space-y-4"></div>
+            </div>
           </div>
 
           <div id="pbEmptyState" class="hidden flex items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/80 px-6 py-16 text-center text-sm text-slate-400">

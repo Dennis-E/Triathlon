@@ -65,4 +65,4 @@ Then open the app in your browser and import your Strava ZIP export from the lan
 
 ## Contributing and feedback
 
-Please use your team's established feedback channel for questions and suggestions.
+Feedback is welcome as development continues. Please send questions and suggestions to [myaidevproject@gmail.com](mailto:myaidevproject@gmail.com).

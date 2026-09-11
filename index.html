@@ -3746,8 +3746,10 @@ datasets: [{
     }
 
     const ANALYSIS_COUNTER_API_BASE_URL = 'https://trianalytics-api-520098173492.europe-west1.run.app';
+    const ANALYSIS_COUNTER_CLIENT_KEY = 'k2026-09.nEWXDOuN_5rur45Xqt4h07BqeisjKNij';
     const analysisCounterClient = AnalysisCounter.createAnalysisCounter({
-      apiBaseUrl: ANALYSIS_COUNTER_API_BASE_URL
+      apiBaseUrl: ANALYSIS_COUNTER_API_BASE_URL,
+      clientKey: ANALYSIS_COUNTER_CLIENT_KEY
     });
 
     function setAnalysisCounter(count) {

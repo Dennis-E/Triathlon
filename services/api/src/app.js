@@ -1,4 +1,5 @@
 const express = require('express');
+const { timingSafeEqual } = require('crypto');
 
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://example.invalid',
@@ -15,6 +16,23 @@ function parseAllowedOrigins(value) {
 function parseCount(snapshot) {
   const count = snapshot.exists ? snapshot.data().count : 0;
   return Number.isSafeInteger(count) && count >= 0 ? count : 0;
+}
+
+function parseClientKeys(value) {
+  return (value || '').split(',').map(key => key.trim()).filter(Boolean);
+}
+
+function hasClientKey(clientKey, acceptedKeys) {
+  if (!clientKey) return false;
+  return acceptedKeys.some(acceptedKey => {
+    const supplied = Buffer.from(clientKey);
+    const expected = Buffer.from(acceptedKey);
+    return supplied.length === expected.length && timingSafeEqual(supplied, expected);
+  });
+}
+
+function isValidEventId(eventId) {
+  return typeof eventId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(eventId);
 }
 
 function createRateLimiter({ maxRequests = 20, windowMs = 600000, now = Date.now } = {}) {
@@ -37,12 +55,14 @@ function createRateLimiter({ maxRequests = 20, windowMs = 600000, now = Date.now
   };
 }
 
-function createApp({ firestore, allowedOrigins, rateLimiter } = {}) {
+function createApp({ firestore, allowedOrigins, rateLimiter, clientKeys } = {}) {
   if (!firestore) throw new Error('Firestore is required');
 
   const app = express();
   const origins = allowedOrigins || parseAllowedOrigins(process.env.ALLOWED_ORIGINS);
+  const acceptedClientKeys = clientKeys || parseClientKeys(process.env.ANALYSIS_CLIENT_KEYS);
   const analysesRef = firestore.collection('metrics').doc('analyses');
+  const analysisEvents = firestore.collection('analysisEvents');
 
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
@@ -60,7 +80,7 @@ function createApp({ firestore, allowedOrigins, rateLimiter } = {}) {
 
     res.set('Access-Control-Allow-Origin', origin);
     res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, X-Analysis-Key, X-Analysis-Event-Id');
     res.vary('Origin');
 
     if (req.method === 'OPTIONS') {
@@ -85,10 +105,26 @@ function createApp({ firestore, allowedOrigins, rateLimiter } = {}) {
 
   app.post('/v1/analyses', rateLimiter || createRateLimiter(), async (req, res, next) => {
     try {
+      const clientKey = req.get('X-Analysis-Key');
+      const eventId = req.get('X-Analysis-Event-Id');
+      if (!hasClientKey(clientKey, acceptedClientKeys)) {
+        res.status(401).json({ error: 'Analysis key is invalid' });
+        return;
+      }
+      if (!isValidEventId(eventId)) {
+        res.status(400).json({ error: 'Analysis event ID is invalid' });
+        return;
+      }
+
       const count = await firestore.runTransaction(async transaction => {
+        const eventRef = analysisEvents.doc(eventId);
+        const existingEvent = await transaction.get(eventRef);
+        if (existingEvent.exists) return parseCount(await transaction.get(analysesRef));
+
         const snapshot = await transaction.get(analysesRef);
         const nextCount = parseCount(snapshot) + 1;
         transaction.set(analysesRef, { count: nextCount }, { merge: true });
+        transaction.set(eventRef, { createdAt: new Date() });
         return nextCount;
       });
       res.status(201).json({ count });
@@ -105,4 +141,4 @@ function createApp({ firestore, allowedOrigins, rateLimiter } = {}) {
   return app;
 }
 
-module.exports = { createApp, createRateLimiter, parseAllowedOrigins };
+module.exports = { createApp, createRateLimiter, hasClientKey, isValidEventId, parseAllowedOrigins, parseClientKeys };

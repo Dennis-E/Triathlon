@@ -71,4 +71,37 @@ describe('index.html inline script syntax', () => {
     expect(inlineCode).toContain("appendYAxisLabel(svg, X_AXIS_Y - 1, '0', false)");
     expect(inlineCode).toContain('const firstRecordValue = records[0].value');
   });
+
+  it('uses one opaque sticky sport header without a grid gap below it', () => {
+    const panel = html.match(/<div id="vizPanelPersonalBests"[\s\S]*?<div id="pbEmptyState"/)[0];
+    expect((panel.match(/sticky -top-6/g) || [])).toHaveLength(1);
+    expect(panel).toContain('sticky -top-6 z-20 col-span-full -mb-3 grid grid-cols-3');
+  });
+
+  it('provides a per-tile full screen detail overlay', () => {
+    expect(html).toContain('id="pbDetailOverlay"');
+    expect(html).toContain('role="dialog" aria-modal="true"');
+    expect(inlineCode).toContain("icon.setAttribute('data-lucide', 'maximize-2')");
+    expect((inlineCode.match(/function appendPbDetailButton\(header,/g) || [])).toHaveLength(1);
+    expect((inlineCode.match(/^\s*appendPbDetailButton\(header,/gm) || [])).toHaveLength(3);
+    expect(inlineCode).toContain('border border-slate-600 bg-slate-900 text-slate-200');
+    expect(inlineCode).toContain('window.lucide.createIcons()');
+    expect(inlineCode).toContain("if (event.target.id === 'pbDetailOverlay') closePbDetail()");
+  });
+
+  it('keeps complete record histories and positions compact labels by direction', () => {
+    expect((inlineCode.match(/return pbs;/g) || [])).toHaveLength(2);
+    expect(inlineCode).not.toContain('return pbs.slice(0, PB_MAX_RESULTS)');
+    expect(inlineCode).toContain("formatDurationHms(best.duration), color, 'right'");
+    expect((inlineCode.match(/color, 'left'\)/g) || [])).toHaveLength(2);
+    expect(inlineCode).toContain("label.setAttribute('font-weight', '700')");
+  });
+
+  it('includes activity titles in collision-protected detail labels', () => {
+    expect(inlineCode).toContain('function wrapPbActivityTitle(title, maxCharacters = 24)');
+    expect((inlineCode.match(/title: .*\.name \|\| 'Activity'/g) || [])).toHaveLength(3);
+    expect(inlineCode).toContain("svg.appendChild(createSvgElement('rect'");
+    expect(inlineCode).toContain('const labelLayouts = records.map');
+    expect(inlineCode).toContain('labelLayouts.forEach(layout =>');
+  });
 });

@@ -28,11 +28,12 @@ function extractInlineScripts(html) {
 }
 
 describe('index.html inline script syntax', () => {
+  let html;
   let inlineCode;
 
   beforeAll(() => {
     const htmlPath = path.join(__dirname, '../index.html');
-    const html = fs.readFileSync(htmlPath, 'utf-8');
+    html = fs.readFileSync(htmlPath, 'utf-8');
     inlineCode = extractInlineScripts(html);
   });
 
@@ -52,5 +53,22 @@ describe('index.html inline script syntax', () => {
     // declarations in the same function scope.
     const matches = (inlineCode.match(/\bconst hasAny\b/g) || []);
     expect(matches.length).toBeLessThanOrEqual(1);
+  });
+
+  it('renders each PB section heading once across all sport columns', () => {
+    const panel = html.match(/<div id="vizPanelPersonalBests"[\s\S]*?<div id="pbEmptyState"/)[0];
+
+    expect((panel.match(/>Distance records</g) || [])).toHaveLength(1);
+    expect((panel.match(/>Elevation</g) || [])).toHaveLength(1);
+    expect((panel.match(/>Longest</g) || [])).toHaveLength(1);
+  });
+
+  it('shares timeline axes and current-best labels across PB tile types', () => {
+    expect((inlineCode.match(/function appendTimelineAxes\(svg\)/g) || [])).toHaveLength(1);
+    expect((inlineCode.match(/^\s*appendTimelineAxes\(svg\);/gm) || [])).toHaveLength(3);
+    expect((inlineCode.match(/function appendCurrentBest\(svg,/g) || [])).toHaveLength(1);
+    expect((inlineCode.match(/^\s*appendCurrentBest\(svg,/gm) || [])).toHaveLength(3);
+    expect(inlineCode).toContain("appendYAxisLabel(svg, X_AXIS_Y - 1, '0', false)");
+    expect(inlineCode).toContain('const firstRecordValue = records[0].value');
   });
 });

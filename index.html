@@ -859,46 +859,43 @@
               <h3 class="text-sm font-semibold text-[#EF4444] uppercase tracking-wider">Run</h3>
             </div>
 
+            <p class="col-span-full text-[10px] font-semibold uppercase tracking-wider text-slate-500">Distance records</p>
+
             <div class="space-y-2">
-              <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Distance records</p>
               <div id="pbSwimContainer" class="space-y-4"></div>
             </div>
             <div class="space-y-2">
-              <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Distance records</p>
               <div id="pbBikeContainer" class="space-y-4"></div>
             </div>
             <div class="space-y-2">
-              <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Distance records</p>
               <div id="pbRunContainer" class="space-y-4"></div>
             </div>
 
             <div class="col-span-full border-t border-dashed border-slate-600"></div>
 
+            <p class="col-span-full text-[10px] font-semibold uppercase tracking-wider text-slate-500">Elevation</p>
+
             <div class="space-y-2">
-              <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Elevation</p>
               <p class="text-xs italic text-slate-600">Not applicable for swimming.</p>
             </div>
             <div class="space-y-2">
-              <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Elevation</p>
               <div id="pbBikeElevationContainer" class="space-y-4"></div>
             </div>
             <div class="space-y-2">
-              <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Elevation</p>
               <div id="pbRunElevationContainer" class="space-y-4"></div>
             </div>
 
             <div class="col-span-full border-t border-dashed border-slate-600"></div>
 
+            <p class="col-span-full text-[10px] font-semibold uppercase tracking-wider text-slate-500">Longest</p>
+
             <div class="space-y-2">
-              <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Longest</p>
               <div id="pbSwimLongestContainer" class="space-y-4"></div>
             </div>
             <div class="space-y-2">
-              <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Longest</p>
               <div id="pbBikeLongestContainer" class="space-y-4"></div>
             </div>
             <div class="space-y-2">
-              <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Longest</p>
               <div id="pbRunLongestContainer" class="space-y-4"></div>
             </div>
           </div>
@@ -3020,6 +3017,85 @@ datasets: [{
         return PAD_L + ((t - axisStart) / axisSpan) * DRAW_W;
       }
 
+      function appendTimelineAxes(svg) {
+        const baseline = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        baseline.setAttribute('x1', PAD_L);
+        baseline.setAttribute('y1', X_AXIS_Y);
+        baseline.setAttribute('x2', VB_W - PAD_R);
+        baseline.setAttribute('y2', X_AXIS_Y);
+        baseline.setAttribute('stroke', '#1E293B');
+        baseline.setAttribute('stroke-width', '1');
+        svg.appendChild(baseline);
+
+        const yAxis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        yAxis.setAttribute('x1', PAD_L);
+        yAxis.setAttribute('y1', CHART_TOP);
+        yAxis.setAttribute('x2', PAD_L);
+        yAxis.setAttribute('y2', X_AXIS_Y);
+        yAxis.setAttribute('stroke', '#1E293B');
+        yAxis.setAttribute('stroke-width', '1');
+        svg.appendChild(yAxis);
+
+        yearTicks.forEach(function(tick) {
+          const x = tToX(tick.t);
+          const tickLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          tickLine.setAttribute('x1', x);
+          tickLine.setAttribute('y1', X_AXIS_Y);
+          tickLine.setAttribute('x2', x);
+          tickLine.setAttribute('y2', X_AXIS_Y + 3);
+          tickLine.setAttribute('stroke', '#334155');
+          tickLine.setAttribute('stroke-width', '0.8');
+          svg.appendChild(tickLine);
+
+          const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          label.setAttribute('x', x);
+          label.setAttribute('y', SVG_H - 0.5);
+          label.setAttribute('text-anchor', 'middle');
+          label.setAttribute('font-size', '8.5');
+          label.setAttribute('fill', '#CBD5E1');
+          label.setAttribute('font-family', 'ui-monospace, monospace');
+          label.textContent = tick.year;
+          svg.appendChild(label);
+        });
+      }
+
+      function appendYAxisLabel(svg, y, text, isTop) {
+        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        label.setAttribute('x', PAD_L - 2);
+        label.setAttribute('y', y);
+        label.setAttribute('text-anchor', 'end');
+        label.setAttribute('dominant-baseline', isTop ? 'hanging' : 'auto');
+        label.setAttribute('font-size', '6.8');
+        label.setAttribute('fill', isTop ? '#E2E8F0' : '#CBD5E1');
+        label.setAttribute('font-family', 'ui-monospace, monospace');
+        label.textContent = text;
+        svg.appendChild(label);
+      }
+
+      function appendCurrentBest(svg, x, y, text, color) {
+        const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        dot.setAttribute('cx', x);
+        dot.setAttribute('cy', y);
+        dot.setAttribute('r', '2.5');
+        dot.setAttribute('fill', color);
+        dot.style.pointerEvents = 'none';
+        svg.appendChild(dot);
+
+        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        const nearLeft = x < PAD_L + 42;
+        const nearRight = x > VB_W - PAD_R - 42;
+        label.setAttribute('x', nearLeft ? x + 3 : nearRight ? x - 3 : x);
+        label.setAttribute('y', Math.max(5, y - 3));
+        label.setAttribute('text-anchor', nearLeft ? 'start' : nearRight ? 'end' : 'middle');
+        label.setAttribute('font-size', '7');
+        label.setAttribute('font-weight', '600');
+        label.setAttribute('fill', color);
+        label.setAttribute('font-family', 'ui-monospace, monospace');
+        label.style.pointerEvents = 'none';
+        label.textContent = text;
+        svg.appendChild(label);
+      }
+
       // ── Shared floating tooltip ───────────────────────────────────────────────
       const tooltip  = document.getElementById('pbTooltip');
       const ttTitle  = document.getElementById('pbTooltipTitle');
@@ -3112,10 +3188,8 @@ datasets: [{
         block.className = 'bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-1.5';
         const color = PB_SPORT_COLOR[sport];
         const header = document.createElement('div');
-        header.className = 'flex items-center justify-between gap-2';
-        header.innerHTML = '<span class="text-xs font-semibold text-slate-300">' + title + '</span>' +
-          '<span class="text-[11px] font-mono text-slate-400">' +
-          (records.length ? formatValue(records[records.length - 1].value) : 'n/a') + '</span>';
+        header.className = 'flex items-center';
+        header.innerHTML = '<span class="text-xs font-semibold text-slate-300">' + title + '</span>';
         block.appendChild(header);
 
         if (records.length === 0) {
@@ -3134,25 +3208,25 @@ datasets: [{
         svg.style.overflow = 'visible';
         svg.style.display = 'block';
 
-        const baseline = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        baseline.setAttribute('x1', PAD_L);
-        baseline.setAttribute('y1', X_AXIS_Y);
-        baseline.setAttribute('x2', VB_W - PAD_R);
-        baseline.setAttribute('y2', X_AXIS_Y);
-        baseline.setAttribute('stroke', '#1E293B');
-        svg.appendChild(baseline);
+        appendTimelineAxes(svg);
 
         const maxValue = Math.max(records[records.length - 1].value, 1);
         const valueToY = value => X_AXIS_Y - (value / maxValue) * (X_AXIS_Y - CHART_TOP - 2);
-        const topLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        topLabel.setAttribute('x', PAD_L - 2);
-        topLabel.setAttribute('y', CHART_TOP + 1);
-        topLabel.setAttribute('text-anchor', 'end');
-        topLabel.setAttribute('font-size', '6.8');
-        topLabel.setAttribute('fill', '#E2E8F0');
-        topLabel.setAttribute('font-family', 'ui-monospace, monospace');
-        topLabel.textContent = formatValue(maxValue);
-        svg.appendChild(topLabel);
+        const firstRecordValue = records[0].value;
+        const firstRecordY = valueToY(firstRecordValue);
+        appendYAxisLabel(svg, firstRecordY <= CHART_TOP + 2 ? CHART_TOP + 1 : firstRecordY - 1, formatValue(firstRecordValue), firstRecordY <= CHART_TOP + 2);
+        appendYAxisLabel(svg, X_AXIS_Y - 1, '0', false);
+
+        if (records.length > 1) {
+          const firstRecordTick = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          firstRecordTick.setAttribute('x1', PAD_L - 2);
+          firstRecordTick.setAttribute('y1', firstRecordY);
+          firstRecordTick.setAttribute('x2', PAD_L + 2);
+          firstRecordTick.setAttribute('y2', firstRecordY);
+          firstRecordTick.setAttribute('stroke', '#334155');
+          firstRecordTick.setAttribute('stroke-width', '0.8');
+          svg.appendChild(firstRecordTick);
+        }
 
         const points = records.map(item => tToX(item.activity.date.getTime()).toFixed(2) + ',' + valueToY(item.value).toFixed(2)).join(' ');
         const trendLine = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
@@ -3162,9 +3236,10 @@ datasets: [{
         trendLine.setAttribute('stroke-width', '1.8');
         svg.appendChild(trendLine);
 
-        records.forEach(item => {
+        records.forEach(function(item, index) {
           const x = tToX(item.activity.date.getTime());
           const y = valueToY(item.value);
+          const isLatest = index === records.length - 1;
           const hit = document.createElementNS('http://www.w3.org/2000/svg', 'line');
           hit.setAttribute('x1', x);
           hit.setAttribute('y1', CHART_TOP);
@@ -3184,6 +3259,10 @@ datasets: [{
           line.setAttribute('opacity', '0.75');
           line.style.pointerEvents = 'none';
           svg.appendChild(line);
+
+          if (isLatest) {
+            appendCurrentBest(svg, x, y, formatValue(item.value), color);
+          }
 
           const record = item;
           hit.addEventListener('mouseenter', function(e) {
@@ -3238,14 +3317,11 @@ datasets: [{
           const block = document.createElement('div');
           block.className = 'bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-1.5';
 
-          // Header: distance label + current PB time
+          // Header: distance label
           const best   = pbs[pbs.length - 1];
           const header = document.createElement('div');
-          header.className = 'flex items-center justify-between';
-          const metricLabel = best.metricType === 'speed_bike' ? 'Current PB speed' : 'Current PB pace';
-          header.innerHTML =
-            '<span class="text-xs font-semibold text-slate-300">' + distDef.label + '</span>' +
-            '<span class="text-[11px] font-mono text-slate-400" title="' + metricLabel + ': ' + formatPerformanceValue(best.metricValue, best.metricType) + '">' + formatDurationHms(best.duration) + '</span>';
+          header.className = 'flex items-center';
+          header.innerHTML = '<span class="text-xs font-semibold text-slate-300">' + distDef.label + '</span>';
           block.appendChild(header);
 
           // SVG
@@ -3262,51 +3338,7 @@ datasets: [{
           svg.style.display  = 'block';
           svg.style.height   = 'auto';
 
-          // X-axis baseline
-          const baseline = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-          baseline.setAttribute('x1', PAD_L);
-          baseline.setAttribute('y1', X_AXIS_Y);
-          baseline.setAttribute('x2', VB_W - PAD_R);
-          baseline.setAttribute('y2', X_AXIS_Y);
-          baseline.setAttribute('stroke', '#1E293B');
-          baseline.setAttribute('stroke-width', '1');
-          svg.appendChild(baseline);
-
-          // Y-axis
-          const yAxis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-          yAxis.setAttribute('x1', PAD_L);
-          yAxis.setAttribute('y1', CHART_TOP);
-          yAxis.setAttribute('x2', PAD_L);
-          yAxis.setAttribute('y2', X_AXIS_Y);
-          yAxis.setAttribute('stroke', '#1E293B');
-          yAxis.setAttribute('stroke-width', '1');
-          svg.appendChild(yAxis);
-
-          // Year tick marks + labels
-          yearTicks.forEach(function(tick) {
-            const x        = tToX(tick.t);
-            const tickLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            tickLine.setAttribute('x1', x);
-            tickLine.setAttribute('y1', X_AXIS_Y);
-            tickLine.setAttribute('x2', x);
-            tickLine.setAttribute('y2', X_AXIS_Y + 3);
-            tickLine.setAttribute('stroke', '#334155');
-            tickLine.setAttribute('stroke-width', '0.8');
-            svg.appendChild(tickLine);
-
-            const xFrac = (tick.t - axisStart) / axisSpan;
-            if (xFrac >= 0 && xFrac <= 1) {
-              const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-              label.setAttribute('x', x);
-              label.setAttribute('y', SVG_H - 0.5);
-              label.setAttribute('text-anchor', 'middle');
-              label.setAttribute('font-size', '8.5');
-              label.setAttribute('fill', '#CBD5E1');
-              label.setAttribute('font-family', 'ui-monospace, monospace');
-              label.textContent = tick.year;
-              svg.appendChild(label);
-            }
-          });
+          appendTimelineAxes(svg);
 
           // PB line chart + vertical PB markers (Y axis = total duration)
           const durationMax = Math.max(...pbs.map(pb => pb.duration));
@@ -3319,27 +3351,8 @@ datasets: [{
           }
 
           // Y-axis labels (top = slowest PB duration, bottom fixed at zero)
-          const yTopLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          yTopLabel.setAttribute('x', PAD_L - 2);
-          yTopLabel.setAttribute('y', CHART_TOP + 1);
-          yTopLabel.setAttribute('text-anchor', 'end');
-          yTopLabel.setAttribute('dominant-baseline', 'hanging');
-          yTopLabel.setAttribute('font-size', '6.8');
-          yTopLabel.setAttribute('fill', '#E2E8F0');
-          yTopLabel.setAttribute('font-family', 'ui-monospace, monospace');
-          yTopLabel.textContent = formatDurationHms(durationMax);
-          svg.appendChild(yTopLabel);
-
-          const yBottomLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          yBottomLabel.setAttribute('x', PAD_L - 2);
-          yBottomLabel.setAttribute('y', X_AXIS_Y - 1);
-          yBottomLabel.setAttribute('text-anchor', 'end');
-          yBottomLabel.setAttribute('dominant-baseline', 'auto');
-          yBottomLabel.setAttribute('font-size', '6.8');
-          yBottomLabel.setAttribute('fill', '#CBD5E1');
-          yBottomLabel.setAttribute('font-family', 'ui-monospace, monospace');
-          yBottomLabel.textContent = '0:00';
-          svg.appendChild(yBottomLabel);
+          appendYAxisLabel(svg, CHART_TOP + 1, formatDurationHms(durationMax), true);
+          appendYAxisLabel(svg, X_AXIS_Y - 1, '0:00', false);
 
           const trendLine = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
           const points = pbs.map(function(pb) {
@@ -3386,15 +3399,8 @@ datasets: [{
             line.style.pointerEvents = 'none';
             svg.appendChild(line);
 
-            // Dot for current PB on trend line
             if (isLatest) {
-              const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-              dot.setAttribute('cx', x);
-              dot.setAttribute('cy', y1);
-              dot.setAttribute('r', '2.5');
-              dot.setAttribute('fill', color);
-              dot.style.pointerEvents = 'none';
-              svg.appendChild(dot);
+              appendCurrentBest(svg, x, y1, formatDurationHms(best.duration), color);
             }
 
             // Hover events — close over immutable copies
@@ -3443,10 +3449,8 @@ datasets: [{
             block.className = 'bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-1.5';
 
             const header = document.createElement('div');
-            header.className = 'flex items-center justify-between';
-            header.innerHTML =
-              '<span class="text-xs font-semibold text-slate-300">' + durationDef.label + '</span>' +
-              '<span class="text-[11px] font-mono text-slate-400">' + Math.round(best.watts) + ' W</span>';
+            header.className = 'flex items-center';
+            header.innerHTML = '<span class="text-xs font-semibold text-slate-300">' + durationDef.label + '</span>';
             block.appendChild(header);
 
             const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -3456,45 +3460,7 @@ datasets: [{
             svg.setAttribute('preserveAspectRatio', 'none');
             svg.style.overflow = 'visible';
 
-            const baseline = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            baseline.setAttribute('x1', PAD_L);
-            baseline.setAttribute('y1', X_AXIS_Y);
-            baseline.setAttribute('x2', VB_W - PAD_R);
-            baseline.setAttribute('y2', X_AXIS_Y);
-            baseline.setAttribute('stroke', '#1E293B');
-            baseline.setAttribute('stroke-width', '1');
-            svg.appendChild(baseline);
-
-            const yAxis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            yAxis.setAttribute('x1', PAD_L);
-            yAxis.setAttribute('y1', CHART_TOP);
-            yAxis.setAttribute('x2', PAD_L);
-            yAxis.setAttribute('y2', X_AXIS_Y);
-            yAxis.setAttribute('stroke', '#1E293B');
-            yAxis.setAttribute('stroke-width', '1');
-            svg.appendChild(yAxis);
-
-            yearTicks.forEach(function(tick) {
-              const x = tToX(tick.t);
-              const tickLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-              tickLine.setAttribute('x1', x);
-              tickLine.setAttribute('y1', X_AXIS_Y);
-              tickLine.setAttribute('x2', x);
-              tickLine.setAttribute('y2', X_AXIS_Y + 3);
-              tickLine.setAttribute('stroke', '#334155');
-              tickLine.setAttribute('stroke-width', '0.8');
-              svg.appendChild(tickLine);
-
-              const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-              label.setAttribute('x', x);
-              label.setAttribute('y', SVG_H - 0.5);
-              label.setAttribute('text-anchor', 'middle');
-              label.setAttribute('font-size', '8.5');
-              label.setAttribute('fill', '#CBD5E1');
-              label.setAttribute('font-family', 'ui-monospace, monospace');
-              label.textContent = tick.year;
-              svg.appendChild(label);
-            });
+            appendTimelineAxes(svg);
 
             const maxWatts = Math.max(...pbs.map(pb => pb.watts));
             const minWatts = Math.min(...pbs.map(pb => pb.watts));
@@ -3508,26 +3474,8 @@ datasets: [{
               return X_AXIS_Y - Math.max(0, Math.min(1, normalized)) * ySpan;
             }
 
-            const yTopLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            yTopLabel.setAttribute('x', PAD_L - 2);
-            yTopLabel.setAttribute('y', CHART_TOP + 1);
-            yTopLabel.setAttribute('text-anchor', 'end');
-            yTopLabel.setAttribute('dominant-baseline', 'hanging');
-            yTopLabel.setAttribute('font-size', '6.8');
-            yTopLabel.setAttribute('fill', '#E2E8F0');
-            yTopLabel.setAttribute('font-family', 'ui-monospace, monospace');
-            yTopLabel.textContent = Math.round(yTopWatts) + 'W';
-            svg.appendChild(yTopLabel);
-
-            const yBottomLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            yBottomLabel.setAttribute('x', PAD_L - 2);
-            yBottomLabel.setAttribute('y', X_AXIS_Y - 1);
-            yBottomLabel.setAttribute('text-anchor', 'end');
-            yBottomLabel.setAttribute('font-size', '6.8');
-            yBottomLabel.setAttribute('fill', '#CBD5E1');
-            yBottomLabel.setAttribute('font-family', 'ui-monospace, monospace');
-            yBottomLabel.textContent = Math.round(yBottomWatts) + 'W';
-            svg.appendChild(yBottomLabel);
+            appendYAxisLabel(svg, CHART_TOP + 1, Math.round(yTopWatts) + 'W', true);
+            appendYAxisLabel(svg, X_AXIS_Y - 1, Math.round(yBottomWatts) + 'W', false);
 
             const trendLine = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
             const points = pbs.map(function(pb) {
@@ -3546,6 +3494,7 @@ datasets: [{
               const x = tToX(pb.date.getTime());
               const y1 = wattsToY(pb.watts);
               const y2 = X_AXIS_Y;
+              const isLatest = i === pbs.length - 1;
               const opacity = 0.30 + 0.70 * (i / Math.max(pbs.length - 1, 1));
 
               const hit = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -3569,6 +3518,10 @@ datasets: [{
               line.setAttribute('opacity', opacity.toFixed(2));
               line.style.pointerEvents = 'none';
               svg.appendChild(line);
+
+              if (isLatest) {
+                appendCurrentBest(svg, x, y1, Math.round(best.watts) + ' W', color);
+              }
 
               const pbSnap = pb;
               const rank = i + 1;

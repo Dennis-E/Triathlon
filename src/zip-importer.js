@@ -30,25 +30,32 @@ function ensureJSZipLoaded() {
 }
 
 /**
- * Extract activities.csv from Strava ZIP export
+ * Load and parse a Strava export ZIP file with JSZip
  * @param {File} zipFile - The ZIP file from Strava export
- * @returns {Promise<string>} CSV text content
+ * @returns {Promise<Object>} Loaded JSZip instance
  */
-async function extractActivitiesCsvFromZip(zipFile) {
+async function loadZipArchive(zipFile) {
   await ensureJSZipLoaded();
 
   if (zipFile.size === 0) {
     throw new Error('ZIP file is empty');
   }
 
-  let zip;
   try {
-    zip = new JSZip();
+    const zip = new JSZip();
     await zip.loadAsync(zipFile);
+    return zip;
   } catch (err) {
     throw new Error(`Failed to read ZIP file: ${err.message}. Make sure this is a valid Strava export ZIP.`);
   }
+}
 
+/**
+ * Find and read activities.csv from an already loaded JSZip instance
+ * @param {Object} zip - Loaded JSZip instance
+ * @returns {Promise<string>} CSV text content
+ */
+async function readActivitiesCsvFromZip(zip) {
   // Look for activities.csv in the root or in common subdirectories
   let csvFile = null;
   let csvPath = null;
@@ -89,15 +96,31 @@ async function extractActivitiesCsvFromZip(zipFile) {
   throw new Error('Could not find activities.csv in ZIP file. Make sure you exported data from Strava.');
 }
 
+/**
+ * Extract activities.csv from Strava ZIP export
+ * @param {File} zipFile - The ZIP file from Strava export
+ * @returns {Promise<string>} CSV text content
+ */
+async function extractActivitiesCsvFromZip(zipFile) {
+  const zip = await loadZipArchive(zipFile);
+  return readActivitiesCsvFromZip(zip);
+}
+
 async function importStravaZip(zipFile, onProgress) {
   const reportProgress = typeof onProgress === 'function' ? onProgress : () => {};
   reportProgress({ percent: 10, stage: 'Reading activities.csv...' });
-  const csvText = await extractActivitiesCsvFromZip(zipFile);
-  reportProgress({ percent: 65, stage: 'Preparing activity data...' });
+  const zip = await loadZipArchive(zipFile);
+  const csvText = await readActivitiesCsvFromZip(zip);
+  reportProgress({ percent: 40, stage: 'Preparing activity data...' });
+
+  const activitySportById = parseActivitySportsById(csvText);
+  const gpsTracksByActivityId = await extractGpsTracksFromZip(zip, csvText, activitySportById, reportProgress);
+  reportProgress({ percent: 95, stage: 'Finalizing...' });
 
   return {
     csvText,
-    fitBestEffortsByActivityId: {}
+    fitBestEffortsByActivityId: {},
+    gpsTracksByActivityId
   };
 }
 
@@ -150,6 +173,150 @@ function parseFitFileIdToActivityId(rawCsvText) {
 
     const fitFileId = match[1];
     result.set(fitFileId, activityId);
+  }
+
+  return result;
+}
+
+/**
+ * Map GPS track filenames (activities/{id}.gpx or .fit, optionally .gz) to Strava activity IDs
+ * @param {string} rawCsvText - Raw activities.csv text (with Filename column)
+ * @returns {Map<string, {activityId: string, ext: 'gpx'|'fit'}>} filename -> activity mapping
+ */
+function parseGpsFileIdToActivityId(rawCsvText) {
+  const rows = parseCsvBasic(rawCsvText);
+  if (rows.length < 2) return new Map();
+
+  const headers = rows[0];
+  const activityIdIdx = headers.findIndex(h => h === 'Activity ID' || h === 'Aktivitäts-ID');
+  const filenameIdx = headers.findIndex(h => h === 'Filename' || h === 'Dateiname');
+  const result = new Map();
+
+  if (activityIdIdx === -1 || filenameIdx === -1) return result;
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const activityId = row[activityIdIdx] ? String(row[activityIdIdx]).trim() : '';
+    const filename = row[filenameIdx] ? String(row[filenameIdx]).trim() : '';
+    if (!activityId || !filename) continue;
+
+    const match = filename.match(/^activities\/(.+)\.(gpx|fit)(?:\.gz)?$/i);
+    if (!match) continue;
+
+    result.set(filename, { activityId, ext: match[2].toLowerCase() });
+  }
+
+  return result;
+}
+
+/**
+ * Extract latitude/longitude trackpoints from GPX XML text (regex-based, no DOMParser needed)
+ * @param {string} xmlText - GPX file content
+ * @returns {Array<{lat: number, lon: number}>}
+ */
+function extractGpxTrackpoints(xmlText) {
+  if (!xmlText) return [];
+  const points = [];
+  const pointTagPattern = /<(?:\w+:)?(?:trkpt|rtept)\b[^>]*\blat="(-?\d+(?:\.\d+)?)"[^>]*\blon="(-?\d+(?:\.\d+)?)"[^>]*\/?>/gi;
+  let match;
+  while ((match = pointTagPattern.exec(xmlText)) !== null) {
+    const lat = parseFloat(match[1]);
+    const lon = parseFloat(match[2]);
+    if (Number.isFinite(lat) && Number.isFinite(lon)) {
+      points.push({ lat, lon });
+    }
+  }
+  return points;
+}
+
+/**
+ * Extract latitude/longitude trackpoints from parsed FIT records
+ * @param {Array} fitRecords - Records returned by fit-file-parser
+ * @returns {Array<{lat: number, lon: number}>}
+ */
+function extractFitTrackpoints(fitRecords) {
+  if (!Array.isArray(fitRecords)) return [];
+  const points = [];
+  for (const rec of fitRecords) {
+    const lat = rec && Number.isFinite(rec.position_lat) ? rec.position_lat : null;
+    const lon = rec && Number.isFinite(rec.position_long) ? rec.position_long : null;
+    if (lat !== null && lon !== null) {
+      points.push({ lat, lon });
+    }
+  }
+  return points;
+}
+
+/**
+ * Reduce a track to at most maxPoints, always keeping the first and last point
+ * @param {Array} points - Track points
+ * @param {number} maxPoints - Maximum number of points to keep
+ * @returns {Array}
+ */
+function downsampleTrack(points, maxPoints = 180) {
+  if (!Array.isArray(points) || points.length <= maxPoints || maxPoints < 2) {
+    return Array.isArray(points) ? points : [];
+  }
+  const stride = (points.length - 1) / (maxPoints - 1);
+  const sampled = [];
+  for (let i = 0; i < maxPoints; i++) {
+    sampled.push(points[Math.round(i * stride)]);
+  }
+  return sampled;
+}
+
+/**
+ * Extract GPS tracks for every matching activity file found in the ZIP archive
+ * @param {Object} zip - Loaded JSZip instance
+ * @param {string} rawCsvText - Raw activities.csv text (with Filename column)
+ * @param {Map<string, string>} activitySportById - activityId -> sport (Run/Bike/Swim)
+ * @param {Function} [reportProgress] - Optional progress callback ({percent, stage})
+ * @returns {Promise<Object>} { [activityId]: { sport, points: [[lat, lon], ...] } }
+ */
+async function extractGpsTracksFromZip(zip, rawCsvText, activitySportById, reportProgress) {
+  const notify = typeof reportProgress === 'function' ? reportProgress : () => {};
+  const fileIdMap = parseGpsFileIdToActivityId(rawCsvText);
+  const entries = Array.from(fileIdMap.entries()).filter(([filename]) => zip.files[filename] && !zip.files[filename].dir);
+
+  const result = {};
+  let processed = 0;
+
+  for (const [filename, { activityId, ext }] of entries) {
+    processed++;
+    if (entries.length > 0) {
+      const percent = 40 + Math.round((processed / entries.length) * 50);
+      notify({ percent, stage: `Extracting GPS tracks (${processed}/${entries.length})...` });
+    }
+
+    try {
+      const isGzipped = /\.gz$/i.test(filename);
+      let points;
+
+      if (ext === 'gpx') {
+        const text = isGzipped
+          ? new TextDecoder('utf-8').decode(await gunzipUint8Array(await zip.files[filename].async('uint8array')))
+          : await zip.files[filename].async('string');
+        points = extractGpxTrackpoints(text);
+      } else {
+        const bytes = isGzipped
+          ? await gunzipUint8Array(await zip.files[filename].async('uint8array'))
+          : await zip.files[filename].async('uint8array');
+        const FitParserCtor = await ensureFitParserLoaded();
+        const records = await parseFitRecords(FitParserCtor, bytes);
+        points = extractFitTrackpoints(records);
+      }
+
+      if (!points.length) continue;
+
+      const sampled = downsampleTrack(points, 180);
+      result[activityId] = {
+        sport: (activitySportById && activitySportById.get(activityId)) || null,
+        points: sampled.map(p => [p.lat, p.lon])
+      };
+    } catch (err) {
+      // Skip activities whose GPS file can't be read/parsed; the rest of the import should still succeed
+      continue;
+    }
   }
 
   return result;
@@ -358,6 +525,11 @@ if (typeof module !== 'undefined' && module.exports) {
     importStravaZip,
     parseCsvBasic,
     serializeCsvBasic,
-    extractRelevantColumns
+    extractRelevantColumns,
+    parseGpsFileIdToActivityId,
+    extractGpxTrackpoints,
+    extractFitTrackpoints,
+    downsampleTrack,
+    extractGpsTracksFromZip
   };
 }

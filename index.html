@@ -19,6 +19,7 @@
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.344.0/dist/umd/lucide.min.js"></script>
   <!-- ZIP Importer Utility -->
   <script src="./src/zip-importer.js"></script>
+  <script src="./src/heatmap-utils.js"></script>
   <script src="./src/analysis-counter.js"></script>
   <style>
     /* Custom scrollbar for modern feel */
@@ -593,6 +594,19 @@
           >
             Personal Bests
           </button>
+          <button
+            id="vizTabHeatmap"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="vizPanelHeatmap"
+            tabindex="-1"
+            onclick="setVisualizationTab('heatmap')"
+            onkeydown="handleVisualizationTabKeydown(event, 'heatmap')"
+            class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
+          >
+            Heatmap
+          </button>
         </div>
       </div>
       
@@ -908,6 +922,31 @@
         </div>
       </div>
 
+      <div id="vizPanelHeatmap" role="tabpanel" aria-labelledby="vizTabHeatmap" class="hidden">
+        <div class="space-y-5">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+            <div class="space-y-1">
+              <h2 class="text-2xl font-bold tracking-tight">GPS Heatmap</h2>
+              <p class="text-xs text-slate-400">Where you trained — built from the GPS tracks in your Strava export</p>
+            </div>
+
+            <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+              <button onclick="setHeatmapSportFilter('All')" id="heatmapSportBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">All Sports</button>
+              <button onclick="setHeatmapSportFilter('Run')" id="heatmapSportBtnRun" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Run</button>
+              <button onclick="setHeatmapSportFilter('Bike')" id="heatmapSportBtnBike" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Bike</button>
+              <button onclick="setHeatmapSportFilter('Swim')" id="heatmapSportBtnSwim" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Swim</button>
+            </div>
+          </div>
+
+          <div class="relative w-full h-[480px]">
+            <div id="heatmapMapContainer" class="w-full h-full rounded-xl overflow-hidden"></div>
+            <div id="heatmapEmptyState" class="hidden absolute inset-0 flex items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/80 px-6 text-center text-sm text-slate-400">
+              No GPS data found in the imported activities.
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
 
   </main>
@@ -958,6 +997,7 @@
     let rawCsvData = [];
     let processedActivities = [];
     let fitBestEffortsByActivityId = {};
+    let gpsTracksByActivityId = {};
     let importedDataset = null;
     let selectedSportFilter = 'All'; // 'All', 'Run', 'Bike', 'Swim'
     let selectedAggregationLevel = 'weekly'; // 'daily', 'weekly', 'monthly', 'yearly'
@@ -975,6 +1015,10 @@
      let enabledScatterTrendYears = null;
      let enabledScatterDataYears = null;
      let scatterShowTrendLines = true;
+     let selectedHeatmapSportFilter = 'All';
+     let heatmapMapInstance = null;
+     let heatmapLayerInstance = null;
+     let leafletLoadPromise = null;
     let selectedTimeframeByAggregation = {
       daily: '3m',
       weekly: '1y',
@@ -1187,7 +1231,8 @@
         sourceLabel,
         rawCsvData: csvRows,
         activities,
-        fitBestEffortsByActivityId: {}
+        fitBestEffortsByActivityId: {},
+        gpsTracksByActivityId: {}
       };
     }
 
@@ -1196,6 +1241,7 @@
       rawCsvData = dataset.rawCsvData;
       processedActivities = dataset.activities;
       fitBestEffortsByActivityId = dataset.fitBestEffortsByActivityId || {};
+      gpsTracksByActivityId = dataset.gpsTracksByActivityId || {};
 
       updateStatusBadge('success', `Loaded ${processedActivities.length} activities`);
 
@@ -1282,6 +1328,9 @@
               const dataset = createImportedDataset(results.data, options.sourceLabel || 'Imported data');
               if (options.fitBestEffortsByActivityId && typeof options.fitBestEffortsByActivityId === 'object') {
                 dataset.fitBestEffortsByActivityId = options.fitBestEffortsByActivityId;
+              }
+              if (options.gpsTracksByActivityId && typeof options.gpsTracksByActivityId === 'object') {
+                dataset.gpsTracksByActivityId = options.gpsTracksByActivityId;
               }
               applyImportedDataset(dataset, options);
               resolve(dataset);
@@ -2102,6 +2151,103 @@ datasets: [{
       selectedScatterSportFilter = sport;
       setScatterSportBtnActive(`scatterSportBtn${sport}`);
       renderHeartratePaceChart();
+    }
+
+    // Lazy-load Leaflet + leaflet.heat only when the heatmap tab is first opened
+    function ensureLeafletLoaded() {
+      if (leafletLoadPromise) return leafletLoadPromise;
+
+      leafletLoadPromise = new Promise((resolve, reject) => {
+        if (typeof L !== 'undefined' && L.heatLayer) {
+          resolve();
+          return;
+        }
+
+        const cssLink = document.createElement('link');
+        cssLink.rel = 'stylesheet';
+        cssLink.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        document.head.appendChild(cssLink);
+
+        const leafletScript = document.createElement('script');
+        leafletScript.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        leafletScript.onload = () => {
+          const heatScript = document.createElement('script');
+          heatScript.src = 'https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js';
+          heatScript.onload = resolve;
+          heatScript.onerror = () => reject(new Error('Failed to load leaflet.heat library'));
+          document.head.appendChild(heatScript);
+        };
+        leafletScript.onerror = () => reject(new Error('Failed to load Leaflet library'));
+        document.head.appendChild(leafletScript);
+      });
+
+      return leafletLoadPromise;
+    }
+
+    function setHeatmapSportBtnActive(btnId) {
+      document.querySelectorAll('[id^="heatmapSportBtn"]').forEach(btn => {
+        btn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200';
+      });
+      const btn = document.getElementById(btnId);
+      if (btn) {
+        btn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25';
+      }
+    }
+
+    function setHeatmapSportFilter(sport) {
+      selectedHeatmapSportFilter = sport;
+      setHeatmapSportBtnActive(`heatmapSportBtn${sport}`);
+      renderHeatmap();
+    }
+
+    async function renderHeatmap() {
+      const container = document.getElementById('heatmapMapContainer');
+      const emptyState = document.getElementById('heatmapEmptyState');
+      if (!container) return;
+
+      const points = window.heatmapUtils.buildHeatmapPoints(gpsTracksByActivityId, { sportFilter: selectedHeatmapSportFilter });
+
+      if (points.length === 0) {
+        container.classList.add('hidden');
+        if (emptyState) emptyState.classList.remove('hidden');
+        return;
+      }
+
+      container.classList.remove('hidden');
+      if (emptyState) emptyState.classList.add('hidden');
+
+      try {
+        await ensureLeafletLoaded();
+      } catch (err) {
+        console.error('Could not load map library', err);
+        container.classList.add('hidden');
+        if (emptyState) {
+          emptyState.textContent = 'Could not load the map library. Check your internet connection and try again.';
+          emptyState.classList.remove('hidden');
+        }
+        return;
+      }
+
+      if (!heatmapMapInstance) {
+        heatmapMapInstance = L.map(container);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          maxZoom: 19
+        }).addTo(heatmapMapInstance);
+      }
+
+      if (heatmapLayerInstance) {
+        heatmapMapInstance.removeLayer(heatmapLayerInstance);
+      }
+      heatmapLayerInstance = L.heatLayer(points, { radius: 6, blur: 8, maxZoom: 17 }).addTo(heatmapMapInstance);
+
+      const bounds = window.heatmapUtils.computeHeatmapBounds(points);
+      if (bounds) {
+        heatmapMapInstance.fitBounds(bounds, { padding: [20, 20] });
+      }
+
+      // Leaflet needs a resize nudge after becoming visible inside a previously hidden tab panel
+      setTimeout(() => heatmapMapInstance.invalidateSize(), 0);
     }
 
      function setScatterDataYearEnabled(year, enabled) {
@@ -3926,6 +4072,8 @@ datasets: [{
           renderEquipmentTimeline();
         } else if (nextTab === 'personalBests') {
           renderPbChart();
+        } else if (nextTab === 'heatmap') {
+          renderHeatmap();
         }
       }
     }
@@ -4008,6 +4156,7 @@ datasets: [{
         tabName === 'heartratePace' ? 'vizTabHeartratePace' :
         tabName === 'equipment' ? 'vizTabEquipment' :
         tabName === 'equipmentTimeline' ? 'vizTabEquipmentTimeline' :
+        tabName === 'heatmap' ? 'vizTabHeatmap' :
         'vizTabPersonalBests'
       );
       if (tabButton) tabButton.focus();
@@ -4040,7 +4189,8 @@ datasets: [{
           await importCsvText(importResult.csvText, {
             sourceLabel: 'Strava ZIP import',
             openDashboard: true,
-            fitBestEffortsByActivityId: importResult.fitBestEffortsByActivityId || {}
+            fitBestEffortsByActivityId: importResult.fitBestEffortsByActivityId || {},
+            gpsTracksByActivityId: importResult.gpsTracksByActivityId || {}
           });
           recordCompletedAnalysis();
 

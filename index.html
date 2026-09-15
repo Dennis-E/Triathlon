@@ -504,6 +504,33 @@
         </div>
       </button>
 
+      <!-- Card: Heatmap -->
+      <button
+        type="button"
+        onclick="openDashboardTab('heatmap')"
+        class="group overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 text-left transition-all duration-200 hover:border-indigo-500/60 hover:shadow-xl hover:shadow-indigo-500/10 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      >
+        <div class="relative h-44 overflow-hidden border-b border-slate-800 bg-slate-950 p-4">
+          <div class="absolute left-3 top-3 z-10 rounded-full border border-indigo-400/30 bg-slate-950/85 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-200">Preview</div>
+          <div class="absolute inset-0 bg-gradient-to-b from-white/5 via-transparent to-transparent"></div>
+          <div class="relative z-10 flex h-full flex-col">
+            <div class="flex items-center gap-1 pl-16 pt-7">
+              <span class="rounded px-2 py-0.5 text-[9px] font-medium text-slate-600">Total distance</span>
+              <span class="rounded px-2 py-0.5 text-[9px] font-medium text-slate-600">Heartrate</span>
+              <span class="rounded bg-indigo-600 px-2 py-0.5 text-[9px] font-medium text-white">Heatmap</span>
+            </div>
+            <!-- Real OpenStreetMap preview (Leaflet, non-interactive) with simulated heat blobs -->
+            <div class="relative mt-3 flex-1 overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
+              <div id="heatmapPreviewMap" class="absolute inset-0 h-full w-full pointer-events-none"></div>
+            </div>
+          </div>
+        </div>
+        <div class="p-4 space-y-0.5">
+          <h3 class="font-semibold text-sm transition-colors group-hover:text-indigo-300">Heatmap</h3>
+          <p class="text-xs text-slate-500">Where you trained — GPS heatmap from your activities</p>
+        </div>
+      </button>
+
     </div>
 
     <!-- Enter Dashboard button -->
@@ -992,6 +1019,8 @@
   <script>
     // Lucide Icons init
     lucide.createIcons();
+    // Deferred so all `let` state declarations below (e.g. leafletLoadPromise) have run first
+    setTimeout(renderHeatmapPreviewMap, 0);
 
     // Configuration / State
     let rawCsvData = [];
@@ -2248,6 +2277,66 @@ datasets: [{
 
       // Leaflet needs a resize nudge after becoming visible inside a previously hidden tab panel
       setTimeout(() => heatmapMapInstance.invalidateSize(), 0);
+    }
+
+    // Handful of jittered demo points around cities with typical training activity, used only for the landing-page preview card
+    function buildDemoHeatmapPoints() {
+      const points = [];
+      const addCluster = (lat, lon, count, spread, weight = 1) => {
+        for (let i = 0; i < count; i++) {
+          points.push([lat + (Math.random() - 0.5) * spread, lon + (Math.random() - 0.5) * spread, weight]);
+        }
+      };
+
+      addCluster(40.71, -74.00, 12, 3, 1);    // East Coast US (New York)
+      addCluster(42.36, -71.06, 6, 2, 1);     // Boston
+      addCluster(38.90, -77.03, 6, 2, 1);     // Washington DC
+      addCluster(51.51, -0.13, 14, 1.2, 1);   // London
+      addCluster(52.52, 13.41, 14, 1.2, 1);   // Berlin
+      addCluster(40.42, -3.70, 40, 2.5, 1.4); // Madrid - dense cluster
+
+      return points;
+    }
+
+    async function renderHeatmapPreviewMap() {
+      const container = document.getElementById('heatmapPreviewMap');
+      if (!container) return;
+
+      try {
+        await ensureLeafletLoaded();
+      } catch (err) {
+        console.error('Could not load map library for heatmap preview', err);
+        return;
+      }
+
+      const previewMap = L.map(container, {
+        zoomControl: false,
+        attributionControl: false,
+        dragging: false,
+        touchZoom: false,
+        scrollWheelZoom: false,
+        doubleClickZoom: false,
+        boxZoom: false,
+        keyboard: false,
+        tap: false,
+        zoomSnap: 0.1
+      }).setView([42, -34], 2.1);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19
+      }).addTo(previewMap);
+
+      const demoPoints = buildDemoHeatmapPoints();
+      L.heatLayer(demoPoints, { radius: 11, blur: 14, maxZoom: 6 }).addTo(previewMap);
+
+      // Fit to the demo points so the preview looks right at any card width (from single-column mobile to 5-column 2xl)
+      const demoBounds = window.heatmapUtils.computeHeatmapBounds(demoPoints);
+      const fitToDemoBounds = () => {
+        previewMap.invalidateSize();
+        if (demoBounds) previewMap.fitBounds(demoBounds, { padding: [16, 16] });
+      };
+      setTimeout(fitToDemoBounds, 0);
+      window.addEventListener('resize', fitToDemoBounds);
     }
 
      function setScatterDataYearEnabled(year, enabled) {

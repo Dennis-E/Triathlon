@@ -2182,12 +2182,13 @@ datasets: [{
       renderHeartratePaceChart();
     }
 
-    // Lazy-load Leaflet + leaflet.heat only when the heatmap tab is first opened
+    // Lazy-load Leaflet only when the heatmap tab is first opened. Route lines are
+    // drawn with vanilla Leaflet polylines, so no heat-plugin dependency is needed.
     function ensureLeafletLoaded() {
       if (leafletLoadPromise) return leafletLoadPromise;
 
       leafletLoadPromise = new Promise((resolve, reject) => {
-        if (typeof L !== 'undefined' && L.heatLayer) {
+        if (typeof L !== 'undefined' && L.polyline) {
           resolve();
           return;
         }
@@ -2199,19 +2200,16 @@ datasets: [{
 
         const leafletScript = document.createElement('script');
         leafletScript.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-        leafletScript.onload = () => {
-          const heatScript = document.createElement('script');
-          heatScript.src = 'https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js';
-          heatScript.onload = resolve;
-          heatScript.onerror = () => reject(new Error('Failed to load leaflet.heat library'));
-          document.head.appendChild(heatScript);
-        };
+        leafletScript.onload = resolve;
         leafletScript.onerror = () => reject(new Error('Failed to load Leaflet library'));
         document.head.appendChild(leafletScript);
       });
 
       return leafletLoadPromise;
     }
+
+    // Shared route-line color, tuned for contrast against standard OSM tiles (FR-004).
+    const ROUTE_LINE_COLOR = '#F97316';
 
     function setHeatmapSportBtnActive(btnId) {
       document.querySelectorAll('[id^="heatmapSportBtn"]').forEach(btn => {
@@ -2234,9 +2232,18 @@ datasets: [{
       const emptyState = document.getElementById('heatmapEmptyState');
       if (!container) return;
 
-      const points = window.heatmapUtils.buildHeatmapPoints(gpsTracksByActivityId, { sportFilter: selectedHeatmapSportFilter });
+      const hasData = window.heatmapUtils.hasGpsData(gpsTracksByActivityId);
 
-      if (points.length === 0) {
+      if (!hasData) {
+        container.classList.add('hidden');
+        if (emptyState) emptyState.classList.remove('hidden');
+        return;
+      }
+
+      const segments = window.heatmapUtils.buildRouteSegments(gpsTracksByActivityId, { sportFilter: selectedHeatmapSportFilter });
+      const segmentList = Object.values(segments);
+
+      if (segmentList.length === 0) {
         container.classList.add('hidden');
         if (emptyState) emptyState.classList.remove('hidden');
         return;
@@ -2258,19 +2265,32 @@ datasets: [{
       }
 
       if (!heatmapMapInstance) {
-        heatmapMapInstance = L.map(container);
+        heatmapMapInstance = L.map(container, { renderer: L.canvas({ padding: 0.5 }) });
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
           maxZoom: 19
         }).addTo(heatmapMapInstance);
       }
 
+      // Re-render as a fresh layer group each time so switching the sport filter never
+      // leaves stale routes from a previously selected sport on the map (FR-006/SC-004).
       if (heatmapLayerInstance) {
         heatmapMapInstance.removeLayer(heatmapLayerInstance);
       }
-      heatmapLayerInstance = L.heatLayer(points, { radius: 6, blur: 8, maxZoom: 17 }).addTo(heatmapMapInstance);
+      heatmapLayerInstance = L.layerGroup();
+      segmentList.forEach(segment => {
+        const style = window.heatmapUtils.computeRouteSegmentStyle(segment.count);
+        L.polyline(segment.coords, {
+          renderer: heatmapMapInstance.options.renderer,
+          color: ROUTE_LINE_COLOR,
+          weight: style.weight,
+          opacity: style.opacity,
+          lineCap: 'round'
+        }).addTo(heatmapLayerInstance);
+      });
+      heatmapLayerInstance.addTo(heatmapMapInstance);
 
-      const bounds = window.heatmapUtils.computeHeatmapBounds(points);
+      const bounds = window.heatmapUtils.computeRouteSegmentBounds(segments);
       if (bounds) {
         heatmapMapInstance.fitBounds(bounds, { padding: [20, 20] });
       }
@@ -2279,23 +2299,38 @@ datasets: [{
       setTimeout(() => heatmapMapInstance.invalidateSize(), 0);
     }
 
-    // Handful of jittered demo points around cities with typical training activity, used only for the landing-page preview card
-    function buildDemoHeatmapPoints() {
-      const points = [];
-      const addCluster = (lat, lon, count, spread, weight = 1) => {
-        for (let i = 0; i < count; i++) {
-          points.push([lat + (Math.random() - 0.5) * spread, lon + (Math.random() - 0.5) * spread, weight]);
+    // Synthetic demo route segments around cities with typical training activity, used only
+    // for the landing-page preview card - mirrors the real map's route-line + frequency
+    // styling (research.md Decision 4) instead of the old heat-blob preview.
+    function buildDemoRouteSegments() {
+      const segments = [];
+      let segmentId = 0;
+
+      const addRadialLines = (lat, lon, lineCount, spread, maxCount) => {
+        for (let i = 0; i < lineCount; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const length = spread * (0.4 + Math.random() * 0.6);
+          const endLat = lat + Math.sin(angle) * length;
+          const endLon = lon + Math.cos(angle) * length;
+          // First line per cluster is always a single visit, so the preview always shows
+          // at least one clearly-thin-but-visible line alongside the busier ones.
+          const count = i === 0 ? 1 : Math.max(1, Math.round(Math.random() * maxCount));
+          segments.push({ key: `demo-${segmentId++}`, coords: [[lat, lon], [endLat, endLon]], count });
         }
       };
 
-      addCluster(40.71, -74.00, 12, 3, 1);    // East Coast US (New York)
-      addCluster(42.36, -71.06, 6, 2, 1);     // Boston
-      addCluster(38.90, -77.03, 6, 2, 1);     // Washington DC
-      addCluster(51.51, -0.13, 14, 1.2, 1);   // London
-      addCluster(52.52, 13.41, 14, 1.2, 1);   // Berlin
-      addCluster(40.42, -3.70, 40, 2.5, 1.4); // Madrid - dense cluster
+      addRadialLines(40.71, -74.00, 10, 2.2, 30); // New York
+      addRadialLines(42.36, -71.06, 5, 1.6, 15);   // Boston
+      addRadialLines(38.90, -77.03, 5, 1.6, 15);   // Washington DC
+      addRadialLines(51.51, -0.13, 8, 1.0, 25);    // London
+      addRadialLines(52.52, 13.41, 8, 1.0, 25);    // Berlin
+      addRadialLines(40.42, -3.70, 12, 1.8, 40);   // Madrid - dense cluster
 
-      return points;
+      // A single distant one-off activity (e.g. a marathon abroad), always a single visit -
+      // this is what stays visible at world zoom per User Story 3 / SC-002.
+      segments.push({ key: 'demo-distant-1', coords: [[35.68, 139.69], [35.66, 139.75]], count: 1 }); // Tokyo
+
+      return segments;
     }
 
     async function renderHeatmapPreviewMap() {
@@ -2310,6 +2345,7 @@ datasets: [{
       }
 
       const previewMap = L.map(container, {
+        renderer: L.canvas({ padding: 0.5 }),
         zoomControl: false,
         attributionControl: false,
         dragging: false,
@@ -2326,11 +2362,20 @@ datasets: [{
         maxZoom: 19
       }).addTo(previewMap);
 
-      const demoPoints = buildDemoHeatmapPoints();
-      L.heatLayer(demoPoints, { radius: 11, blur: 14, maxZoom: 6 }).addTo(previewMap);
+      const demoSegments = buildDemoRouteSegments();
+      demoSegments.forEach(segment => {
+        const style = window.heatmapUtils.computeRouteSegmentStyle(segment.count);
+        L.polyline(segment.coords, {
+          renderer: previewMap.options.renderer,
+          color: ROUTE_LINE_COLOR,
+          weight: style.weight,
+          opacity: style.opacity,
+          lineCap: 'round'
+        }).addTo(previewMap);
+      });
 
-      // Fit to the demo points so the preview looks right at any card width (from single-column mobile to 5-column 2xl)
-      const demoBounds = window.heatmapUtils.computeHeatmapBounds(demoPoints);
+      // Fit to the demo segments so the preview looks right at any card width (from single-column mobile to 5-column 2xl)
+      const demoBounds = window.heatmapUtils.computeRouteSegmentBounds(demoSegments);
       const fitToDemoBounds = () => {
         previewMap.invalidateSize();
         if (demoBounds) previewMap.fitBounds(demoBounds, { padding: [16, 16] });

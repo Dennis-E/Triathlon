@@ -166,13 +166,156 @@ function computeRouteSegmentStyle(count, options = {}) {
   return { weight, opacity };
 }
 
+/* ------------------------------------------------------------------------
+ * Rendering Performance Helpers
+ * Pure, DOM-free helpers used by the route-line heatmap's canvas rendering
+ * (specs/002-heatmap-performance-scale) to keep pan/zoom smooth at scale:
+ * viewport culling, low-zoom aggregation, and minimum-visible-length.
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Does a route segment's bounding box intersect a (padded) viewport?
+ * @param {{coords: [[number, number], [number, number]]}} segment
+ * @param {[[number, number], [number, number]]} viewportBounds - [[minLat, minLon], [maxLat, maxLon]]
+ * @param {number} [paddingDegrees] - widens the viewport bounds on all sides before testing
+ * @returns {boolean}
+ */
+function segmentIntersectsBounds(segment, viewportBounds, paddingDegrees = 0) {
+  if (!segment || !Array.isArray(segment.coords) || !Array.isArray(viewportBounds) || viewportBounds.length !== 2) {
+    return false;
+  }
+  const [[vMinLat, vMinLon], [vMaxLat, vMaxLon]] = viewportBounds;
+  if (![vMinLat, vMinLon, vMaxLat, vMaxLon].every(Number.isFinite)) return false;
+
+  const minLat = vMinLat - paddingDegrees;
+  const maxLat = vMaxLat + paddingDegrees;
+  const minLon = vMinLon - paddingDegrees;
+  const maxLon = vMaxLon + paddingDegrees;
+
+  let segMinLat = Infinity;
+  let segMaxLat = -Infinity;
+  let segMinLon = Infinity;
+  let segMaxLon = -Infinity;
+  for (const point of segment.coords) {
+    if (!Array.isArray(point)) continue;
+    const [lat, lon] = point;
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    if (lat < segMinLat) segMinLat = lat;
+    if (lat > segMaxLat) segMaxLat = lat;
+    if (lon < segMinLon) segMinLon = lon;
+    if (lon > segMaxLon) segMaxLon = lon;
+  }
+  if (segMinLat === Infinity) return false;
+
+  return segMinLat <= maxLat && segMaxLat >= minLat && segMinLon <= maxLon && segMaxLon >= minLon;
+}
+
+// Coarser grid size used only for low-zoom rendering aggregation - larger than the
+// 15m ROUTE_GRID_CELL_METERS used for real segment identity, so many nearby
+// full-detail segments collapse into a single drawn stroke when zoomed out far
+// enough that the difference wouldn't be visible anyway.
+const LOW_ZOOM_DEFAULT_CELL_METERS = 300;
+
+function snapToGridCellWithSize(lat, lon, cellMeters) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const latStepDeg = (cellMeters / EARTH_RADIUS_METERS) * (180 / Math.PI);
+  const lonScale = Math.max(Math.cos((lat * Math.PI) / 180), 1e-6);
+  const lonStepDeg = latStepDeg / lonScale;
+  const latCell = Math.round(lat / latStepDeg);
+  const lonCell = Math.round(lon / lonStepDeg);
+  return `${latCell}:${lonCell}`;
+}
+
+/**
+ * Aggregate route segments onto a coarser grid for low-zoom rendering only.
+ * Purely a rendering-time simplification: does not mutate `segments` and does
+ * not alter the underlying per-segment visit-frequency counts (spec FR-004) -
+ * it only sums them into coarser buckets for display at low zoom.
+ * @param {Object|Array} segments - buildRouteSegments() output (map or array)
+ * @param {{cellMeters?: number}} [options]
+ * @returns {Object<string, {key: string, coords: [[number, number], [number, number]], count: number}>}
+ */
+function buildLowZoomRouteSegments(segments, options = {}) {
+  const cellMeters = Number.isFinite(options.cellMeters) && options.cellMeters > 0
+    ? options.cellMeters
+    : LOW_ZOOM_DEFAULT_CELL_METERS;
+  const aggregated = {};
+  const segmentList = Array.isArray(segments)
+    ? segments
+    : (segments && typeof segments === 'object' ? Object.values(segments) : []);
+
+  for (const segment of segmentList) {
+    if (!segment || !Array.isArray(segment.coords) || segment.coords.length < 2) continue;
+    const [pointA, pointB] = segment.coords;
+    if (!Array.isArray(pointA) || !Array.isArray(pointB)) continue;
+    const [latA, lonA] = pointA;
+    const [latB, lonB] = pointB;
+    if (!Number.isFinite(latA) || !Number.isFinite(lonA) || !Number.isFinite(latB) || !Number.isFinite(lonB)) continue;
+
+    const cellA = snapToGridCellWithSize(latA, lonA, cellMeters);
+    const cellB = snapToGridCellWithSize(latB, lonB, cellMeters);
+    if (!cellA || !cellB) continue;
+
+    const key = cellA === cellB ? cellA : [cellA, cellB].sort().join('|');
+    const count = Number.isFinite(segment.count) ? segment.count : 0;
+
+    if (!aggregated[key]) {
+      aggregated[key] = { key, coords: [[latA, lonA], [latB, lonB]], count: 0 };
+    }
+    aggregated[key].count += count;
+  }
+
+  return aggregated;
+}
+
+/**
+ * Given two projected pixel points for a segment, return adjusted pixel points
+ * guaranteed to be at least `minLengthPx` apart, so an isolated/short segment is
+ * never drawn fully invisible (spec FR-003, "distant single activity stays
+ * visible"). Extends symmetrically from the segment's midpoint along its
+ * original direction; for a degenerate (zero-length) segment, draws a fixed
+ * horizontal dash of `minLengthPx` centered on that point.
+ * @param {[number, number]} p1 - [x, y] pixel point
+ * @param {[number, number]} p2 - [x, y] pixel point
+ * @param {{minLengthPx?: number}} [options]
+ * @returns {[[number, number], [number, number]]}
+ */
+function extendSegmentToMinLength(p1, p2, options = {}) {
+  const minLengthPx = Number.isFinite(options.minLengthPx) && options.minLengthPx > 0 ? options.minLengthPx : 1.5;
+  if (!Array.isArray(p1) || !Array.isArray(p2) || p1.length < 2 || p2.length < 2) return [p1, p2];
+
+  const [x1, y1] = p1;
+  const [x2, y2] = p2;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const length = Math.sqrt(dx * dx + dy * dy);
+
+  if (length >= minLengthPx) return [p1, p2];
+
+  const midX = (x1 + x2) / 2;
+  const midY = (y1 + y2) / 2;
+
+  if (length < 1e-6) {
+    const half = minLengthPx / 2;
+    return [[midX - half, midY], [midX + half, midY]];
+  }
+
+  const scale = (minLengthPx / length) / 2;
+  const newDx = dx * scale;
+  const newDy = dy * scale;
+  return [[midX - newDx, midY - newDy], [midX + newDx, midY + newDy]];
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     hasGpsData,
     snapToGridCell,
     buildRouteSegments,
     computeRouteSegmentBounds,
-    computeRouteSegmentStyle
+    computeRouteSegmentStyle,
+    segmentIntersectsBounds,
+    buildLowZoomRouteSegments,
+    extendSegmentToMinLength
   };
 }
 
@@ -182,6 +325,9 @@ if (typeof window !== 'undefined') {
     snapToGridCell,
     buildRouteSegments,
     computeRouteSegmentBounds,
-    computeRouteSegmentStyle
+    computeRouteSegmentStyle,
+    segmentIntersectsBounds,
+    buildLowZoomRouteSegments,
+    extendSegmentToMinLength
   };
 }

@@ -1046,7 +1046,7 @@
      let scatterShowTrendLines = true;
      let selectedHeatmapSportFilter = 'All';
      let heatmapMapInstance = null;
-     let heatmapLayerInstance = null;
+     let routeCanvasLayerInstance = null;
      let leafletLoadPromise = null;
     let selectedTimeframeByAggregation = {
       daily: '3m',
@@ -2211,6 +2211,117 @@ datasets: [{
     // Shared route-line color, tuned for contrast against standard OSM tiles (FR-004).
     const ROUTE_LINE_COLOR = '#F97316';
 
+    // Lazily define the custom canvas-based route layer once Leaflet (L) is loaded.
+    // Replaces one-L.polyline-per-segment rendering (specs/001-route-line-heatmap) with a
+    // single <canvas> that redraws only on moveend/zoomend, avoiding the per-object
+    // bookkeeping cost that made pan/zoom janky at scale (specs/002-heatmap-performance-scale).
+    let RouteCanvasLayerClass = null;
+    function ensureRouteCanvasLayerClass() {
+      if (RouteCanvasLayerClass) return RouteCanvasLayerClass;
+
+      RouteCanvasLayerClass = L.Layer.extend({
+        initialize: function (options) {
+          L.Util.setOptions(this, options || {});
+          this._segments = [];
+          this._lowZoomSegments = null;
+        },
+
+        onAdd: function (map) {
+          this._map = map;
+          this._canvas = L.DomUtil.create('canvas', 'leaflet-zoom-animated');
+          this._canvas.style.position = 'absolute';
+          map.getPanes().overlayPane.appendChild(this._canvas);
+          map.on('moveend zoomend resize', this._reset, this);
+          this._reset();
+        },
+
+        onRemove: function (map) {
+          L.DomUtil.remove(this._canvas);
+          map.off('moveend zoomend resize', this._reset, this);
+        },
+
+        // Replace the segments this layer draws (called on every renderHeatmap(), e.g.
+        // after a sport-filter change) and force a fresh redraw (FR-006/SC-004 from
+        // specs/001-route-line-heatmap: no stale routes left visible).
+        setSegments: function (segments) {
+          this._segments = Object.values(segments || {});
+          this._lowZoomSegments = null;
+          if (this._map) this._reset();
+          return this;
+        },
+
+        _reset: function () {
+          if (!this._map) return;
+          const map = this._map;
+          const size = map.getSize();
+          const topLeft = map.containerPointToLayerPoint([0, 0]);
+          L.DomUtil.setPosition(this._canvas, topLeft);
+          this._canvas.width = size.x;
+          this._canvas.height = size.y;
+          this._origin = topLeft;
+          this._draw();
+        },
+
+        _draw: function () {
+          const map = this._map;
+          const ctx = this._canvas.getContext('2d');
+          ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
+          if (!this._segments.length) return;
+
+          const zoom = map.getZoom();
+          const mapBounds = map.getBounds();
+          const viewportBounds = [
+            [mapBounds.getSouth(), mapBounds.getWest()],
+            [mapBounds.getNorth(), mapBounds.getEast()]
+          ];
+          // Pad by 25% of the viewport height so segments don't visibly pop in/out at
+          // the edge while panning between moveend events.
+          const paddingDegrees = (mapBounds.getNorth() - mapBounds.getSouth()) * 0.25;
+
+          // Below this zoom, use the coarser buildLowZoomRouteSegments() aggregate
+          // (research.md Decision 4) instead of full per-15m-cell detail.
+          const lowZoomThreshold = this.options.lowZoomThresholdZoom || 10;
+          let segmentsToDraw = this._segments;
+          if (zoom < lowZoomThreshold) {
+            if (!this._lowZoomSegments) {
+              this._lowZoomSegments = Object.values(window.heatmapUtils.buildLowZoomRouteSegments(this._segments));
+            }
+            segmentsToDraw = this._lowZoomSegments;
+          }
+
+          const minLengthPx = this.options.minLengthPx || 1.5;
+          const origin = this._origin;
+
+          for (let i = 0; i < segmentsToDraw.length; i++) {
+            const segment = segmentsToDraw[i];
+            // Viewport culling (research.md Decision 3): skip segments that can't be seen.
+            if (!window.heatmapUtils.segmentIntersectsBounds(segment, viewportBounds, paddingDegrees)) continue;
+
+            const style = window.heatmapUtils.computeRouteSegmentStyle(segment.count);
+            const layerA = map.latLngToLayerPoint(segment.coords[0]);
+            const layerB = map.latLngToLayerPoint(segment.coords[1]);
+            const a = [layerA.x - origin.x, layerA.y - origin.y];
+            const b = [layerB.x - origin.x, layerB.y - origin.y];
+            // Never draw a fully-invisible stroke, so an isolated activity always shows
+            // (spec FR-003 / SC-004 from specs/002-heatmap-performance-scale).
+            const [pa, pb] = window.heatmapUtils.extendSegmentToMinLength(a, b, { minLengthPx });
+
+            ctx.beginPath();
+            ctx.moveTo(pa[0], pa[1]);
+            ctx.lineTo(pb[0], pb[1]);
+            ctx.strokeStyle = ROUTE_LINE_COLOR;
+            ctx.globalAlpha = style.opacity;
+            ctx.lineWidth = style.weight;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+          }
+          ctx.globalAlpha = 1;
+        }
+      });
+
+      return RouteCanvasLayerClass;
+    }
+
     function setHeatmapSportBtnActive(btnId) {
       document.querySelectorAll('[id^="heatmapSportBtn"]').forEach(btn => {
         btn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200';
@@ -2265,30 +2376,24 @@ datasets: [{
       }
 
       if (!heatmapMapInstance) {
-        heatmapMapInstance = L.map(container, { renderer: L.canvas({ padding: 0.5 }) });
+        heatmapMapInstance = L.map(container);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
           maxZoom: 19
         }).addTo(heatmapMapInstance);
       }
 
-      // Re-render as a fresh layer group each time so switching the sport filter never
-      // leaves stale routes from a previously selected sport on the map (FR-006/SC-004).
-      if (heatmapLayerInstance) {
-        heatmapMapInstance.removeLayer(heatmapLayerInstance);
+      // A single canvas layer draws all segments directly (no per-segment Leaflet
+      // objects), redrawing on moveend/zoomend for smooth pan/zoom at scale. Calling
+      // setSegments() again (e.g. after a sport-filter change) replaces the drawn
+      // routes so no stale routes from a previous filter remain (FR-006/SC-004 from
+      // specs/001-route-line-heatmap).
+      if (!routeCanvasLayerInstance) {
+        const RouteCanvasLayer = ensureRouteCanvasLayerClass();
+        routeCanvasLayerInstance = new RouteCanvasLayer({ lowZoomThresholdZoom: 10, minLengthPx: 1.5 });
+        routeCanvasLayerInstance.addTo(heatmapMapInstance);
       }
-      heatmapLayerInstance = L.layerGroup();
-      segmentList.forEach(segment => {
-        const style = window.heatmapUtils.computeRouteSegmentStyle(segment.count);
-        L.polyline(segment.coords, {
-          renderer: heatmapMapInstance.options.renderer,
-          color: ROUTE_LINE_COLOR,
-          weight: style.weight,
-          opacity: style.opacity,
-          lineCap: 'round'
-        }).addTo(heatmapLayerInstance);
-      });
-      heatmapLayerInstance.addTo(heatmapMapInstance);
+      routeCanvasLayerInstance.setSegments(segments);
 
       const bounds = window.heatmapUtils.computeRouteSegmentBounds(segments);
       if (bounds) {

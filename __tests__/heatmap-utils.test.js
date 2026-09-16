@@ -3,7 +3,10 @@ const {
   snapToGridCell,
   buildRouteSegments,
   computeRouteSegmentBounds,
-  computeRouteSegmentStyle
+  computeRouteSegmentStyle,
+  segmentIntersectsBounds,
+  buildLowZoomRouteSegments,
+  extendSegmentToMinLength
 } = require('../src/heatmap-utils');
 
 describe('heatmap-utils', () => {
@@ -171,6 +174,89 @@ describe('heatmap-utils', () => {
       expect(() => computeRouteSegmentStyle(-5)).not.toThrow();
       expect(() => computeRouteSegmentStyle(NaN)).not.toThrow();
       expect(computeRouteSegmentStyle(0).weight).toBeGreaterThan(0);
+    });
+  });
+
+  describe('segmentIntersectsBounds', () => {
+    const viewportBounds = [[48.0, 11.0], [48.2, 11.2]];
+
+    it('returns true for a segment fully inside the bounds', () => {
+      const segment = { coords: [[48.05, 11.05], [48.1, 11.1]] };
+      expect(segmentIntersectsBounds(segment, viewportBounds)).toBe(true);
+    });
+
+    it('returns false for a segment fully outside the bounds', () => {
+      const segment = { coords: [[49.0, 12.0], [49.1, 12.1]] };
+      expect(segmentIntersectsBounds(segment, viewportBounds)).toBe(false);
+    });
+
+    it('returns true for a segment straddling the bounds edge (partial overlap)', () => {
+      const segment = { coords: [[48.15, 11.15], [48.25, 11.25]] };
+      expect(segmentIntersectsBounds(segment, viewportBounds)).toBe(true);
+    });
+
+    it('returns true for a segment just outside bounds but within paddingDegrees', () => {
+      const segment = { coords: [[48.21, 11.05], [48.22, 11.06]] };
+      expect(segmentIntersectsBounds(segment, viewportBounds, 0)).toBe(false);
+      expect(segmentIntersectsBounds(segment, viewportBounds, 0.05)).toBe(true);
+    });
+
+    it('returns false for invalid input', () => {
+      expect(segmentIntersectsBounds(null, viewportBounds)).toBe(false);
+      expect(segmentIntersectsBounds({ coords: [] }, viewportBounds)).toBe(false);
+      expect(segmentIntersectsBounds({ coords: [[48.05, 11.05], [48.1, 11.1]] }, null)).toBe(false);
+    });
+  });
+
+  describe('buildLowZoomRouteSegments', () => {
+    it('merges several full-detail segments in the same coarse cell, summing counts', () => {
+      const segments = {
+        a: { coords: [[48.10000, 11.50000], [48.10001, 11.50001]], count: 2 },
+        b: { coords: [[48.10002, 11.50002], [48.10003, 11.50003]], count: 5 }
+      };
+      const aggregated = buildLowZoomRouteSegments(segments, { cellMeters: 300 });
+      const values = Object.values(aggregated);
+      expect(values.length).toBe(1);
+      expect(values[0].count).toBe(7);
+    });
+
+    it('does not mutate the input segments', () => {
+      const segments = {
+        a: { coords: [[48.1, 11.5], [48.10001, 11.50001]], count: 3 }
+      };
+      const snapshot = JSON.parse(JSON.stringify(segments));
+      buildLowZoomRouteSegments(segments, { cellMeters: 300 });
+      expect(segments).toEqual(snapshot);
+    });
+
+    it('returns an empty result for empty input without throwing', () => {
+      expect(buildLowZoomRouteSegments({})).toEqual({});
+      expect(buildLowZoomRouteSegments([])).toEqual({});
+      expect(() => buildLowZoomRouteSegments(null)).not.toThrow();
+    });
+  });
+
+  describe('extendSegmentToMinLength', () => {
+    it('leaves points unchanged when already at or above the minimum length', () => {
+      const [p1, p2] = extendSegmentToMinLength([0, 0], [10, 0], { minLengthPx: 5 });
+      expect(p1).toEqual([0, 0]);
+      expect(p2).toEqual([10, 0]);
+    });
+
+    it('extends symmetrically from the midpoint along the original direction when too short', () => {
+      const [p1, p2] = extendSegmentToMinLength([0, 0], [1, 0], { minLengthPx: 5 });
+      const length = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+      expect(length).toBeCloseTo(5, 5);
+      // midpoint should remain at (0.5, 0)
+      expect((p1[0] + p2[0]) / 2).toBeCloseTo(0.5, 5);
+    });
+
+    it('draws a fixed horizontal dash for a degenerate zero-length segment', () => {
+      const [p1, p2] = extendSegmentToMinLength([3, 4], [3, 4], { minLengthPx: 2 });
+      const length = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+      expect(length).toBeCloseTo(2, 5);
+      expect(p1[1]).toBe(4);
+      expect(p2[1]).toBe(4);
     });
   });
 });

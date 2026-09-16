@@ -38,6 +38,13 @@ Your data stays in the browser. No login is required, and your files are process
   - Compare progress across target distances and training phases
   - Track most elevation for running and cycling, plus longest swim distance
 
+- GPS route heatmap
+  - Explore where you trained using frequency-weighted route lines
+  - Read infrequent routes in light blue and the most-traveled routes in red across a logarithmic frequency scale
+  - Group recordings of the same route within a 30-meter GPS tolerance while preserving route direction and continuity
+  - Hover route lines to inspect all contributing activities or a random sample of ten for frequently traveled routes
+  - Filter routes by All Sports, Run, Bike, or Swim
+
 ## Features and filters
 
 The dashboard currently includes the following filters and controls:

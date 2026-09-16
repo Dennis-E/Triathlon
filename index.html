@@ -970,6 +970,26 @@
             <div id="heatmapEmptyState" class="hidden absolute inset-0 flex items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/80 px-6 text-center text-sm text-slate-400">
               No GPS data found in the imported activities.
             </div>
+            <div id="heatmapFrequencyLegend" role="img" aria-label="" class="hidden pointer-events-none absolute bottom-7 left-3 z-[500] w-[min(18rem,calc(100%-1.5rem))] rounded-md border border-slate-700 bg-slate-950/90 px-3 py-2 text-white shadow-lg backdrop-blur-sm">
+              <p class="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-300">Route frequency</p>
+              <div id="heatmapFrequencyRange">
+                <div class="h-2 w-full rounded-sm" style="background: linear-gradient(to right, #60A5FA 0%, #DC2626 100%);"></div>
+                <div class="mt-1 grid grid-cols-3 gap-2 text-[9px] leading-tight text-slate-300">
+                  <span>Low <strong id="heatmapFrequencyMin" class="block text-white"></strong></span>
+                  <span class="text-center">Mid <strong id="heatmapFrequencyMidpoint" class="block text-white"></strong></span>
+                  <span class="text-right">High <strong id="heatmapFrequencyMax" class="block text-white"></strong></span>
+                </div>
+              </div>
+              <div id="heatmapFrequencyConstant" class="hidden items-center gap-2 text-[10px] text-slate-200">
+                <span class="h-2.5 w-8 shrink-0 rounded-sm bg-[#60A5FA]"></span>
+                <span id="heatmapFrequencyConstantValue"></span>
+              </div>
+            </div>
+            <div id="heatmapActivityTooltip" class="hidden pointer-events-none absolute z-[600] w-[min(20rem,calc(100%-1rem))] rounded-md border border-slate-700 bg-slate-950/95 p-3 text-white shadow-xl backdrop-blur-sm">
+              <p id="heatmapActivityTooltipHeading" class="text-xs font-semibold"></p>
+              <p id="heatmapActivityTooltipAvailability" class="mt-1 hidden text-[10px] text-amber-300"></p>
+              <div id="heatmapActivityTooltipRows" class="mt-2 max-h-[22rem] space-y-2 overflow-hidden"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -1027,6 +1047,9 @@
     let processedActivities = [];
     let fitBestEffortsByActivityId = {};
     let gpsTracksByActivityId = {};
+    let heatmapActivitySummaryIndex = new Map();
+    let heatmapTooltipSegmentKey = null;
+    let heatmapTooltipModel = null;
     let importedDataset = null;
     let selectedSportFilter = 'All'; // 'All', 'Run', 'Bike', 'Swim'
     let selectedAggregationLevel = 'weekly'; // 'daily', 'weekly', 'monthly', 'yearly'
@@ -1271,6 +1294,8 @@
       processedActivities = dataset.activities;
       fitBestEffortsByActivityId = dataset.fitBestEffortsByActivityId || {};
       gpsTracksByActivityId = dataset.gpsTracksByActivityId || {};
+      heatmapActivitySummaryIndex = window.heatmapUtils.buildActivitySummaryIndex(processedActivities);
+      hideHeatmapActivityTooltip();
 
       updateStatusBadge('success', `Loaded ${processedActivities.length} activities`);
 
@@ -2208,9 +2233,6 @@ datasets: [{
       return leafletLoadPromise;
     }
 
-    // Shared route-line color, tuned for contrast against standard OSM tiles (FR-004).
-    const ROUTE_LINE_COLOR = '#F97316';
-
     // Lazily define the custom canvas-based route layer once Leaflet (L) is loaded.
     // Replaces one-L.polyline-per-segment rendering (specs/001-route-line-heatmap) with a
     // single <canvas> that redraws only on moveend/zoomend, avoiding the per-object
@@ -2223,7 +2245,10 @@ datasets: [{
         initialize: function (options) {
           L.Util.setOptions(this, options || {});
           this._segments = [];
+          this._frequencyScale = null;
           this._lowZoomSegments = null;
+          this._screenSegmentIndex = window.heatmapUtils.buildScreenSegmentIndex([]);
+          this._hoverFrame = null;
         },
 
         onAdd: function (map) {
@@ -2232,20 +2257,39 @@ datasets: [{
           this._canvas.style.position = 'absolute';
           map.getPanes().overlayPane.appendChild(this._canvas);
           map.on('moveend zoomend resize', this._reset, this);
+          map.on('movestart zoomstart', hideHeatmapActivityTooltip);
+          this._mouseMoveHandler = event => {
+            if (this._hoverFrame) cancelAnimationFrame(this._hoverFrame);
+            this._hoverFrame = requestAnimationFrame(() => this._handlePointerMove(event));
+          };
+          this._mouseLeaveHandler = hideHeatmapActivityTooltip;
+          map.getContainer().addEventListener('mousemove', this._mouseMoveHandler);
+          map.getContainer().addEventListener('mouseleave', this._mouseLeaveHandler);
           this._reset();
         },
 
         onRemove: function (map) {
           L.DomUtil.remove(this._canvas);
           map.off('moveend zoomend resize', this._reset, this);
+          map.off('movestart zoomstart', hideHeatmapActivityTooltip);
+          map.getContainer().removeEventListener('mousemove', this._mouseMoveHandler);
+          map.getContainer().removeEventListener('mouseleave', this._mouseLeaveHandler);
+          if (this._hoverFrame) cancelAnimationFrame(this._hoverFrame);
+          hideHeatmapActivityTooltip();
         },
 
         // Replace the segments this layer draws (called on every renderHeatmap(), e.g.
         // after a sport-filter change) and force a fresh redraw (FR-006/SC-004 from
         // specs/001-route-line-heatmap: no stale routes left visible).
-        setSegments: function (segments) {
-          this._segments = Object.values(segments || {});
+        setSegments: function (segments, frequencyScale) {
+          const segmentList = Object.values(segments || {});
+          this._frequencyScale = frequencyScale || window.heatmapUtils.computeRouteFrequencyScale(segmentList);
+          this._segments = segmentList.map(segment => ({
+            ...segment,
+            color: window.heatmapUtils.computeRouteSegmentColor(segment.count, this._frequencyScale)
+          }));
           this._lowZoomSegments = null;
+          hideHeatmapActivityTooltip();
           if (this._map) this._reset();
           return this;
         },
@@ -2266,7 +2310,10 @@ datasets: [{
           const map = this._map;
           const ctx = this._canvas.getContext('2d');
           ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
-          if (!this._segments.length) return;
+          if (!this._segments.length) {
+            this._screenSegmentIndex = window.heatmapUtils.buildScreenSegmentIndex([]);
+            return;
+          }
 
           const zoom = map.getZoom();
           const mapBounds = map.getBounds();
@@ -2279,18 +2326,23 @@ datasets: [{
           const paddingDegrees = (mapBounds.getNorth() - mapBounds.getSouth()) * 0.25;
 
           // Below this zoom, use the coarser buildLowZoomRouteSegments() aggregate
-          // (research.md Decision 4) instead of full per-15m-cell detail.
+          // (research.md Decision 4) instead of full corridor detail.
           const lowZoomThreshold = this.options.lowZoomThresholdZoom || 10;
           let segmentsToDraw = this._segments;
           if (zoom < lowZoomThreshold) {
             if (!this._lowZoomSegments) {
-              this._lowZoomSegments = Object.values(window.heatmapUtils.buildLowZoomRouteSegments(this._segments));
+              this._lowZoomSegments = Object.values(window.heatmapUtils.buildLowZoomRouteSegments(this._segments))
+                .map(segment => ({
+                  ...segment,
+                  color: window.heatmapUtils.computeRouteSegmentColor(segment.colorCount, this._frequencyScale)
+                }));
             }
             segmentsToDraw = this._lowZoomSegments;
           }
 
           const minLengthPx = this.options.minLengthPx || 1.5;
           const origin = this._origin;
+          const screenEntries = [];
 
           for (let i = 0; i < segmentsToDraw.length; i++) {
             const segment = segmentsToDraw[i];
@@ -2309,13 +2361,28 @@ datasets: [{
             ctx.beginPath();
             ctx.moveTo(pa[0], pa[1]);
             ctx.lineTo(pb[0], pb[1]);
-            ctx.strokeStyle = ROUTE_LINE_COLOR;
+            ctx.strokeStyle = segment.color;
             ctx.globalAlpha = style.opacity;
             ctx.lineWidth = style.weight;
             ctx.lineCap = 'round';
             ctx.stroke();
+            screenEntries.push({ key: segment.key, p1: pa, p2: pb, lineWidth: style.weight, segment });
           }
           ctx.globalAlpha = 1;
+          this._screenSegmentIndex = window.heatmapUtils.buildScreenSegmentIndex(screenEntries);
+        },
+
+        _handlePointerMove: function (event) {
+          this._hoverFrame = null;
+          if (!this._map || !this._screenSegmentIndex) return;
+          const rect = this._map.getContainer().getBoundingClientRect();
+          const point = [event.clientX - rect.left, event.clientY - rect.top];
+          const hit = window.heatmapUtils.hitTestScreenSegmentIndex(this._screenSegmentIndex, point);
+          if (!hit) {
+            hideHeatmapActivityTooltip();
+            return;
+          }
+          showHeatmapActivityTooltip(hit.segment, point, rect);
         }
       });
 
@@ -2333,9 +2400,100 @@ datasets: [{
     }
 
     function setHeatmapSportFilter(sport) {
+      hideHeatmapActivityTooltip();
       selectedHeatmapSportFilter = sport;
       setHeatmapSportBtnActive(`heatmapSportBtn${sport}`);
       renderHeatmap();
+    }
+
+    function hideHeatmapActivityTooltip() {
+      const tooltip = document.getElementById('heatmapActivityTooltip');
+      if (tooltip) tooltip.classList.add('hidden');
+      heatmapTooltipSegmentKey = null;
+      heatmapTooltipModel = null;
+    }
+
+    function showHeatmapActivityTooltip(segment, point, mapRect) {
+      const tooltip = document.getElementById('heatmapActivityTooltip');
+      if (!tooltip || !segment) return;
+      if (heatmapTooltipSegmentKey !== segment.key) {
+        heatmapTooltipSegmentKey = segment.key;
+        heatmapTooltipModel = window.heatmapUtils.buildActivityTooltipModel(
+          segment.activityIds,
+          heatmapActivitySummaryIndex,
+          { segmentKey: segment.key }
+        );
+        document.getElementById('heatmapActivityTooltipHeading').textContent = heatmapTooltipModel.heading;
+        const availability = document.getElementById('heatmapActivityTooltipAvailability');
+        availability.textContent = heatmapTooltipModel.availabilityNote || '';
+        availability.classList.toggle('hidden', !heatmapTooltipModel.availabilityNote);
+        const rows = document.getElementById('heatmapActivityTooltipRows');
+        rows.replaceChildren();
+        for (const activity of heatmapTooltipModel.activities) {
+          const row = document.createElement('div');
+          row.className = 'border-t border-slate-800 pt-1.5 text-[10px] leading-tight';
+          const title = document.createElement('p');
+          title.className = 'truncate font-medium text-white';
+          title.textContent = activity.name;
+          const details = document.createElement('p');
+          details.className = 'mt-0.5 text-slate-300';
+          details.textContent = `${activity.dateLabel} · ${activity.sport} · ${activity.distanceLabel} · ${activity.durationLabel}`;
+          row.append(title, details);
+          rows.appendChild(row);
+        }
+      }
+
+      tooltip.classList.remove('hidden');
+      const margin = 8;
+      const offset = 12;
+      const tooltipRect = tooltip.getBoundingClientRect();
+      const maxLeft = Math.max(margin, mapRect.width - tooltipRect.width - margin);
+      const maxTop = Math.max(margin, mapRect.height - tooltipRect.height - margin);
+      tooltip.style.left = `${Math.min(maxLeft, Math.max(margin, point[0] + offset))}px`;
+      tooltip.style.top = `${Math.min(maxTop, Math.max(margin, point[1] + offset))}px`;
+    }
+
+    function renderHeatmapFrequencyLegend(scale) {
+      const legend = document.getElementById('heatmapFrequencyLegend');
+      if (!legend) return;
+
+      const guide = window.heatmapUtils.buildFrequencyScaleGuide(scale);
+      const range = document.getElementById('heatmapFrequencyRange');
+      const constant = document.getElementById('heatmapFrequencyConstant');
+      const minLabel = document.getElementById('heatmapFrequencyMin');
+      const midpointLabel = document.getElementById('heatmapFrequencyMidpoint');
+      const maxLabel = document.getElementById('heatmapFrequencyMax');
+      const constantValue = document.getElementById('heatmapFrequencyConstantValue');
+      if (!guide.visible) {
+        legend.classList.add('hidden');
+        legend.setAttribute('aria-label', '');
+        minLabel.textContent = '';
+        midpointLabel.textContent = '';
+        maxLabel.textContent = '';
+        constantValue.textContent = '';
+        return;
+      }
+
+      legend.classList.remove('hidden');
+      legend.setAttribute('aria-label', guide.ariaLabel);
+      if (guide.mode === 'constant') {
+        range.classList.add('hidden');
+        constant.classList.remove('hidden');
+        constant.classList.add('flex');
+        minLabel.textContent = '';
+        midpointLabel.textContent = '';
+        maxLabel.textContent = '';
+        constantValue.textContent = `${guide.count} ${guide.count === 1 ? 'visit' : 'visits'}`;
+        return;
+      }
+
+      constant.classList.add('hidden');
+      constant.classList.remove('flex');
+      range.classList.remove('hidden');
+      constantValue.textContent = '';
+      minLabel.textContent = guide.minCount;
+      midpointLabel.textContent = `≈${guide.midpointCount}`;
+      maxLabel.textContent = guide.maxCount;
     }
 
     async function renderHeatmap() {
@@ -2348,6 +2506,7 @@ datasets: [{
       if (!hasData) {
         container.classList.add('hidden');
         if (emptyState) emptyState.classList.remove('hidden');
+        renderHeatmapFrequencyLegend(null);
         return;
       }
 
@@ -2357,8 +2516,11 @@ datasets: [{
       if (segmentList.length === 0) {
         container.classList.add('hidden');
         if (emptyState) emptyState.classList.remove('hidden');
+        renderHeatmapFrequencyLegend(null);
         return;
       }
+
+      const frequencyScale = window.heatmapUtils.computeRouteFrequencyScale(segmentList);
 
       container.classList.remove('hidden');
       if (emptyState) emptyState.classList.add('hidden');
@@ -2372,6 +2534,7 @@ datasets: [{
           emptyState.textContent = 'Could not load the map library. Check your internet connection and try again.';
           emptyState.classList.remove('hidden');
         }
+        renderHeatmapFrequencyLegend(null);
         return;
       }
 
@@ -2393,7 +2556,8 @@ datasets: [{
         routeCanvasLayerInstance = new RouteCanvasLayer({ lowZoomThresholdZoom: 10, minLengthPx: 1.5 });
         routeCanvasLayerInstance.addTo(heatmapMapInstance);
       }
-      routeCanvasLayerInstance.setSegments(segments);
+      routeCanvasLayerInstance.setSegments(segments, frequencyScale);
+      renderHeatmapFrequencyLegend(frequencyScale);
 
       const bounds = window.heatmapUtils.computeRouteSegmentBounds(segments);
       if (bounds) {
@@ -2468,11 +2632,12 @@ datasets: [{
       }).addTo(previewMap);
 
       const demoSegments = buildDemoRouteSegments();
+      const demoScale = window.heatmapUtils.computeRouteFrequencyScale(demoSegments);
       demoSegments.forEach(segment => {
         const style = window.heatmapUtils.computeRouteSegmentStyle(segment.count);
         L.polyline(segment.coords, {
           renderer: previewMap.options.renderer,
-          color: ROUTE_LINE_COLOR,
+          color: window.heatmapUtils.computeRouteSegmentColor(segment.count, demoScale),
           weight: style.weight,
           opacity: style.opacity,
           lineCap: 'round'

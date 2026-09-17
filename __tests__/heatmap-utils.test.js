@@ -71,6 +71,25 @@ describe('heatmap-utils', () => {
       expect(interpolateTrackProbes(null, 30)).toEqual([]);
     });
 
+    it('optionally returns a parallel true-point-index mapping without changing the default return shape', () => {
+      const points = [[48.0, 11.0], [48.0, 11.001], [48.0, 11.002]];
+      const plain = interpolateTrackProbes(points, 30);
+      expect(Array.isArray(plain)).toBe(true);
+
+      const { probes, trueIndices } = interpolateTrackProbes(points, 30, { includeTrueIndices: true });
+      expect(probes).toEqual(plain);
+      expect(trueIndices).toHaveLength(probes.length);
+      trueIndices.forEach(index => {
+        expect(index).toBeGreaterThanOrEqual(0);
+        expect(index).toBeLessThan(points.length);
+      });
+      for (let i = 1; i < trueIndices.length; i++) {
+        expect(trueIndices[i]).toBeGreaterThanOrEqual(trueIndices[i - 1]);
+      }
+      // The first probe always originates from the first source point.
+      expect(trueIndices[0]).toBe(0);
+    });
+
     it('computes point-to-segment distance including zero-length segments', () => {
       expect(pointToSegmentDistance([5, 3], [0, 0], [10, 0])).toBeCloseTo(3, 6);
       expect(pointToSegmentDistance([4, 5], [1, 1], [1, 1])).toBeCloseTo(5, 6);
@@ -198,6 +217,61 @@ describe('heatmap-utils', () => {
       const second = buildRouteSegments({ a: { sport: 'Run', points: loop }, b: { sport: 'Run', points: northRoute(20) } });
       expect(first).toEqual(second);
       expect(Object.values(first).every(segment => new Set(segment.activityIds).size === segment.activityIds.length)).toBe(true);
+    });
+
+    it('attaches a true-path point sub-sequence to every corridor, using only recorded points', () => {
+      const points = [
+        [48.10000, 11.50000],
+        [48.10050, 11.50002],
+        [48.10100, 11.50005],
+        [48.10150, 11.50007],
+        [48.10200, 11.50004],
+        [48.10250, 11.50001],
+        [48.10300, 11.50000]
+      ];
+      const segments = Object.values(buildRouteSegments({ solo: { sport: 'Run', points } }));
+
+      expect(segments.length).toBeGreaterThan(0);
+      segments.forEach(segment => {
+        expect(Array.isArray(segment.truePathPoints)).toBe(true);
+        expect(segment.truePathPoints.length).toBeGreaterThanOrEqual(2);
+        segment.truePathPoints.forEach(point => expect(points).toContainEqual(point));
+      });
+    });
+
+    it('does not change truePathPoints when a later activity only matches an existing corridor', () => {
+      const tracks = {
+        a: { sport: 'Run', points: northRoute(0) },
+        b: { sport: 'Run', points: northRoute(20) }
+      };
+      const soloSegments = Object.values(buildRouteSegments({ a: tracks.a }));
+      const sharedSegments = Object.values(buildRouteSegments(tracks));
+      const soloByKey = new Map(soloSegments.map(segment => [segment.key, segment]));
+
+      sharedSegments.forEach(segment => {
+        const solo = soloByKey.get(segment.key);
+        if (solo) expect(segment.truePathPoints).toEqual(solo.truePathPoints);
+      });
+    });
+
+    it('keeps one count/key per corridor regardless of how many true-path points it has (spec 006 FR-003/FR-004)', () => {
+      const tracks = {
+        c: { sport: 'Run', points: northRoute(29, true) },
+        a: { sport: 'Run', points: northRoute(0) },
+        b: { sport: 'Run', points: northRoute(20) }
+      };
+      const segments = Object.values(buildRouteSegments(tracks));
+      const shared = segments.filter(segment => segment.count === 3);
+      expect(shared.length).toBeGreaterThan(0);
+
+      const scale = computeRouteFrequencyScale(segments);
+      shared.forEach(segment => {
+        // Exactly one count/key/color per corridor, independent of truePathPoints length.
+        expect(typeof segment.count).toBe('number');
+        expect(typeof segment.key).toBe('string');
+        expect(segment.truePathPoints.length).toBeGreaterThanOrEqual(2);
+        expect(typeof computeRouteSegmentColor(segment.count, scale)).toBe('string');
+      });
     });
   });
 

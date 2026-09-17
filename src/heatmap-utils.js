@@ -55,15 +55,19 @@ function headingDifferenceDegrees(headingA, headingB) {
   return Math.min(difference, 180 - difference);
 }
 
-function interpolateTrackProbes(points, spacingMeters = 30) {
-  if (!Array.isArray(points) || points.length === 0) return [];
+function interpolateTrackProbes(points, spacingMeters = 30, options = {}) {
+  if (!Array.isArray(points) || points.length === 0) return options.includeTrueIndices ? { probes: [], trueIndices: [] } : [];
   const spacing = Number.isFinite(spacingMeters) && spacingMeters > 0 ? spacingMeters : 30;
   const probes = [];
+  const trueIndices = [];
   for (let index = 0; index < points.length - 1; index++) {
     const start = points[index];
     const end = points[index + 1];
     if (!isCoordinate(start) || !isCoordinate(end)) continue;
-    if (probes.length === 0) probes.push([start[0], start[1]]);
+    if (probes.length === 0) {
+      probes.push([start[0], start[1]]);
+      trueIndices.push(index);
+    }
     const length = distanceMeters(start, end);
     if (!Number.isFinite(length) || length < 1e-6) continue;
     const steps = Math.max(1, Math.ceil(length / spacing));
@@ -73,10 +77,16 @@ function interpolateTrackProbes(points, spacingMeters = 30) {
         start[0] + (end[0] - start[0]) * ratio,
         start[1] + (end[1] - start[1]) * ratio
       ]);
+      // Every probe along this source segment maps back to the point that began it (`index`),
+      // so a corridor window can later be sliced back to true recorded points (spec 006 FR-001).
+      trueIndices.push(index);
     }
   }
-  if (probes.length === 0 && isCoordinate(points[0])) probes.push([points[0][0], points[0][1]]);
-  return probes;
+  if (probes.length === 0 && isCoordinate(points[0])) {
+    probes.push([points[0][0], points[0][1]]);
+    trueIndices.push(0);
+  }
+  return options.includeTrueIndices ? { probes, trueIndices } : probes;
 }
 
 function pointToSegmentDistance(point, segmentStart, segmentEnd) {
@@ -144,7 +154,7 @@ function buildRouteSegments(gpsTracksByActivityId, options = {}) {
     .sort(([activityA], [activityB]) => activityA.localeCompare(activityB));
 
   for (const [activityId, track] of activities) {
-    const probes = interpolateTrackProbes(track.points, probeSpacingMeters);
+    const { probes, trueIndices } = interpolateTrackProbes(track.points, probeSpacingMeters, { includeTrueIndices: true });
     if (probes.length < 2) continue;
     const activityContinuitySteps = Math.min(continuitySteps, probes.length - 1);
     const canMatchExistingCorridor = activityContinuitySteps === continuitySteps;
@@ -186,9 +196,18 @@ function buildRouteSegments(gpsTracksByActivityId, options = {}) {
       let segment = bestMatch ? bestMatch.candidate : null;
       if (!segment) {
         const key = `corridor-${String(nextSegmentId++).padStart(8, '0')}`;
+        // Capture the creating activity's own recorded (simplified) points spanning this
+        // window, so rendering can follow the true curve instead of the [start, end] chord
+        // (spec 006 FR-001/FR-002); coords/heading remain the existing matching geometry.
+        const trueStartIdx = trueIndices[index];
+        const trueEndIdx = trueIndices[index + activityContinuitySteps];
+        const truePathSlice = track.points.slice(trueStartIdx, trueEndIdx + 1).map(point => [point[0], point[1]]);
         segment = {
           key,
           coords: [[start[0], start[1]], [end[0], end[1]]],
+          truePathPoints: truePathSlice.length >= 2
+            ? truePathSlice
+            : [[start[0], start[1]], [end[0], end[1]]],
           heading,
           activityIds: [],
           count: 0,

@@ -2355,23 +2355,53 @@ datasets: [{
             if (!window.heatmapUtils.segmentIntersectsBounds(segment, viewportBounds, paddingDegrees)) continue;
 
             const style = window.heatmapUtils.computeRouteSegmentStyle(segment.count);
-            const layerA = map.latLngToLayerPoint(segment.coords[0]);
-            const layerB = map.latLngToLayerPoint(segment.coords[1]);
-            const a = [layerA.x - origin.x, layerA.y - origin.y];
-            const b = [layerB.x - origin.x, layerB.y - origin.y];
+            // Above the low-zoom threshold, draw the corridor's true recorded (simplified)
+            // path instead of its [start, end] matching chord, so curves are followed rather
+            // than cut across (spec 006 FR-001); low-zoom aggregates have no truePathPoints
+            // and fall back to their existing coords chord unchanged (FR-006).
+            const hasTruePath = Array.isArray(segment.truePathPoints) && segment.truePathPoints.length >= 2;
+            const pathPoints = hasTruePath ? segment.truePathPoints : segment.coords;
+            const pixelPoints = pathPoints.map(point => {
+              const layerPoint = map.latLngToLayerPoint(point);
+              return [layerPoint.x - origin.x, layerPoint.y - origin.y];
+            });
+
             // Never draw a fully-invisible stroke, so an isolated activity always shows
             // (spec FR-003 / SC-004 from specs/002-heatmap-performance-scale).
-            const [pa, pb] = window.heatmapUtils.extendSegmentToMinLength(a, b, { minLengthPx });
+            const totalLengthPx = pixelPoints.slice(1).reduce((sum, point, index) => {
+              const previous = pixelPoints[index];
+              return sum + Math.hypot(point[0] - previous[0], point[1] - previous[1]);
+            }, 0);
+            if (totalLengthPx < minLengthPx) {
+              const [extendedStart, extendedEnd] = window.heatmapUtils.extendSegmentToMinLength(
+                pixelPoints[0], pixelPoints[pixelPoints.length - 1], { minLengthPx }
+              );
+              pixelPoints[0] = extendedStart;
+              pixelPoints[pixelPoints.length - 1] = extendedEnd;
+            }
 
             ctx.beginPath();
-            ctx.moveTo(pa[0], pa[1]);
-            ctx.lineTo(pb[0], pb[1]);
+            ctx.moveTo(pixelPoints[0][0], pixelPoints[0][1]);
+            for (let pointIndex = 1; pointIndex < pixelPoints.length; pointIndex++) {
+              ctx.lineTo(pixelPoints[pointIndex][0], pixelPoints[pointIndex][1]);
+            }
             ctx.strokeStyle = segment.color;
             ctx.globalAlpha = style.opacity;
             ctx.lineWidth = style.weight;
             ctx.lineCap = 'round';
             ctx.stroke();
-            screenEntries.push({ key: segment.key, p1: pa, p2: pb, lineWidth: style.weight, segment });
+            // One screenEntries item per drawn true-path edge, all tagged with the same
+            // segment/key, so hit-testing keeps resolving to the correct corridor regardless
+            // of which edge along its true path was hovered (spec 006 FR-008).
+            for (let pointIndex = 1; pointIndex < pixelPoints.length; pointIndex++) {
+              screenEntries.push({
+                key: segment.key,
+                p1: pixelPoints[pointIndex - 1],
+                p2: pixelPoints[pointIndex],
+                lineWidth: style.weight,
+                segment
+              });
+            }
           }
           ctx.globalAlpha = 1;
           this._screenSegmentIndex = window.heatmapUtils.buildScreenSegmentIndex(screenEntries);

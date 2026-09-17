@@ -19,7 +19,8 @@ const {
   hitTestScreenSegmentIndex,
   segmentIntersectsBounds,
   buildLowZoomRouteSegments,
-  extendSegmentToMinLength
+  extendSegmentToMinLength,
+  sortSegmentsForDrawOrder
 } = require('../src/heatmap-utils');
 
 describe('heatmap-utils', () => {
@@ -225,36 +226,24 @@ describe('heatmap-utils', () => {
   });
 
   describe('computeRouteSegmentStyle', () => {
-    it('returns the legible minimum floor for a single visit', () => {
-      const style = computeRouteSegmentStyle(1);
-      expect(style.weight).toBeGreaterThan(0);
-      expect(style.opacity).toBeGreaterThan(0);
-      expect(style.weight).toBeLessThan(computeRouteSegmentStyle(50).weight);
-    });
-
-    it('increases weight and opacity monotonically with count', () => {
+    it('returns the same fixed weight/opacity regardless of visit-frequency count (FR-007/FR-008)', () => {
       const low = computeRouteSegmentStyle(1);
-      const mid = computeRouteSegmentStyle(5);
-      const high = computeRouteSegmentStyle(20);
-      expect(mid.weight).toBeGreaterThan(low.weight);
-      expect(high.weight).toBeGreaterThan(mid.weight);
-      expect(mid.opacity).toBeGreaterThan(low.opacity);
-      expect(high.opacity).toBeGreaterThan(mid.opacity);
+      const mid = computeRouteSegmentStyle(50);
+      const high = computeRouteSegmentStyle(100000);
+      expect(mid).toEqual(low);
+      expect(high).toEqual(low);
+      expect(low.weight).toBeGreaterThan(0);
+      expect(low.opacity).toBeGreaterThan(0);
     });
 
-    it('clamps at the configured maximum regardless of how large count is', () => {
-      const capped = computeRouteSegmentStyle(50, { maxWeight: 9, maxOpacity: 0.95 });
-      const wayOver = computeRouteSegmentStyle(100000, { maxWeight: 9, maxOpacity: 0.95 });
-      expect(wayOver.weight).toBeLessThanOrEqual(9);
-      expect(wayOver.opacity).toBeLessThanOrEqual(0.95);
-      expect(wayOver.weight).toBeCloseTo(capped.weight, 0);
-    });
-
-    it('handles invalid/out-of-range counts without throwing', () => {
+    it('handles invalid/out-of-range counts without throwing and without changing style', () => {
+      const baseline = computeRouteSegmentStyle(1);
       expect(() => computeRouteSegmentStyle(0)).not.toThrow();
       expect(() => computeRouteSegmentStyle(-5)).not.toThrow();
       expect(() => computeRouteSegmentStyle(NaN)).not.toThrow();
-      expect(computeRouteSegmentStyle(0).weight).toBeGreaterThan(0);
+      expect(computeRouteSegmentStyle(0)).toEqual(baseline);
+      expect(computeRouteSegmentStyle(-5)).toEqual(baseline);
+      expect(computeRouteSegmentStyle(NaN)).toEqual(baseline);
     });
   });
 
@@ -583,4 +572,55 @@ describe('heatmap-utils', () => {
       expect(p2[1]).toBe(4);
     });
   });
+
+  describe('sortSegmentsForDrawOrder', () => {
+    it('sorts ascending by count so higher-frequency segments are drawn last (on top)', () => {
+      const segments = [
+        { key: 'b', count: 5 },
+        { key: 'a', count: 1 },
+        { key: 'c', count: 10 }
+      ];
+      const sorted = sortSegmentsForDrawOrder(segments);
+      expect(sorted.map(s => s.key)).toEqual(['a', 'b', 'c']);
+    });
+
+    it('breaks ties between equal counts by ascending lexical segment key (FR-003)', () => {
+      const segments = [
+        { key: 'zzz', count: 3 },
+        { key: 'aaa', count: 3 },
+        { key: 'mmm', count: 3 }
+      ];
+      const sorted = sortSegmentsForDrawOrder(segments);
+      expect(sorted.map(s => s.key)).toEqual(['aaa', 'mmm', 'zzz']);
+    });
+
+    it('produces identical output regardless of input order (import-order independence)', () => {
+      const segments = [
+        { key: 'b', count: 5 },
+        { key: 'a', count: 1 },
+        { key: 'c', count: 10 }
+      ];
+      const shuffled = [segments[2], segments[0], segments[1]];
+      expect(sortSegmentsForDrawOrder(shuffled)).toEqual(sortSegmentsForDrawOrder(segments));
+    });
+
+    it('supports an alternate count field (e.g. colorCount for low-zoom aggregates, FR-010)', () => {
+      const segments = [
+        { key: 'b', count: 999, colorCount: 1 },
+        { key: 'a', count: 1, colorCount: 10 }
+      ];
+      const sorted = sortSegmentsForDrawOrder(segments, 'colorCount');
+      expect(sorted.map(s => s.key)).toEqual(['b', 'a']);
+    });
+
+    it('does not mutate the input array and handles empty/invalid input safely', () => {
+      const segments = [{ key: 'b', count: 5 }, { key: 'a', count: 1 }];
+      const snapshot = JSON.parse(JSON.stringify(segments));
+      sortSegmentsForDrawOrder(segments);
+      expect(segments).toEqual(snapshot);
+      expect(sortSegmentsForDrawOrder([])).toEqual([]);
+      expect(sortSegmentsForDrawOrder(null)).toEqual([]);
+    });
+  });
 });
+

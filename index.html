@@ -2284,10 +2284,13 @@ datasets: [{
         setSegments: function (segments, frequencyScale) {
           const segmentList = Object.values(segments || {});
           this._frequencyScale = frequencyScale || window.heatmapUtils.computeRouteFrequencyScale(segmentList);
-          this._segments = segmentList.map(segment => ({
+          const styledSegments = segmentList.map(segment => ({
             ...segment,
             color: window.heatmapUtils.computeRouteSegmentColor(segment.count, this._frequencyScale)
           }));
+          // Sort once here (not per redraw frame) so higher-frequency segments are always
+          // drawn last/on top, independent of import order (spec 005 FR-001/FR-002/FR-003).
+          this._segments = window.heatmapUtils.sortSegmentsForDrawOrder(styledSegments);
           this._lowZoomSegments = null;
           hideHeatmapActivityTooltip();
           if (this._map) this._reset();
@@ -2331,11 +2334,13 @@ datasets: [{
           let segmentsToDraw = this._segments;
           if (zoom < lowZoomThreshold) {
             if (!this._lowZoomSegments) {
-              this._lowZoomSegments = Object.values(window.heatmapUtils.buildLowZoomRouteSegments(this._segments))
+              const styledLowZoomSegments = Object.values(window.heatmapUtils.buildLowZoomRouteSegments(this._segments))
                 .map(segment => ({
                   ...segment,
                   color: window.heatmapUtils.computeRouteSegmentColor(segment.colorCount, this._frequencyScale)
                 }));
+              // Same frequency-on-top guarantee for aggregates, keyed by colorCount (FR-010).
+              this._lowZoomSegments = window.heatmapUtils.sortSegmentsForDrawOrder(styledLowZoomSegments, 'colorCount');
             }
             segmentsToDraw = this._lowZoomSegments;
           }

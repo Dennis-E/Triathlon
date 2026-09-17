@@ -265,6 +265,82 @@ function downsampleTrack(points, maxPoints = 180) {
   return sampled;
 }
 
+const SIMPLIFY_EARTH_RADIUS_METERS = 6371000;
+
+// Equirectangular projection to local planar meters, referenced to the given latitude,
+// so perpendicular-distance comparisons stay latitude-independent (research.md Decision 2).
+function projectToLocalMeters(point, refLatDegrees) {
+  const latRad = point.lat * Math.PI / 180;
+  const lonRad = point.lon * Math.PI / 180;
+  const refLatRad = refLatDegrees * Math.PI / 180;
+  return [
+    lonRad * Math.cos(refLatRad) * SIMPLIFY_EARTH_RADIUS_METERS,
+    latRad * SIMPLIFY_EARTH_RADIUS_METERS
+  ];
+}
+
+// Perpendicular distance (meters) from `point` to the infinite line through `lineStart`/`lineEnd`.
+function perpendicularDistanceMeters(point, lineStart, lineEnd) {
+  const refLat = (lineStart.lat + lineEnd.lat) / 2;
+  const [px, py] = projectToLocalMeters(point, refLat);
+  const [x1, y1] = projectToLocalMeters(lineStart, refLat);
+  const [x2, y2] = projectToLocalMeters(lineEnd, refLat);
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared < 1e-9) return Math.hypot(px - x1, py - y1);
+  return Math.abs(dy * (px - x1) - dx * (py - y1)) / Math.sqrt(lengthSquared);
+}
+
+// Recursive Ramer–Douglas–Peucker: keeps the point(s) that deviate most from the chord
+// between the current endpoints whenever that deviation exceeds toleranceMeters, and drops
+// everything else (research.md Decision 2). Never interpolates a new point (FR-005).
+function rdpSimplify(points, toleranceMeters) {
+  if (points.length < 3) return points.slice();
+  const first = points[0];
+  const last = points[points.length - 1];
+  let maxDistance = -1;
+  let maxIndex = 0;
+  for (let i = 1; i < points.length - 1; i++) {
+    const distance = perpendicularDistanceMeters(points[i], first, last);
+    if (distance > maxDistance) {
+      maxDistance = distance;
+      maxIndex = i;
+    }
+  }
+  if (maxDistance > toleranceMeters) {
+    const left = rdpSimplify(points.slice(0, maxIndex + 1), toleranceMeters);
+    const right = rdpSimplify(points.slice(maxIndex), toleranceMeters);
+    return left.slice(0, -1).concat(right);
+  }
+  return [first, last];
+}
+
+/**
+ * Reduce a GPS track's point count using curve-preserving (Ramer–Douglas–Peucker)
+ * simplification instead of a fixed-count, evenly-spaced stride: points are dropped only
+ * where they lie within `toleranceMeters` of the straight chord between their retained
+ * neighbors, so curves and turns survive while straight sections shrink (spec 005 FR-004).
+ * The first and last point are always kept, and no new point is ever interpolated (FR-005).
+ * If the tolerance-based result still exceeds `maxPoints`, an even-stride reduction of that
+ * result is applied only as a bounded safety-maximum fallback (FR-004).
+ * @param {Array<{lat: number, lon: number}>} points - Track points
+ * @param {{toleranceMeters?: number, maxPoints?: number}} [options]
+ * @returns {Array<{lat: number, lon: number}>}
+ */
+function simplifyTrackPoints(points, options = {}) {
+  if (!Array.isArray(points) || points.length === 0) return [];
+  if (points.length <= 2) return points.slice();
+
+  const toleranceMeters = Number.isFinite(options.toleranceMeters) && options.toleranceMeters > 0
+    ? options.toleranceMeters : 3;
+  const maxPoints = Number.isFinite(options.maxPoints) && options.maxPoints >= 2
+    ? options.maxPoints : 2000;
+
+  const simplified = rdpSimplify(points, toleranceMeters);
+  return simplified.length > maxPoints ? downsampleTrack(simplified, maxPoints) : simplified;
+}
+
 /**
  * Extract GPS tracks for every matching activity file found in the ZIP archive
  * @param {Object} zip - Loaded JSZip instance
@@ -308,10 +384,10 @@ async function extractGpsTracksFromZip(zip, rawCsvText, activitySportById, repor
 
       if (!points.length) continue;
 
-      const sampled = downsampleTrack(points, 180);
+      const simplified = simplifyTrackPoints(points, { toleranceMeters: 3, maxPoints: 2000 });
       result[activityId] = {
         sport: (activitySportById && activitySportById.get(activityId)) || null,
-        points: sampled.map(p => [p.lat, p.lon])
+        points: simplified.map(p => [p.lat, p.lon])
       };
     } catch (err) {
       // Skip activities whose GPS file can't be read/parsed; the rest of the import should still succeed
@@ -530,6 +606,7 @@ if (typeof module !== 'undefined' && module.exports) {
     extractGpxTrackpoints,
     extractFitTrackpoints,
     downsampleTrack,
+    simplifyTrackPoints,
     extractGpsTracksFromZip
   };
 }

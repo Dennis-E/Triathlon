@@ -491,37 +491,25 @@ function hitTestScreenSegmentIndex(index, point) {
   return hits.length > 0 ? hits[0].entry : null;
 }
 
-// Legible-minimum-to-capped-maximum style constants (FR-003/FR-004): tuned so
-// a single visit is still clearly visible (opacity/weight floor) while very
-// frequent segments saturate around ~50 visits instead of growing unbounded.
+// Fixed rendering style (spec 005 FR-007/FR-008/FR-009): color is the sole visit-frequency
+// visual channel; weight/opacity stay constant so nearby distinct roads never visually merge
+// and an isolated route never shrinks to an imperceptible hairline.
 const ROUTE_STYLE_DEFAULTS = {
-  minWeight: 2,
-  maxWeight: 9,
-  minOpacity: 0.55,
-  maxOpacity: 0.95,
-  saturationCount: 50
+  weight: 3,
+  opacity: 0.85
 };
 
 /**
- * Map a visit-frequency count to a clamped, perceptually-scaled { weight, opacity }
- * style pair (spec.md FR-002/FR-003/FR-004/FR-005; research.md Decision 3).
+ * Return the fixed { weight, opacity } style pair used for every route segment, independent
+ * of visit-frequency count (spec 005 FR-007/FR-008; research.md Decision 3). `count` is
+ * accepted for call-site compatibility but does not affect the returned style.
  * @param {number} count
- * @param {{minWeight?: number, maxWeight?: number, minOpacity?: number, maxOpacity?: number, saturationCount?: number}} [options]
+ * @param {{weight?: number, opacity?: number}} [options]
  * @returns {{weight: number, opacity: number}}
  */
 function computeRouteSegmentStyle(count, options = {}) {
-  const config = { ...ROUTE_STYLE_DEFAULTS, ...options };
-  const safeCount = Number.isFinite(count) && count > 0 ? count : 1;
-
-  // Logarithmic compression: rare (count=1) segments stay near the legible
-  // floor, common segments approach the cap, and extremely frequent segments
-  // are clamped rather than growing without bound.
-  const normalized = Math.log(1 + safeCount) / Math.log(1 + config.saturationCount);
-  const clamped = Math.min(1, Math.max(0, normalized));
-
-  const weight = config.minWeight + clamped * (config.maxWeight - config.minWeight);
-  const opacity = config.minOpacity + clamped * (config.maxOpacity - config.minOpacity);
-
+  const weight = Number.isFinite(options.weight) && options.weight > 0 ? options.weight : ROUTE_STYLE_DEFAULTS.weight;
+  const opacity = Number.isFinite(options.opacity) && options.opacity > 0 ? options.opacity : ROUTE_STYLE_DEFAULTS.opacity;
   return { weight, opacity };
 }
 
@@ -680,6 +668,28 @@ function extendSegmentToMinLength(p1, p2, options = {}) {
   return [[midX - newDx, midY - newDy], [midX + newDx, midY + newDy]];
 }
 
+/**
+ * Sort route segments ascending by visit-frequency count (with a deterministic lexical-key
+ * tie-break), so that drawing them in this order guarantees the highest-frequency segment is
+ * always the last (topmost) one rendered at any shared screen position, independent of
+ * import/processing order (spec 005 FR-001/FR-002/FR-003). Pass `countField: 'colorCount'`
+ * to sort low-zoom aggregates (FR-010) the same way.
+ * @param {Array<Object>|Object} segments - segment array or map (values are used)
+ * @param {string} [countField] - property name holding the frequency count (default 'count')
+ * @returns {Array<Object>} new sorted array; input is not mutated
+ */
+function sortSegmentsForDrawOrder(segments, countField = 'count') {
+  const list = Array.isArray(segments)
+    ? segments.slice()
+    : (segments && typeof segments === 'object' ? Object.values(segments) : []);
+  return list.sort((a, b) => {
+    const countA = Number.isFinite(a && a[countField]) ? a[countField] : 0;
+    const countB = Number.isFinite(b && b[countField]) ? b[countField] : 0;
+    if (countA !== countB) return countA - countB;
+    return String(a && a.key).localeCompare(String(b && b.key));
+  });
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     hasGpsData,
@@ -702,7 +712,8 @@ if (typeof module !== 'undefined' && module.exports) {
     hitTestScreenSegmentIndex,
     segmentIntersectsBounds,
     buildLowZoomRouteSegments,
-    extendSegmentToMinLength
+    extendSegmentToMinLength,
+    sortSegmentsForDrawOrder
   };
 }
 
@@ -728,6 +739,7 @@ if (typeof window !== 'undefined') {
     hitTestScreenSegmentIndex,
     segmentIntersectsBounds,
     buildLowZoomRouteSegments,
-    extendSegmentToMinLength
+    extendSegmentToMinLength,
+    sortSegmentsForDrawOrder
   };
 }

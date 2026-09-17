@@ -5,6 +5,7 @@ const {
   extractGpxTrackpoints,
   extractFitTrackpoints,
   downsampleTrack,
+  simplifyTrackPoints,
   extractGpsTracksFromZip
 } = require('../src/zip-importer');
 
@@ -133,12 +134,91 @@ describe('downsampleTrack', () => {
   });
 });
 
+describe('simplifyTrackPoints', () => {
+  it('always keeps the first and last point verbatim', () => {
+    const points = [
+      { lat: 48.00000, lon: 11.0000 },
+      { lat: 48.00025, lon: 11.0025 },
+      { lat: 48.00050, lon: 11.0050 },
+      { lat: 48.00025, lon: 11.0075 },
+      { lat: 48.00000, lon: 11.0100 }
+    ];
+    const simplified = simplifyTrackPoints(points, { toleranceMeters: 3 });
+    expect(simplified[0]).toEqual(points[0]);
+    expect(simplified[simplified.length - 1]).toEqual(points[points.length - 1]);
+  });
+
+  it('drops a point within tolerance of the straight chord between its neighbors', () => {
+    // p1 lies exactly on the straight chord p0-p2, and p3 exactly on chord p2-p4, so once
+    // the sharp turn at p2 splits the search, both must be dropped (0m deviation).
+    const points = [
+      { lat: 48.00000, lon: 11.0000 },
+      { lat: 48.00025, lon: 11.0025 },
+      { lat: 48.00050, lon: 11.0050 },
+      { lat: 48.00025, lon: 11.0075 },
+      { lat: 48.00000, lon: 11.0100 }
+    ];
+    const simplified = simplifyTrackPoints(points, { toleranceMeters: 3 });
+    expect(simplified).not.toContainEqual(points[1]);
+    expect(simplified).not.toContainEqual(points[3]);
+  });
+
+  it('retains a point whose deviation from the chord exceeds the tolerance (a sharp turn)', () => {
+    // p2 is offset ~55m in latitude from the direct start-to-end chord, far beyond a 3m tolerance.
+    const points = [
+      { lat: 48.00000, lon: 11.0000 },
+      { lat: 48.00025, lon: 11.0025 },
+      { lat: 48.00050, lon: 11.0050 },
+      { lat: 48.00025, lon: 11.0075 },
+      { lat: 48.00000, lon: 11.0100 }
+    ];
+    const simplified = simplifyTrackPoints(points, { toleranceMeters: 3 });
+    expect(simplified).toContainEqual(points[2]);
+  });
+
+  it('never invents a point that was not in the input (FR-005)', () => {
+    const points = [
+      { lat: 48.00000, lon: 11.0000 },
+      { lat: 48.00025, lon: 11.0025 },
+      { lat: 48.00050, lon: 11.0050 },
+      { lat: 48.00025, lon: 11.0075 },
+      { lat: 48.00000, lon: 11.0100 }
+    ];
+    const simplified = simplifyTrackPoints(points, { toleranceMeters: 3 });
+    simplified.forEach(point => expect(points).toContainEqual(point));
+  });
+
+  it('falls back to bounded reduction when the tolerance-based result still exceeds maxPoints', () => {
+    // A jagged zig-zag where every point deviates well beyond tolerance, so RDP alone
+    // would keep (nearly) all points; the safety-maximum fallback must still bound the result.
+    const points = Array.from({ length: 500 }, (_, i) => ({
+      lat: 48.0000 + (i % 2 === 0 ? 0.001 : 0),
+      lon: 11.0000 + i * 0.0002
+    }));
+    const simplified = simplifyTrackPoints(points, { toleranceMeters: 3, maxPoints: 50 });
+    expect(simplified.length).toBeLessThanOrEqual(50);
+    expect(simplified[0]).toEqual(points[0]);
+    expect(simplified[simplified.length - 1]).toEqual(points[points.length - 1]);
+  });
+
+  it('returns the input unchanged for two or fewer points', () => {
+    const points = [{ lat: 1, lon: 1 }, { lat: 2, lon: 2 }];
+    expect(simplifyTrackPoints(points)).toEqual(points);
+    expect(simplifyTrackPoints([{ lat: 1, lon: 1 }])).toEqual([{ lat: 1, lon: 1 }]);
+  });
+
+  it('handles empty input', () => {
+    expect(simplifyTrackPoints([])).toEqual([]);
+    expect(simplifyTrackPoints(null)).toEqual([]);
+  });
+});
+
 describe('extractGpsTracksFromZip', () => {
   function makeZipFile(content) {
     return { dir: false, async: jest.fn().mockResolvedValue(content) };
   }
 
-  it('extracts and downsamples GPX tracks keyed by activity ID', async () => {
+  it('extracts and simplifies GPX tracks keyed by activity ID', async () => {
     const gpx = `<gpx><trkpt lat="48.1" lon="11.5"></trkpt><trkpt lat="48.2" lon="11.6"></trkpt></gpx>`;
     const zip = { files: { 'activities/111.gpx': makeZipFile(gpx) } };
     const rawCsv = ['Activity ID,Filename', '111,activities/111.gpx'].join('\n');
@@ -150,6 +230,25 @@ describe('extractGpsTracksFromZip', () => {
       sport: 'Run',
       points: [[48.1, 11.5], [48.2, 11.6]]
     });
+  });
+
+  it('uses curve-preserving simplification (not fixed-180 stride downsampling) for long tracks', async () => {
+    // A winding path: RDP-based simplification should retain the sharp turn's point even
+    // though it is not among the first/last 180 evenly-strided points.
+    const trkpts = [];
+    for (let i = 0; i < 400; i++) {
+      trkpts.push(`<trkpt lat="48.0000" lon="${(11.0000 + i * 0.0001).toFixed(6)}"></trkpt>`);
+    }
+    // Sharp turn point inserted in the middle, ~55m off the straight chord.
+    trkpts.splice(200, 0, '<trkpt lat="48.0005" lon="11.0200"></trkpt>');
+    const gpx = `<gpx>${trkpts.join('')}</gpx>`;
+    const zip = { files: { 'activities/333.gpx': makeZipFile(gpx) } };
+    const rawCsv = ['Activity ID,Filename', '333,activities/333.gpx'].join('\n');
+
+    const result = await extractGpsTracksFromZip(zip, rawCsv, new Map());
+
+    expect(result['333'].points).toContainEqual([48.0005, 11.0200]);
+    expect(result['333'].points.length).toBeLessThan(401);
   });
 
   it('skips activities whose GPS file cannot be read without failing the whole import', async () => {

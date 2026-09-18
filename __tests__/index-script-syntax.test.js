@@ -89,6 +89,64 @@ describe('index.html inline script syntax', () => {
     expect(inlineCode).toContain("if (event.target.id === 'pbDetailOverlay') closePbDetail()");
   });
 
+  it('provides branded export controls for every visualization', () => {
+    const exportButtons = [
+      'totalDistance',
+      'heartratePace',
+      'equipment',
+      'equipmentTimeline',
+      'heatmap'
+    ];
+    exportButtons.forEach(tabName => {
+      expect(html).toContain(`exportVisualizationTab('${tabName}')`);
+    });
+    expect((html.match(/Export for Insta \/ Strava/g) || []).length).toBeGreaterThanOrEqual(6);
+    expect((html.match(/assets\/Strava_Logo\.svg/g) || []).length).toBeGreaterThanOrEqual(6);
+    expect((html.match(/assets\/Instagram_logo_2016\.svg/g) || []).length).toBeGreaterThanOrEqual(6);
+    expect(html).toMatch(/assets\/Strava_Logo\.svg[\s\S]*Export for Insta \/ Strava[\s\S]*assets\/Instagram_logo_2016\.svg/);
+    expect(html).toContain('id="pbDetailCaptureTarget"');
+    expect(html).toContain("targetElementId: 'pbDetailCaptureTarget'");
+    expect(html).not.toContain("exportVisualizationTab('personalBests')");
+    expect(inlineCode).toContain('getExportAssetPaths');
+    expect(html).toContain('Export for Insta / Strava');
+    expect(html).toContain('class="h-5 w-8 object-contain"');
+  });
+
+  it('composes export metadata in separate image regions and supports PB tile targets', () => {
+    expect(inlineCode).toContain('function drawExportComposition(captured, target, assets)');
+    expect(inlineCode).toContain("ctx.fillRect(0, 0, targetSize, 190)");
+    expect(inlineCode).toContain("ctx.fillRect(0, 0, targetSize, 190)");
+    expect(inlineCode).toContain("ctx.drawImage(assets.qrCode, 930, 28, 120, 120)");
+    expect(inlineCode).not.toContain("ctx.fillRect(0, 930, targetSize, 150)");
+    expect(inlineCode).not.toContain('footerLogoBox');
+    expect(inlineCode).toContain('computeFilterRowLayout');
+    expect(inlineCode).toContain('rowPaddingBottom');
+    expect(inlineCode).toContain("target.contentFit === 'pb-tight' ? 1032 : 960");
+    expect(inlineCode).toContain("target.contentFit === 'pb-tight' ? 560 : 500");
+    expect(inlineCode).toContain("ctx.font = '600 24px system-ui");
+    expect(inlineCode).toContain("ctx.drawImage(assets.qrCode");
+    expect(inlineCode).toContain("kind: 'pb-tile'");
+    expect(inlineCode).toContain("targetElementId: 'pbDetailCaptureTarget'");
+    expect(inlineCode).toContain('availableControls: getAvailableControlContext(tabName)');
+    expect(inlineCode).toContain('drawAvailableControls(');
+    expect(inlineCode).toContain('target.availableControls || []');
+    expect(inlineCode).toContain('computeContainFit');
+    expect(inlineCode).toContain('EXPORT_DOMAIN');
+    expect(inlineCode).not.toContain('ctx.drawImage(assets.strava');
+    expect(inlineCode).not.toContain('ctx.drawImage(assets.instagram');
+    expect(inlineCode).not.toContain('targetElementId: tileId');
+    expect(inlineCode).toContain('function exportActivePbDetail()');
+    expect(inlineCode).toContain('computeExportMetadataLayout');
+    expect(inlineCode).toContain("exportVisualizationTarget(target)");
+  });
+
+  it('keeps export assets local and does not route generated images through the API', () => {
+    expect(inlineCode).toContain('getExportAssetPaths');
+    expect(inlineCode).toContain('image.src = path');
+    expect(inlineCode).not.toContain('fetch(EXPORT');
+    expect(inlineCode).not.toContain('analysisCounterClient.recordAnalysis(dataUrl)');
+  });
+
   it('keeps complete record histories and positions compact labels by direction', () => {
     expect((inlineCode.match(/return pbs;/g) || [])).toHaveLength(2);
     expect(inlineCode).not.toContain('return pbs.slice(0, PB_MAX_RESULTS)');

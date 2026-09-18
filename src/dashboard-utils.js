@@ -44,30 +44,28 @@ function findHeaderIndex(headers, matcher) {
  */
 function parseGermanDate(dateStr) {
   if (!dateStr) return null;
-  const directParse = new Date(dateStr);
-  if (!Number.isNaN(directParse.getTime())) {
-    return directParse;
+  const normalized = String(dateStr).trim();
+  const germanMatch = normalized.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:,\s*\d{1,2}:\d{2}(?::\d{2})?)?$/);
+
+  if (germanMatch) {
+    const day = parseInt(germanMatch[1], 10);
+    const month = parseInt(germanMatch[2], 10) - 1;
+    const year = parseInt(germanMatch[3], 10);
+    const parsedDate = new Date(year, month, day);
+
+    if (
+      parsedDate.getFullYear() !== year ||
+      parsedDate.getMonth() !== month ||
+      parsedDate.getDate() !== day
+    ) {
+      return null;
+    }
+
+    return parsedDate;
   }
 
-  const parts = dateStr.split(',');
-  if (!parts[0]) return null;
-  const dmy = parts[0].trim().split('.');
-  if (dmy.length !== 3) return null;
-  const day = parseInt(dmy[0], 10);
-  const month = parseInt(dmy[1], 10) - 1; // 0-indexed
-  const year = parseInt(dmy[2], 10);
-  
-  // Validate day and month
-  if (day < 1 || day > 31 || month < 0 || month > 11) {
-    return null;
-  }
-  
-  const parsedDate = new Date(year, month, day);
-  // Verify the date is valid (e.g., Feb 30 would auto-correct, so check it matches)
-  if (isNaN(parsedDate.getTime()) || parsedDate.getDate() !== day || parsedDate.getMonth() !== month) {
-    return null;
-  }
-  return parsedDate;
+  const directParse = new Date(normalized);
+  return Number.isNaN(directParse.getTime()) ? null : directParse;
 }
 
 /**

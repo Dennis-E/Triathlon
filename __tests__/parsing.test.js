@@ -30,6 +30,23 @@ describe('parseGermanDate', () => {
     expect(result.getDate()).toBe(19);
   });
 
+  it.each([
+    ['10.01.2026, 08:40:03', 0, 10],
+    ['11.08.2026, 15:04:57', 7, 11],
+    ['12.07.2026, 09:18:51', 6, 12],
+    ['10.09.2026', 8, 10],
+    ['11.09.2026', 8, 11],
+    ['12.09.2026', 8, 12],
+    ['10.09.2026, 14:52:02', 8, 10]
+  ])('should not interpret German date %s as US month-day format', (value, expectedMonth, expectedDay) => {
+    const result = parseGermanDate(value);
+
+    expect(result).not.toBeNull();
+    expect(result.getFullYear()).toBe(2026);
+    expect(result.getMonth()).toBe(expectedMonth);
+    expect(result.getDate()).toBe(expectedDay);
+  });
+
   it('should parse english export dates with month names', () => {
     const result = parseGermanDate('Jul 27, 2026, 9:00:37 AM');
     expect(result).not.toBeNull();
@@ -53,6 +70,8 @@ describe('parseGermanDate', () => {
   it('should return null for invalid date format', () => {
     expect(parseGermanDate('not-a-date')).toBeNull();
     expect(parseGermanDate('32.13.2026')).toBeNull(); // Invalid day/month
+    expect(parseGermanDate('31.04.2026')).toBeNull();
+    expect(parseGermanDate('29.02.2025')).toBeNull();
   });
 
   it('should return null for incomplete date', () => {

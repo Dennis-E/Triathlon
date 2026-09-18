@@ -251,6 +251,19 @@ describe('processData', () => {
     expect(result[0].monday).toBeDefined();
     expect(result[0].monday.getDay()).toBe(1); // Monday
   });
+
+  it('should keep ambiguous German September dates in September', () => {
+    const data = [
+      ['Aktivitätsdatum', 'Aktivitätsart', 'Name der Aktivität', 'Bewegungszeit', 'Distanz'],
+      ['10.09.2026, 14:52:02', 'Lauf', 'September run', '3600', '10000']
+    ];
+
+    const result = processData(data);
+
+    expect(result).toHaveLength(1);
+    expect(formatDateIso(result[0].date)).toBe('2026-09-10');
+    expect(formatDateIso(result[0].monday)).toBe('2026-09-07');
+  });
 });
 
 describe('aggregateByWeek', () => {

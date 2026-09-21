@@ -1107,31 +1107,378 @@
     </div>
   </div>
 
-  <footer class="border-t border-slate-900 bg-slate-950/70 py-3 px-6 text-center text-[11px] text-slate-500 shrink-0">
-    <div class="flex flex-col items-center gap-2">
-      <div class="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 shadow-lg shadow-red-500/10">
-        <p class="text-xs font-semibold tracking-wide text-red-200">Alpha version - <a class="underline decoration-red-300/70 underline-offset-2 hover:text-white" href="mailto:myaidevproject@gmail.com">Feedback is welcome as development continues.</a></p>
-      </div>
-      <p>TriAnalytica • Local Offline Processing (No internet transmission of your personal files)</p>
-      <div class="flex flex-wrap items-center justify-center gap-4 text-slate-400">
-        <details class="text-left">
-          <summary class="cursor-pointer select-none text-slate-300 hover:text-white">Impressum</summary>
-          <div class="mt-2 max-w-sm space-y-1 text-slate-400">
-            <p>Dennis Eggert</p>
-            <p>Germanenstr. 6, 53175 Bonn</p>
-            <p>E-Mail: <a class="underline hover:text-white" href="mailto:myaidevproject@gmail.com">myaidevproject@gmail.com</a></p>
-          </div>
-        </details>
-        <details class="text-left">
-          <summary class="cursor-pointer select-none text-slate-300 hover:text-white">Datenschutzerklärung</summary>
-          <div class="mt-2 max-w-sm space-y-1 text-slate-400">
-            <p>Importierte Aktivitätsdaten (z. B. GPX- oder CSV-Dateien) werden ausschließlich lokal in Ihrem Browser verarbeitet und nicht auf einem Server dieser Anwendung gespeichert.</p>
-            <p>Extern eingebundene Bibliotheken (z. B. von einem CDN) können dennoch übliche Browser-/Netzwerkanfragen auslösen, etwa beim Laden von Skripten oder Schriftarten.</p>
-          </div>
-        </details>
-      </div>
+  <footer class="border-t border-slate-900 bg-slate-950/70 px-4 py-3 text-center text-[11px] text-slate-500 shrink-0">
+    <div class="flex flex-wrap items-center justify-center gap-2 text-slate-400">
+      <a
+        href="mailto:myaidevproject@gmail.com?subject=TriAnalytica%20Feedback&body=Hi%20Dennis%2C%0A%0AHere%20is%20my%20feedback%20on%20TriAnalytica%3A%0A%0A"
+        class="inline-flex items-center justify-center rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-1.5 text-[11px] font-medium text-amber-100 transition hover:border-amber-400 hover:bg-amber-500/20 hover:text-white focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-slate-950"
+        aria-label="Alpha phase - please send feedback"
+        title="Open an email to send feedback"
+      >
+        Alpha Phase - Please Feedback
+      </a>
+      <button id="imprintButton" type="button" class="inline-flex items-center justify-center rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-[11px] font-medium text-slate-200 transition hover:border-slate-500 hover:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 focus:ring-offset-slate-950" aria-haspopup="dialog" aria-controls="imprintModal">
+        Impressum
+      </button>
+      <button id="privacyPolicyButton" type="button" class="inline-flex items-center justify-center rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 py-1.5 text-[11px] font-medium text-indigo-100 transition hover:border-indigo-400 hover:bg-indigo-500/20 hover:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 focus:ring-offset-slate-950" aria-haspopup="dialog" aria-controls="privacyPolicyModal">
+        Datenschutzerklärung / Privacy Policy
+      </button>
     </div>
   </footer>
+
+  <div id="imprintModal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm" aria-hidden="true">
+    <div class="relative flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-indigo-500/40 bg-slate-950 shadow-2xl shadow-slate-950/40" role="dialog" aria-modal="true" aria-labelledby="imprintTitle" tabindex="-1">
+      <div class="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+        <h2 id="imprintTitle" class="text-lg font-semibold text-white">Impressum</h2>
+        <button id="imprintClose" type="button" class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-300 transition hover:border-slate-500 hover:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400" aria-label="Close imprint dialog">×</button>
+      </div>
+      <div class="overflow-y-auto px-4 py-4 text-sm leading-7 text-slate-300">
+        <p class="text-white">Dennis Eggert</p>
+        <p>Germanenstr. 6</p>
+        <p>53175 Bonn</p>
+        <p>Deutschland</p>
+        <p class="mt-3">E-Mail: <a class="underline hover:text-white" href="mailto:myaidevproject@gmail.com">myaidevproject@gmail.com</a></p>
+      </div>
+    </div>
+  </div>
+
+  <div id="privacyPolicyModal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm" aria-hidden="true">
+    <div class="relative flex h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-indigo-500/40 bg-slate-950 shadow-2xl shadow-slate-950/40" role="dialog" aria-modal="true" aria-labelledby="privacyPolicyTitle" tabindex="-1">
+      <div class="sticky top-0 z-10 flex shrink-0 items-center justify-between gap-3 border-b border-slate-800 bg-slate-950/95 px-4 py-3 sm:px-6">
+        <div>
+          <p class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Legal</p>
+          <h2 id="privacyPolicyTitle" class="text-lg font-semibold text-white sm:text-xl">Datenschutzerklärung / Privacy Policy</h2>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <div class="inline-flex rounded-lg border border-slate-700 bg-slate-900 p-1" aria-label="Language switch">
+            <button type="button" data-privacy-lang="de" class="privacy-lang-btn rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-300 transition hover:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400" aria-pressed="true">Deutsch</button>
+            <button type="button" data-privacy-lang="en" class="privacy-lang-btn rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-300 transition hover:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400" aria-pressed="false">English</button>
+          </div>
+          <button id="privacyPolicyClose" type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-lg text-slate-300 transition hover:border-slate-500 hover:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400" aria-label="Close privacy policy dialog">×</button>
+        </div>
+      </div>
+
+      <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+        <div id="privacyPolicyContentDe" class="privacy-policy-panel space-y-6 text-sm leading-7 text-slate-300" lang="de">
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">1. Verantwortlicher</h3>
+            <p><strong>Verantwortlicher:</strong></p>
+            <p>Dennis Eggert<br>Germanenstr. 6<br>53175 Bonn<br>Deutschland</p>
+            <p>E-Mail: <a class="underline hover:text-white" href="mailto:myaidevproject@gmail.com">myaidevproject@gmail.com</a></p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">2. Verarbeitung importierter Aktivitätsdaten</h3>
+            <p>Users may select/import GPX and CSV activity files. Users can use the app to import Strava export data or other GPX/CSV activity files for analysis. Diese Dateien werden lokal im Browser des Nutzers verarbeitet. Die Dateien werden nicht auf einen TriAnalytica-Anwendungsserver hochgeladen und TriAnalytica speichert sie nicht dauerhaft auf seinem eigenen Server. Die importierten Daten werden nur verwendet, um die angeforderten Auswertungen, Diagramme und Visualisierungen zu berechnen.</p>
+            <p>Die App verwendet für die Analyse lokal im Browser verarbeitete Daten. Browserspeicher (z. B. lokale Zustände zur Verhinderung doppelter Zählungen) kann im Browser des Nutzers gespeichert werden, bleibt aber auf dem Endgerät und wird nicht auf serverseitige TriAnalytica-Systeme übertragen.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">3. Hosting über GitHub Pages</h3>
+            <p>Die Website wird über GitHub Pages bzw. GitHub-Infrastruktur gehostet. Beim Aufruf der Website können nach dem allgemeinen technischen Ablauf der Internetkommunikation normale Verbindungsdaten verarbeitet werden, etwa IP-Adresse, Zeitpunkt und Uhrzeit der Anfrage, angeforderte Ressource, Browser-/User-Agent-Informationen sowie andere technisch notwendige Protokoll-/Requestdaten.</p>
+            <p>TriAnalytica selbst speichert diese technischen Verbindungsdaten nicht in eigener Verantwortung über die App und die Website; der jeweilige Host-/Dienstanbieter kann nach eigenen technischen und sicherheitsrelevanten Vorgaben Protokolldaten verwalten. Diese Informationen dienen der sicheren, zuverlässigen und effizienten Bereitstellung der Website.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">4. Technische Verbindungsdaten</h3>
+            <p>Bei jedem Zugriff auf die Website können technisch notwendige Verbindungsdaten verarbeitet werden. Dazu gehören typischerweise die IP-Adresse, Datum und Uhrzeit, angeforderte URL/Ressource, Statuscodes, Referrer, Browser-/User-Agent-Informationen und andere technisch erforderliche Logdaten. Diese Daten werden vor allem zur Sicherheit, Stabilität und dem Betrieb der Website erhoben.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">5. Externe Bibliotheken, Schriftarten und CDN-Ressourcen</h3>
+            <p>Diese Webanwendung lädt bestimmte Ressourcen aus externen Anbietern. Aktuell werden im Code unter anderem folgende externe Ressourcen verwendet:</p>
+            <ul class="list-disc space-y-1 pl-5">
+              <li><strong>Tailwind CSS</strong> über cdn.tailwindcss.com – Frontend-Styling</li>
+              <li><strong>Chart.js</strong> über cdn.jsdelivr.net – Diagramme und Visualisierungen</li>
+              <li><strong>Papa Parse</strong> über cdn.jsdelivr.net – CSV-Import und Parsing</li>
+              <li><strong>html2canvas</strong> über cdn.jsdelivr.net – Export-Preview und Bildgenerierung</li>
+              <li><strong>Lucide</strong> über cdn.jsdelivr.net – Icons</li>
+              <li><strong>Leaflet</strong> über unpkg.com – Heatmap-/Routenvisualisierung</li>
+              <li><strong>JSZip</strong> über cdnjs.cloudflare.com – ZIP-Import</li>
+              <li><strong>GitHub Pages / GitHub infrastructure</strong> – Bereitstellung der Website</li>
+              <li><strong>Google Cloud Run API</strong> – Analyse-Zähler-API unter <code class="rounded bg-slate-800 px-1 py-0.5 text-slate-200">https://trianalytics-api-520098173492.europe-west1.run.app</code> (nur über die Browser-Anwendung, wenn der Analyse-Zähler aktiv verwendet wird)</li>
+            </ul>
+            <p>Beim Laden dieser Ressourcen kann der Browser direkt mit den jeweiligen Anbietern kommunizieren. Dabei können technische Verbindungsdaten wie die IP-Adresse und andere technische Requestdaten an diese Provider übertragen werden. TriAnalytica nutzt nur die Ressourcen, die im Projekt tatsächlich geladen werden. Eine generische oder erfundene Drittanbieter-Liste wird nicht verwendet.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">6. Cookies, Tracking und Analytics</h3>
+            <p>TriAnalytica verwendet keine werblichen Cookies, keine Analyse- oder Marketing-Tracking-Tags, keine Tracking-Pixel und keine Nutzerkonten. Es gibt keine Personenbezogene Benutzer- oder Login-Sitzung, die durch ein Tracking-System verwaltet würde.</p>
+            <p>Die App nutzt lokal im Browser gespeicherten Status für die Analyse-Zählung (localStorage), um doppelte Analyseereignisse nicht mehrfach zu dokumentieren. Diese Speicherung bleibt auf dem Endgerät des Nutzers und wird nicht an TriAnalytica-Server gesendet.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">7. Rechtsgrundlagen</h3>
+            <p>Für die technisch notwendige Bereitstellung und Sicherung der Website, einschließlich der Verarbeitung von Verbindungsdaten durch den Hosting-Anbieter und die Bereitstellung der Website, gilt insoweit eine rechtmäßige Grundlage nach Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an einer sicheren, zuverlässigen und effizienten Bereitstellung der Website).</p>
+            <p>Für die lokale Verarbeitung importierter GPX-/CSV-Dateien durch den Browser des Nutzers gelten die Anforderungen des Datenschutzes im Verhältnis zur Verarbeitung auf dem Endgerät des Nutzers; TriAnalytica selbst speichert diese importierten Dateien nicht auf einem eigenen Server. Eine gesonderte Einwilligung für die bloße lokale Verarbeitung im Browser wird nicht als Voraussetzung für den technisch notwendigen Betrieb der App angenommen.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">8. Empfänger und Dienstleister</h3>
+            <p>Empfänger bzw. Dienstleister im Sinne der DSGVO sind insbesondere:</p>
+            <ul class="list-disc space-y-1 pl-5">
+              <li>GitHub und GitHub Pages als Hosting- und Bereitstellungsprovider</li>
+              <li>CDN- und Skriptprovider wie cdn.tailwindcss.com, cdn.jsdelivr.net, unpkg.com und cdnjs.cloudflare.com, soweit der Browser entsprechende Ressourcen lädt</li>
+              <li>Google Cloud Run bzw. die backendseitige Analyse-API, sofern der Analyse-Zähler im Browser aktiv verwendet wird</li>
+            </ul>
+            <p>Die konkreten Empfänger hängen von den tatsächlich geladenen Ressourcen und der Nutzung der jeweiligen Funktionen ab. Data may also be processed in third countries depending on the provider’s infrastructure.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">9. Datenübermittlung in Drittländer</h3>
+            <p>Je nach verwendeter Hosting- und CDN-Infrastruktur und den technischen Verbindungen des Browsers können Daten an Server in Drittstaaten außerhalb des Europäischen Wirtschaftsraums übertragen werden. Dies ist technisch bedingt durch die Bereitstellung und Nutzung externer Infrastruktur wie GitHub, CDNs und Cloud-Services. TriAnalytica prüft und dokumentiert jedoch nur tatsächliche Technology- und Provider-Umgebungen, die im Projekt verankert sind.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">10. Speicherdauer</h3>
+            <p>TriAnalytica speichert importierte GPX-/CSV-Aktivitätsdateien nicht dauerhaft auf seinem eigenen Anwendungsserver. Die Datei wird im Browser des Nutzers verarbeitet und bleibt dort nur so lange, wie sie von der Browser-Sitzung oder einer lokalen, vom Browser verwalteten Speicherung benötigt wird.</p>
+            <p>Technische Protokolldaten und Server-Logs können je nach Hosting-/Service-Provider unterschiedlich lang aufbewahrt werden. Es gibt keine von TriAnalytica fest vorgegebene eigene Aufbewahrungsdauer für importierte Aktivitätsdaten auf der Applikationsseite.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">11. Rechte betroffener Personen</h3>
+            <p>Betroffene Personen haben das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung, Widerspruch und Datenübertragbarkeit. Sie können sich auch an eine zuständige Datenschutzaufsichtsbehörde wenden, wenn sie der Ansicht sind, dass die Verarbeitung ihrer personenbezogenen Daten rechtswidrig erfolgt.</p>
+            <p>Für Auskunfts- oder Löschungsanfragen im Zusammenhang mit der Website oder dem im Browser gespeicherten lokalen Status wenden Sie sich bitte an den oben genannten Verantwortlichen.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">12. Beschwerderecht</h3>
+            <p>Sie haben das Recht, bei einer zuständigen Datenschutzaufsichtsbehörde Beschwerde einzulegen, wenn Sie der Ansicht sind, dass die Verarbeitung Ihrer personenbezogenen Daten gegen die DSGVO verstößt.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">13. Änderungen dieser Datenschutzerklärung</h3>
+            <p>Diese Datenschutzerklärung kann angepasst werden, wenn sich die technischen Funktionen, Hosting-Umgebungen, verwendeten Bibliotheken oder rechtlichen Rahmenbedingungen ändern. Die jeweils aktuelle Fassung ist immer in der App unter diesem Privacy-Dialog verfügbar.</p>
+          </section>
+        </div>
+
+        <div id="privacyPolicyContentEn" class="privacy-policy-panel hidden space-y-6 text-sm leading-7 text-slate-300" lang="en">
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">1. Controller</h3>
+            <p><strong>Controller:</strong></p>
+            <p>Dennis Eggert<br>Germanenstr. 6<br>53175 Bonn<br>Germany</p>
+            <p>E-mail: <a class="underline hover:text-white" href="mailto:myaidevproject@gmail.com">myaidevproject@gmail.com</a></p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">2. Processing of imported activity data</h3>
+            <p>Users may select or import GPX and CSV activity files for analysis in the application. These files are processed locally in the user's browser. The files are not uploaded to a TriAnalytica application server, and TriAnalytica does not persistently store them on its own server. The imported data is used only to generate the requested analyses, charts, and visualizations.</p>
+            <p>The application relies on browser-side processing of the imported data. Browser storage may be used locally to prevent duplicate counting or to keep lightweight client-side state, but that data remains on the user's device and is not transmitted to TriAnalytica server infrastructure.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">3. Hosting via GitHub Pages</h3>
+            <p>The website is hosted using GitHub Pages / GitHub infrastructure. When the website is accessed, normal technical connection data may be processed as part of standard internet communication. This may include the IP address, date and time of the request, requested resource, browser / user-agent information, and other technically necessary request or log information.</p>
+            <p>TriAnalytica itself does not operate its own application backend specifically for storing the imported activity files on the server side; the hosting provider may process connection data in accordance with its own technical and security requirements.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">4. Technical connection data</h3>
+            <p>Access to the website can generate standard technical connection data. This may include IP address, date/time, requested URL, status codes, referrer, browser/user-agent data, and other information needed to ensure the website's availability, security, and operation.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">5. External libraries, fonts and CDN resources</h3>
+            <p>This web application loads certain resources from external providers. The project currently includes resources from:</p>
+            <ul class="list-disc space-y-1 pl-5">
+              <li><strong>Tailwind CSS</strong> via cdn.tailwindcss.com – frontend styling</li>
+              <li><strong>Chart.js</strong> via cdn.jsdelivr.net – charts and visualizations</li>
+              <li><strong>Papa Parse</strong> via cdn.jsdelivr.net – CSV import and parsing</li>
+              <li><strong>html2canvas</strong> via cdn.jsdelivr.net – export preview and image generation</li>
+              <li><strong>Lucide</strong> via cdn.jsdelivr.net – icons</li>
+              <li><strong>Leaflet</strong> via unpkg.com – heatmap and route visualization</li>
+              <li><strong>JSZip</strong> via cdnjs.cloudflare.com – ZIP import</li>
+              <li><strong>GitHub Pages / GitHub infrastructure</strong> – website hosting</li>
+              <li><strong>Google Cloud Run API</strong> at <code class="rounded bg-slate-800 px-1 py-0.5 text-slate-200">https://trianalytics-api-520098173492.europe-west1.run.app</code> when the analysis counter is used</li>
+            </ul>
+            <p>When these resources are loaded, the browser may connect directly to the respective providers. Technical connection data such as the IP address and other request metadata may be transmitted to those providers. No third-party services are claimed beyond the ones actually used in this project.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">6. Cookies, tracking and analytics</h3>
+            <p>TriAnalytica does not use advertising cookies, analytics scripts, marketing trackers, tracking pixels, or user accounts. No user login or tracking system is used for ongoing user profiling.</p>
+            <p>The app may use local browser storage for lightweight client-side deduplication of the analysis counter. This storage remains on the user's device and is not sent to TriAnalytica servers.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">7. Legal basis</h3>
+            <p>For the technically necessary provision and security of the website, including processing of connection data by the hosting provider, the lawful basis is Article 6(1)(f) GDPR (legitimate interest in securely, reliably and efficiently providing the website).</p>
+            <p>For the local processing of imported GPX/CSV data in the browser, TriAnalytica itself does not store those files on a server. The app performs the processing locally on the user's device for the purpose of generating the requested analyses and visualizations.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">8. Recipients and service providers</h3>
+            <p>Relevant recipients and service providers include:</p>
+            <ul class="list-disc space-y-1 pl-5">
+              <li>GitHub and GitHub Pages for hosting and delivery</li>
+              <li>CDN and script providers such as cdn.tailwindcss.com, cdn.jsdelivr.net, unpkg.com, and cdnjs.cloudflare.com when browser resources are requested</li>
+              <li>Google Cloud Run and the analysis API endpoint when the browser uses the analysis counter</li>
+            </ul>
+            <p>Actual recipients depend on the resources loaded and the features used by the visitor.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">9. International data transfers</h3>
+            <p>Depending on the hosting and CDN infrastructure used by the browser, data may be transferred to servers outside the European Economic Area. This is a consequence of using external hosting and content-delivery providers and is technically necessary for the delivery of the website and remote resources.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">10. Data retention</h3>
+            <p>TriAnalytica does not permanently store imported GPX/CSV activity files on its own application backend/server. The files are processed in the user's browser and remain there only as long as needed for local analysis or browser-managed state.</p>
+            <p>Technical log data and server logs may be retained by the hosting or infrastructure provider according to that provider's own retention policies. No specific retention period for imported activity files is imposed by TriAnalytica on its own application backend.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">11. Data subject rights</h3>
+            <p>Data subjects have the right of access, rectification, erasure, restriction of processing, objection, and data portability. They may also lodge a complaint with a supervisory authority if they believe that processing of their personal data is unlawful.</p>
+            <p>For requests related to website communication or local browser state, contact the controller identified above.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">12. Right to lodge a complaint</h3>
+            <p>You have the right to lodge a complaint with a competent supervisory authority if you believe that the processing of your personal data violates applicable data protection law.</p>
+          </section>
+
+          <section>
+            <h3 class="mb-3 text-base font-semibold text-white">13. Changes to this Privacy Policy</h3>
+            <p>This Privacy Policy may be updated if the technical features, hosting environment, third-party resources, or legal framework change. The current version is always available in this app from the privacy dialog.</p>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      const imprintModal = document.getElementById('imprintModal');
+      const imprintButton = document.getElementById('imprintButton');
+      const imprintClose = document.getElementById('imprintClose');
+      const privacyModal = document.getElementById('privacyPolicyModal');
+      const privacyButton = document.getElementById('privacyPolicyButton');
+      const privacyClose = document.getElementById('privacyPolicyClose');
+      const privacyPanels = Array.from(document.querySelectorAll('.privacy-policy-panel'));
+      const langButtons = Array.from(document.querySelectorAll('.privacy-lang-btn'));
+      const fallbackLang = document.documentElement.lang && document.documentElement.lang.toLowerCase().startsWith('de') ? 'de' : 'en';
+      let lastFocusedElement = null;
+
+      function setPrivacyLanguage(lang) {
+        const effectiveLang = lang === 'de' ? 'de' : 'en';
+        privacyPanels.forEach((panel) => {
+          const isActive = panel.id === (effectiveLang === 'de' ? 'privacyPolicyContentDe' : 'privacyPolicyContentEn');
+          panel.classList.toggle('hidden', !isActive);
+        });
+
+        langButtons.forEach((button) => {
+          const isSelected = button.dataset.privacyLang === effectiveLang;
+          button.setAttribute('aria-pressed', String(isSelected));
+          button.classList.toggle('bg-indigo-500', isSelected);
+          button.classList.toggle('text-white', isSelected);
+          button.classList.toggle('text-slate-300', !isSelected);
+        });
+      }
+
+      function openModal(modal) {
+        if (!modal) return;
+        lastFocusedElement = document.activeElement;
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        modal.setAttribute('aria-hidden', 'false');
+
+        const focusable = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        const firstFocusable = focusable[0];
+        if (firstFocusable) firstFocusable.focus();
+      }
+
+      function closeModal(modal) {
+        if (!modal) return;
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        modal.setAttribute('aria-hidden', 'true');
+        if (lastFocusedElement instanceof HTMLElement) {
+          lastFocusedElement.focus();
+        }
+      }
+
+      function openPrivacyModal() {
+        if (!privacyModal) return;
+        openModal(privacyModal);
+        const initialLang = document.documentElement.lang && document.documentElement.lang.toLowerCase().startsWith('de') ? 'de' : 'en';
+        setPrivacyLanguage(initialLang);
+      }
+
+      function closePrivacyModal() {
+        closeModal(privacyModal);
+      }
+
+      function openImprintModal() {
+        openModal(imprintModal);
+      }
+
+      function closeImprintModal() {
+        closeModal(imprintModal);
+      }
+
+      imprintButton && imprintButton.addEventListener('click', openImprintModal);
+      imprintClose && imprintClose.addEventListener('click', closeImprintModal);
+      privacyButton && privacyButton.addEventListener('click', openPrivacyModal);
+      privacyClose && privacyClose.addEventListener('click', closePrivacyModal);
+
+      imprintModal && imprintModal.addEventListener('click', (event) => {
+        if (event.target === imprintModal) closeImprintModal();
+      });
+
+      privacyModal && privacyModal.addEventListener('click', (event) => {
+        if (event.target === privacyModal) closePrivacyModal();
+      });
+
+      langButtons.forEach((button) => {
+        button.addEventListener('click', () => setPrivacyLanguage(button.dataset.privacyLang || 'de'));
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          if (privacyModal && !privacyModal.classList.contains('hidden')) {
+            closePrivacyModal();
+            return;
+          }
+          if (imprintModal && !imprintModal.classList.contains('hidden')) {
+            closeImprintModal();
+            return;
+          }
+          if (document.getElementById('pbDetailOverlay') && !document.getElementById('pbDetailOverlay').classList.contains('hidden')) {
+            closePbDetail();
+            return;
+          }
+          const previewGate = document.getElementById('previewGateModal');
+          if (previewGate && !previewGate.classList.contains('hidden')) {
+            closePreviewGateModal();
+          }
+          return;
+        }
+
+        if (privacyModal && !privacyModal.classList.contains('hidden') && event.key === 'Tab') {
+          const focusable = privacyModal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+          if (focusable.length === 0) {
+            event.preventDefault();
+            return;
+          }
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+          }
+        }
+      });
+
+      setPrivacyLanguage(fallbackLang);
+    })();
+
+  </script>
 
   <script>
     // Lucide Icons init

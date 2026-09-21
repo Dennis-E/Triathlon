@@ -29,15 +29,24 @@ describe('legal footer', () => {
   });
 
   describe('Impressum (US1)', () => {
-    it('shows an Impressum heading with owner name, address, and email', () => {
-      expect(html).toMatch(/Impressum/);
+    it('shows the alpha feedback button next to the legal buttons', () => {
+      expect(html).toMatch(/alpha phase.*please feedback/i);
+      expect(html).toMatch(/href="mailto:myaidevproject@gmail\.com\?subject=TriAnalytica%20Feedback&body=/i);
+      expect(html).toMatch(/Open an email to send feedback/i);
+    });
+
+    it('shows an Impressum button and preserves the owner contact information in the modal', () => {
+      expect(html).toMatch(/Impressum/i);
+      expect(html).toMatch(/Dennis Eggert/);
+      expect(html).toMatch(/Germanenstr\. 6/);
+      expect(html).toMatch(/53175 Bonn/i);
+      expect(html).toMatch(/myaidevproject@gmail.com/i);
       expect(html).toMatch(/mailto:[^"'\s]+@[^"'\s]+/);
+      expect(html).toMatch(/id="imprintButton"|id="imprintPolicyButton"/i);
     });
 
     it('does not contain a phone number', () => {
       expect(html).not.toMatch(/tel:/i);
-      // Flags a standalone phone-like sequence of 6+ digits (with optional +, spaces, dashes)
-      // near the footer, without false-positiving on unrelated numeric content elsewhere.
       const footerMatch = html.match(/<footer[\s\S]*?<\/footer>/i);
       expect(footerMatch).not.toBeNull();
       const footerHtml = footerMatch[0];
@@ -45,23 +54,22 @@ describe('legal footer', () => {
     });
   });
 
-  describe('Datenschutzerklärung (US2)', () => {
-    it('shows a Datenschutzerklärung heading', () => {
-      expect(html).toMatch(/Datenschutzerklärung/);
+  describe('Datenschutzerklärung / Privacy Policy (US2)', () => {
+    it('shows a dedicated privacy link/button in both languages', () => {
+      expect(html).toMatch(/Datenschutzerklärung\s*\/\s*Privacy Policy/i);
+      expect(html).toMatch(/Datenschutzerklärung/i);
+      expect(html).toMatch(/Privacy Policy/i);
+      expect(html).toMatch(/id="privacyPolicyButton"/i);
     });
 
-    it('states that imported data is processed locally and not stored on a server', () => {
-      const footerMatch = html.match(/<footer[\s\S]*?<\/footer>/i);
-      const footerHtml = footerMatch[0];
-      expect(footerHtml).toMatch(/lokal in Ihrem Browser verarbeitet/);
-      expect(footerHtml).toMatch(/nicht auf einem Server .* gespeichert/);
+    it('does not include the long footer privacy sentence', () => {
+      expect(html).not.toMatch(/Deine importierten GPX-\/CSV-Aktivitätsdateien werden lokal in deinem Browser verarbeitet/i);
+      expect(html).not.toMatch(/Your imported GPX\/CSV activity files are processed locally in your browser/i);
     });
 
-    it('discloses that external libraries may trigger standard network requests', () => {
-      const footerMatch = html.match(/<footer[\s\S]*?<\/footer>/i);
-      const footerHtml = footerMatch[0];
-      expect(footerHtml).toMatch(/CDN/);
-      expect(footerHtml).toMatch(/Browser-\/Netzwerkanfragen/);
+    it('keeps the detailed privacy policy text in the modal instead of inline in the footer', () => {
+      expect(html).toMatch(/privacyPolicyModal/i);
+      expect(html).toMatch(/Verarbeitung importierter Aktivitätsdaten|Processing of imported activity data/i);
     });
   });
 

@@ -16,6 +16,23 @@
 const fs   = require('fs');
 const path = require('path');
 
+// The dashboard orchestration files extracted from the former big inline script
+// (specs/022-modularize-inline-script). Order matches the required <script src>
+// load order in index.html (contracts/script-load-order.md).
+const DASHBOARD_MODULE_FILES = [
+  'dashboard-state.js',
+  'dashboard-core.js',
+  'dashboard-import.js',
+  'dashboard-equipment.js',
+  'dashboard-power-pb.js',
+  'dashboard-distributions.js',
+  'dashboard-scatter.js',
+  'dashboard-heatmap.js',
+  'dashboard-export.js',
+  'dashboard-tabs.js'
+];
+
+
 function extractInlineScripts(html) {
   // Match <script> … </script> blocks that have no src= attribute.
   const blocks = [];
@@ -34,11 +51,20 @@ describe('index.html inline script syntax', () => {
   beforeAll(() => {
     const htmlPath = path.join(__dirname, '../index.html');
     html = fs.readFileSync(htmlPath, 'utf-8');
-    inlineCode = extractInlineScripts(html);
+    const dashboardModulesCode = DASHBOARD_MODULE_FILES
+      .map(fileName => fs.readFileSync(path.join(__dirname, '../src', fileName), 'utf-8'))
+      .join('\n');
+    inlineCode = extractInlineScripts(html) + '\n' + dashboardModulesCode;
   });
 
   it('contains at least one inline script block', () => {
     expect(inlineCode.length).toBeGreaterThan(100);
+  });
+
+  it('loads the dashboard-*.js orchestration files in dependency order', () => {
+    const scriptSrcTags = [...html.matchAll(/<script src="\.\/src\/(dashboard-[a-z-]+\.js)"><\/script>/g)]
+      .map(m => m[1]);
+    expect(scriptSrcTags).toEqual(DASHBOARD_MODULE_FILES);
   });
 
   it('loads the browser power utility before the dashboard script', () => {
@@ -147,7 +173,7 @@ describe('index.html inline script syntax', () => {
     expect((html.match(/assets\/Instagram_logo_2016\.svg/g) || []).length).toBeGreaterThanOrEqual(6);
     expect(html).toMatch(/assets\/Strava_Logo\.svg[\s\S]*Export for Insta \/ Strava[\s\S]*assets\/Instagram_logo_2016\.svg/);
     expect(html).toContain('id="pbDetailCaptureTarget"');
-    expect(html).toContain("targetElementId: 'pbDetailCaptureTarget'");
+    expect(inlineCode).toContain("targetElementId: 'pbDetailCaptureTarget'");
     expect(html).not.toContain("exportVisualizationTab('personalBests')");
     expect(inlineCode).toContain('getExportAssetPaths');
     expect(html).toContain('Export for Insta / Strava');

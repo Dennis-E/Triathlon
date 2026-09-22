@@ -2,9 +2,10 @@
 
 ## Project shape
 
-- This is a static browser app. `index.html` owns the UI, import flow, dashboard state, and chart rendering; there is no frontend bundler or build step.
+- This is a static browser app. `index.html` owns the UI markup and `<script src="...">` wiring; there is no frontend bundler or build step.
 - Browser libraries are loaded from CDN script tags. Browser-facing modules under `src/` expose both CommonJS exports for Jest and `window.*` globals for `index.html`.
 - `src/` contains the reusable data and visualization utilities. Keep these modules browser-compatible and prefer pure functions where possible.
+- Dashboard orchestration (import flow, dashboard state, and chart rendering) lives in dedicated `src/dashboard-*.js` files (`dashboard-state.js`, `dashboard-core.js`, `dashboard-import.js`, `dashboard-equipment.js`, `dashboard-power-pb.js`, `dashboard-distributions.js`, `dashboard-scatter.js`, `dashboard-heatmap.js`, `dashboard-export.js`, `dashboard-tabs.js`), loaded via classic `<script src>` tags in the exact order documented in [specs/022-modularize-inline-script/contracts/script-load-order.md](specs/022-modularize-inline-script/contracts/script-load-order.md). These are DOM-orchestration files (global scope, not dual-target CommonJS modules) and remain part of what `index.html` owns.
 - `scripts/relevant-export-extractor.js` is a separate Node CLI for reducing Strava exports.
 - `services/api/` is a separate Express service for the analysis counter. It has its own `package.json`, dependencies, tests, and runtime entrypoint.
 

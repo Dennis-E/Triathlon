@@ -1,18 +1,15 @@
 <!--
 Sync Impact Report
-- Version change: [none, template placeholders] → 1.0.0
-- Modified principles: all five [PRINCIPLE_N_NAME] placeholders replaced with concrete,
-  repo-derived principles (Static Browser-First Delivery; Dual-Target Reusable Modules;
-  Narrowest-Scope Test-First Verification; Faithful Locale-Aware Data Parsing;
-  Explicit Privacy & Network Boundaries)
-- Added sections: Repository & Dependency Boundaries (was [SECTION_2_NAME]);
-  Development Workflow (was [SECTION_3_NAME])
+- Version change: 1.0.0 → 1.0.1
+- Modified principles: II. Dual-Target Reusable Modules — added a clarifying paragraph
+  scoping the CommonJS+`window.*` bridge requirement to data-processing/visualization
+  utility modules, and explicitly exempting `src/`-located DOM-orchestration files that
+  belong to `index.html`'s domain under Principle I (no behavioral or normative change to
+  existing utility modules; clarification only)
+- Added sections: none
 - Removed sections: none
-- Templates requiring follow-up: none found referencing outdated principle names
-  (.specify/templates/plan-template.md, spec-template.md, tasks-template.md,
-  checklist-template.md contain no hardcoded principle text to sync)
-- Follow-up TODOs: TODO(RATIFICATION_DATE) — original adoption date unknown; set when
-  the team confirms when these practices were first agreed upon.
+- Templates requiring follow-up: none found referencing outdated principle text
+- Follow-up TODOs: TODO(RATIFICATION_DATE) — still unset, unchanged from prior version
 -->
 
 # TriAnalytica Constitution
@@ -36,6 +33,12 @@ attach a `window.*` global bridge, so the same code runs unmodified in Jest and 
 Node tests; `src/tab-navigation.js`'s injectable-document pattern is the reference
 implementation. Rationale: this is what makes the codebase testable without adding a
 browser test runner or bundler.
+
+This principle applies to data-processing/visualization *utility* modules (e.g.
+`equipment-utils.js`, `heatmap-utils.js`). Files under `src/` whose sole purpose is DOM
+orchestration on behalf of `index.html` (wiring globals, event listeners, chart bootstrap)
+remain part of what Principle I assigns to `index.html`'s domain and MAY stay as classic,
+non-modular global scripts, provided they contain no independently reusable business logic.
 
 ### III. Narrowest-Scope Test-First Verification (NON-NEGOTIABLE)
 Every change to reusable modules or dashboard behavior MUST be validated by running the
@@ -102,4 +105,4 @@ clarifications and wording fixes. Reviewers MUST treat a pull request that viola
 Core Principle as blocking unless the constitution is amended first; complexity or
 deviation MUST be justified in the PR description.
 
-**Version**: 1.0.0 | **Ratified**: TODO(RATIFICATION_DATE): original adoption date not recorded | **Last Amended**: 2026-09-16
+**Version**: 1.0.1 | **Ratified**: TODO(RATIFICATION_DATE): original adoption date not recorded | **Last Amended**: 2026-09-22

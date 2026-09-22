@@ -280,6 +280,18 @@ describe('extractGpsTracksFromZip', () => {
 });
 
 describe('FIT power effort helpers', () => {
+  it('creates all eight supported duration efforts from Bike FIT records', () => {
+    const rawRecords = Array.from({ length: 3601 }, (_, index) => ({
+      timestamp: new Date(index * 1000),
+      distance: index * 20,
+      power: 220
+    }));
+
+    expect(buildFitPowerEfforts(rawRecords).map(effort => effort.targetSeconds)).toEqual([
+      5, 30, 60, 120, 300, 600, 1200, 3600
+    ]);
+  });
+
   it('normalizes power records and creates a qualifying 5-minute effort', () => {
     const rawRecords = Array.from({ length: 11 }, (_, index) => ({
       timestamp: new Date(index * 30000),

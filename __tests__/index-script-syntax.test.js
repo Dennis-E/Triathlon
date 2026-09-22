@@ -46,15 +46,40 @@ describe('index.html inline script syntax', () => {
   });
 
   it('renders a distinct activity-average power section for Bike PBs', () => {
-    expect(inlineCode).toContain('Activity-average power progression (W)');
-    expect(inlineCode).toContain('Activity average');
-    expect(inlineCode).toContain('window.powerPbUtils.createActivityAveragePowerRecords(activities)');
-    expect(inlineCode).toContain("Math.round(record.watts) + ' W'");
+    expect(inlineCode).not.toContain('Activity-average power progression (W)');
+    expect(inlineCode).not.toContain('createActivityAveragePowerRecords(activities)');
+  });
+
+  it('defines the dedicated Watt section and available-only profile contract', () => {
+    expect(html).toContain('id="pbBikePowerHeading"');
+    expect(html).toContain('id="pbBikePowerContainer"');
+    expect(inlineCode).toContain("heading.classList.add('hidden')");
+    expect(inlineCode).toContain('buildAllTimePowerProfile');
+    expect(inlineCode).toContain('Duration');
+    expect(inlineCode).toContain('Power (W)');
+    expect(inlineCode).toContain('limited-profile');
   });
 
   it('identifies duration-specific power effort details', () => {
     expect(inlineCode).toContain("Source: duration-specific effort");
     expect(inlineCode).toContain("ttPace.textContent = 'Power: ' + Math.round(pb.watts) + ' W'");
+  });
+
+  it('wires a hover tooltip and label thinning onto every all-time profile point', () => {
+    expect(inlineCode).toContain('window.powerPbUtils.getPowerProfileWattRange(profilePoints)');
+    expect(inlineCode).toContain('window.powerPbUtils.markPowerProfileLabelVisibility(profilePoints)');
+    expect(inlineCode).toContain("showPowerPbTooltip(e, point.record, 1, 1, color, point.durationLabel)");
+    expect(inlineCode).toContain('hit.addEventListener(\'mousemove\', movePbTooltip)');
+    expect(inlineCode).toContain('hit.addEventListener(\'mouseleave\', hidePbTooltip)');
+    expect(inlineCode).toContain('if (point.showLabel) {');
+  });
+
+  it('renders duration tiles with the shared timeline chart instead of static text', () => {
+    expect(inlineCode).toContain('function renderPowerDurationTileChart(block, allPbs, color)');
+    expect(inlineCode).toContain('renderPowerDurationTileChart(block, allPbs, color);');
+    expect(inlineCode).not.toContain("<span class=\"text-slate-500\">Current best</span>");
+    expect(inlineCode).toContain('appendPbDetailButton(header, {');
+    expect(inlineCode).toContain("title: 'Bike power ' + durationDef.label");
   });
 
   it('has no syntax errors in any inline <script> block', () => {
@@ -86,6 +111,7 @@ describe('index.html inline script syntax', () => {
     expect((inlineCode.match(/^\s*appendCurrentBest\(svg,/gm) || [])).toHaveLength(3);
     expect(inlineCode).toContain("appendYAxisLabel(svg, X_AXIS_Y - 1, '0', false)");
     expect(inlineCode).toContain('const firstRecordValue = records[0].value');
+    expect(inlineCode).toContain('function renderPowerDurationTileChart(block, allPbs, color)');
   });
 
   it('uses one opaque sticky sport header without a grid gap below it', () => {
@@ -179,7 +205,7 @@ describe('index.html inline script syntax', () => {
 
   it('includes activity titles in collision-protected detail labels', () => {
     expect(inlineCode).toContain('function wrapPbActivityTitle(title, maxCharacters = 24)');
-    expect((inlineCode.match(/title: .*\.name \|\| 'Activity'/g) || [])).toHaveLength(3);
+    expect((inlineCode.match(/title: .*\.name \|\| 'Activity'/g) || [])).toHaveLength(4);
     expect(inlineCode).toContain("svg.appendChild(createSvgElement('rect'");
     expect(inlineCode).toContain('const labelLayouts = records.map');
     expect(inlineCode).toContain('labelLayouts.forEach(layout =>');

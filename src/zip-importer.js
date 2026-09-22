@@ -9,7 +9,6 @@ const FIT_TARGET_DISTANCES_KM = {
   Bike: [20.0, 40.0, 90.0, 180.0]
 };
 
-const FIT_BIKE_POWER_DURATIONS_SECONDS = [300, 600, 1200, 3600];
 const powerPbUtils = typeof module !== 'undefined' && module.exports
   ? require('./power-pb-utils')
   : (typeof window !== 'undefined' ? window.powerPbUtils : null);
@@ -514,8 +513,8 @@ function buildFitPowerEfforts(records) {
   if (!powerPbUtils || typeof powerPbUtils.calculateRollingPowerEfforts !== 'function') return [];
   const normalized = normalizeFitRecords(records);
   const powerEfforts = [];
-  FIT_BIKE_POWER_DURATIONS_SECONDS.forEach(targetSeconds => {
-    const effort = powerPbUtils.calculateRollingPowerEfforts(normalized, targetSeconds)[0];
+  powerPbUtils.POWER_DURATIONS.forEach(duration => {
+    const effort = powerPbUtils.calculateRollingPowerEfforts(normalized, duration.seconds)[0];
     if (effort) powerEfforts.push(effort);
   });
   return powerEfforts;

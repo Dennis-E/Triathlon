@@ -1,4 +1,8 @@
 const POWER_DURATIONS = [
+  { label: '5s', seconds: 5 },
+  { label: '30s', seconds: 30 },
+  { label: '1m', seconds: 60 },
+  { label: '2m', seconds: 120 },
   { label: '5m', seconds: 300 },
   { label: '10m', seconds: 600 },
   { label: '20m', seconds: 1200 },
@@ -46,43 +50,6 @@ function normalizeFitPowerRecords(records) {
   return normalized;
 }
 
-function createActivityAveragePowerRecords(activities) {
-  if (!Array.isArray(activities)) return [];
-
-  const sorted = activities
-    .filter(activity => activity && activity.sport === 'Bike' && activity.date instanceof Date && !Number.isNaN(activity.date.getTime()))
-    .map(activity => ({ activity, watts: normalizePowerValue(activity.avgWatts) }))
-    .filter(item => item.watts !== null)
-    .sort((a, b) => a.activity.date - b.activity.date);
-
-  let bestWatts = -Infinity;
-  const records = [];
-  for (const { activity, watts } of sorted) {
-    if (watts <= bestWatts) continue;
-    bestWatts = watts;
-    records.push({
-      category: 'activity-average',
-      source: 'activity-average',
-      watts,
-      date: activity.date,
-      activityId: activity.id == null ? null : String(activity.id),
-      activityName: activity.name || 'Activity',
-      durationSeconds: null,
-      targetSeconds: null
-    });
-  }
-  return records;
-}
-
-function getPowerAvailabilityState(averageRecords, durationEfforts) {
-  const hasAverage = Array.isArray(averageRecords) && averageRecords.length > 0;
-  const hasDuration = Array.isArray(durationEfforts) && durationEfforts.length > 0;
-  if (hasAverage && hasDuration) return 'average-and-duration';
-  if (hasAverage) return 'average-only';
-  if (hasDuration) return 'duration-only';
-  return 'none';
-}
-
 function calculateRollingPowerEfforts(records, targetSeconds, coverageThreshold = 0.8) {
   if (!Array.isArray(records) || !Number.isFinite(targetSeconds) || targetSeconds <= 0) return [];
   const points = records
@@ -116,32 +83,34 @@ function calculateRollingPowerEfforts(records, targetSeconds, coverageThreshold 
   return [best];
 }
 
-function buildPowerProgression(records) {
+function buildAllTimePowerProfile(records) {
   if (!Array.isArray(records)) return [];
-  const sorted = records
-    .filter(record => record && record.date instanceof Date && !Number.isNaN(record.date.getTime()) && normalizePowerValue(record.watts) !== null)
-    .map(record => ({ ...record, watts: normalizePowerValue(record.watts) }))
-    .sort((a, b) => a.date - b.date);
-  const progression = [];
-  const categoryOrder = [];
-  const grouped = new Map();
-  sorted.forEach(record => {
-    if (!grouped.has(record.category)) {
-      grouped.set(record.category, []);
-      categoryOrder.push(record.category);
+  const highestByDuration = new Map();
+  records.forEach(record => {
+    const watts = normalizePowerValue(record && record.watts);
+    if (!record || !Number.isFinite(record.durationSeconds) || watts === null) return;
+    const existing = highestByDuration.get(record.durationSeconds);
+    if (!existing || watts > existing.watts) {
+      highestByDuration.set(record.durationSeconds, { ...record, watts });
     }
-    grouped.get(record.category).push(record);
   });
+  return Array.from(highestByDuration.values()).sort((a, b) => a.durationSeconds - b.durationSeconds);
+}
 
-  categoryOrder.forEach(category => {
-    let bestWatts = 0;
-    grouped.get(category).forEach(record => {
-      if (record.watts <= bestWatts) return;
-      bestWatts = record.watts;
-      progression.push(record);
-    });
-  });
-  return progression;
+function getPowerProfileWattRange(points) {
+  if (!Array.isArray(points) || points.length === 0) return { min: null, max: null };
+  const watts = points.map(point => point.watts).filter(value => Number.isFinite(value));
+  if (watts.length === 0) return { min: null, max: null };
+  return { min: Math.min(...watts), max: Math.max(...watts) };
+}
+
+function markPowerProfileLabelVisibility(points) {
+  if (!Array.isArray(points) || points.length === 0) return [];
+  const shortestDuration = Math.min(...points.map(point => point.durationSeconds));
+  return points.map(point => ({
+    ...point,
+    showLabel: point.durationSeconds === shortestDuration || point.durationSeconds >= 300
+  }));
 }
 
 if (typeof module !== 'undefined' && module.exports) {
@@ -149,10 +118,10 @@ if (typeof module !== 'undefined' && module.exports) {
     POWER_DURATIONS,
     normalizePowerValue,
     normalizeFitPowerRecords,
-    createActivityAveragePowerRecords,
-    getPowerAvailabilityState,
     calculateRollingPowerEfforts,
-    buildPowerProgression
+    buildAllTimePowerProfile,
+    getPowerProfileWattRange,
+    markPowerProfileLabelVisibility
   };
 }
 
@@ -161,9 +130,9 @@ if (typeof window !== 'undefined') {
     POWER_DURATIONS,
     normalizePowerValue,
     normalizeFitPowerRecords,
-    createActivityAveragePowerRecords,
-    getPowerAvailabilityState,
     calculateRollingPowerEfforts,
-    buildPowerProgression
+    buildAllTimePowerProfile,
+    getPowerProfileWattRange,
+    markPowerProfileLabelVisibility
   };
 }

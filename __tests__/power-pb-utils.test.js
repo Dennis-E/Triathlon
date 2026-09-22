@@ -2,10 +2,10 @@ const {
   POWER_DURATIONS,
   normalizePowerValue,
   normalizeFitPowerRecords,
-  createActivityAveragePowerRecords,
-  getPowerAvailabilityState,
   calculateRollingPowerEfforts,
-  buildPowerProgression
+  buildAllTimePowerProfile,
+  getPowerProfileWattRange,
+  markPowerProfileLabelVisibility
 } = require('../src/power-pb-utils');
 
 describe('power PB utils', () => {
@@ -20,6 +20,10 @@ describe('power PB utils', () => {
 
   it('defines the supported duration categories', () => {
     expect(POWER_DURATIONS).toEqual([
+      { label: '5s', seconds: 5 },
+      { label: '30s', seconds: 30 },
+      { label: '1m', seconds: 60 },
+      { label: '2m', seconds: 120 },
       { label: '5m', seconds: 300 },
       { label: '10m', seconds: 600 },
       { label: '20m', seconds: 1200 },
@@ -53,42 +57,6 @@ describe('power PB utils', () => {
     ]);
   });
 
-  it('creates activity-average records only for Bike activities with valid watts', () => {
-    const records = createActivityAveragePowerRecords([
-      bikeActivity(),
-      bikeActivity({ id: 'run-1', sport: 'Run', avgWatts: 500 }),
-      bikeActivity({ id: 'invalid', avgWatts: -5 }),
-      bikeActivity({ id: 'missing', avgWatts: null })
-    ]);
-
-    expect(records).toHaveLength(1);
-    expect(records[0]).toMatchObject({
-      category: 'activity-average',
-      source: 'activity-average',
-      watts: 245,
-      activityId: 'bike-1',
-      activityName: 'Bike workout'
-    });
-  });
-
-  it('keeps only successive activity-average highs in chronological order', () => {
-    const records = createActivityAveragePowerRecords([
-      bikeActivity({ id: 'late', date: new Date('2026-07-21'), avgWatts: 250 }),
-      bikeActivity({ id: 'first', date: new Date('2026-07-19'), avgWatts: 220 }),
-      bikeActivity({ id: 'middle', date: new Date('2026-07-20'), avgWatts: 240 }),
-      bikeActivity({ id: 'same', date: new Date('2026-07-22'), avgWatts: 250 })
-    ]);
-
-    expect(records.map(record => record.activityId)).toEqual(['first', 'middle', 'late']);
-  });
-
-  it('reports average and duration power availability separately', () => {
-    expect(getPowerAvailabilityState([], [])).toBe('none');
-    expect(getPowerAvailabilityState([bikeActivity()], [])).toBe('average-only');
-    expect(getPowerAvailabilityState([], [{ targetSeconds: 300, avgPower: 250 }])).toBe('duration-only');
-    expect(getPowerAvailabilityState([bikeActivity()], [{ targetSeconds: 300, avgPower: 250 }])).toBe('average-and-duration');
-  });
-
   it('calculates duration efforts only when 80 percent coverage is available', () => {
     const records = Array.from({ length: 10 }, (_, index) => ({
       tSec: index * 30,
@@ -108,14 +76,55 @@ describe('power PB utils', () => {
     expect(calculateRollingPowerEfforts(records.slice(0, 5), 300)).toEqual([]);
   });
 
-  it('builds separate higher-is-better progressions by category', () => {
-    const records = buildPowerProgression([
-      { category: 'activity-average', source: 'activity-average', watts: 200, date: new Date('2026-01-01') },
-      { category: 'activity-average', source: 'activity-average', watts: 210, date: new Date('2026-01-02') },
-      { category: '5m', source: 'fit-rolling', watts: 300, date: new Date('2026-01-01') },
-      { category: '5m', source: 'fit-rolling', watts: 290, date: new Date('2026-01-02') }
+  it('builds one highest available profile point per duration', () => {
+    const records = buildAllTimePowerProfile([
+      { durationSeconds: 300, durationLabel: '5m', watts: 280, date: new Date('2026-01-01') },
+      { durationSeconds: 300, durationLabel: '5m', watts: 300, date: new Date('2026-01-02') },
+      { durationSeconds: 5, durationLabel: '5s', watts: 900, date: new Date('2026-01-03') },
+      { durationSeconds: 60, durationLabel: '1m', watts: 600, date: new Date('2026-01-04') }
     ]);
 
-    expect(records.map(record => record.watts)).toEqual([200, 210, 300]);
+    expect(records.map(record => record.durationSeconds)).toEqual([5, 60, 300]);
+    expect(records.map(record => record.watts)).toEqual([900, 600, 300]);
+  });
+
+  it('omits missing durations without estimating profile values', () => {
+    expect(buildAllTimePowerProfile([
+      { durationSeconds: 5, durationLabel: '5s', watts: 900, date: new Date('2026-01-03') }
+    ])).toHaveLength(1);
+    expect(buildAllTimePowerProfile([])).toEqual([]);
+  });
+
+  it('returns the exact highest and lowest watt values across profile points', () => {
+    const points = [
+      { durationSeconds: 300, durationLabel: '5m', watts: 300 },
+      { durationSeconds: 5, durationLabel: '5s', watts: 900 },
+      { durationSeconds: 60, durationLabel: '1m', watts: 600 }
+    ];
+    expect(getPowerProfileWattRange(points)).toEqual({ min: 300, max: 900 });
+    expect(getPowerProfileWattRange([{ durationSeconds: 5, durationLabel: '5s', watts: 500 }])).toEqual({ min: 500, max: 500 });
+    expect(getPowerProfileWattRange([
+      { durationSeconds: 5, durationLabel: '5s', watts: 500 },
+      { durationSeconds: 60, durationLabel: '1m', watts: 500 }
+    ])).toEqual({ min: 500, max: 500 });
+    expect(getPowerProfileWattRange([])).toEqual({ min: null, max: null });
+  });
+
+  it('marks only the shortest duration and durations of 5 minutes or longer as label-visible', () => {
+    const points = POWER_DURATIONS.map(duration => ({ durationSeconds: duration.seconds, durationLabel: duration.label, watts: 200 }));
+    const marked = markPowerProfileLabelVisibility(points);
+    expect(marked.filter(point => point.showLabel).map(point => point.durationLabel)).toEqual(['5s', '5m', '10m', '20m', '60m']);
+    expect(marked.filter(point => !point.showLabel).map(point => point.durationLabel)).toEqual(['30s', '1m', '2m']);
+
+    const longOnly = markPowerProfileLabelVisibility([
+      { durationSeconds: 300, durationLabel: '5m', watts: 200 },
+      { durationSeconds: 3600, durationLabel: '60m', watts: 250 }
+    ]);
+    expect(longOnly.every(point => point.showLabel)).toBe(true);
+
+    const single = markPowerProfileLabelVisibility([{ durationSeconds: 5, durationLabel: '5s', watts: 900 }]);
+    expect(single).toEqual([{ durationSeconds: 5, durationLabel: '5s', watts: 900, showLabel: true }]);
+
+    expect(markPowerProfileLabelVisibility([])).toEqual([]);
   });
 });

@@ -1,12 +1,4 @@
-const { createAnalysisCounter, STORAGE_KEY } = require('../src/analysis-counter');
-
-function createStorage() {
-  const values = new Map();
-  return {
-    getItem: key => values.get(key) || null,
-    setItem: (key, value) => values.set(key, value)
-  };
-}
+const { createAnalysisCounter } = require('../src/analysis-counter');
 
 describe('analysis counter client', () => {
   it('loads the current total from the API', async () => {
@@ -32,8 +24,7 @@ describe('analysis counter client', () => {
       apiBaseUrl: 'https://api.example.com',
       clientKey: 'public-client-key',
       eventIdFactory: () => '123e4567-e89b-42d3-a456-426614174000',
-      fetchImpl,
-      storage: createStorage()
+      fetchImpl
     });
 
     await expect(counter.recordAnalysis()).resolves.toBe(18);
@@ -51,8 +42,7 @@ describe('analysis counter client', () => {
     const counter = createAnalysisCounter({
       apiBaseUrl: 'https://api.example.com',
       clientKey: 'public-client-key',
-      fetchImpl,
-      storage: createStorage()
+      fetchImpl
     });
 
     await expect(counter.recordAnalysis()).rejects.toThrow('status 429');
@@ -65,20 +55,50 @@ describe('analysis counter client', () => {
     await expect(counter.getCount()).rejects.toThrow('not configured');
   });
 
-  it('does not record the same browser analysis twice', async () => {
-    const storage = createStorage();
-    const fetchImpl = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ count: 18 }) });
+  it('records every successful upload, not just the first one in a browser', async () => {
+    const fetchImpl = jest.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ count: 18 }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ count: 19 }) });
+    const counter = createAnalysisCounter({
+      apiBaseUrl: 'https://api.example.com',
+      clientKey: 'public-client-key',
+      fetchImpl
+    });
+
+    await expect(counter.recordAnalysis()).resolves.toBe(18);
+    await expect(counter.recordAnalysis()).resolves.toBe(19);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses a distinct event ID for each recorded analysis', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ count: 1 }) });
+    let nextId = 0;
     const counter = createAnalysisCounter({
       apiBaseUrl: 'https://api.example.com',
       clientKey: 'public-client-key',
       fetchImpl,
-      storage,
-      eventIdFactory: () => '123e4567-e89b-42d3-a456-426614174000'
+      eventIdFactory: () => `event-${nextId++}`
     });
 
     await counter.recordAnalysis();
-    await expect(counter.recordAnalysis()).resolves.toBe(18);
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(storage.getItem(STORAGE_KEY))).toMatchObject({ status: 'recorded', count: 18 });
+    await counter.recordAnalysis();
+
+    const eventIds = fetchImpl.mock.calls.map(([, options]) => options.headers['X-Analysis-Event-Id']);
+    expect(eventIds).toEqual(['event-0', 'event-1']);
+  });
+
+  it('records analyses without reading or writing any browser storage', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ count: 5 }) });
+    const storage = { getItem: jest.fn(), setItem: jest.fn() };
+    const counter = createAnalysisCounter({
+      apiBaseUrl: 'https://api.example.com',
+      clientKey: 'public-client-key',
+      fetchImpl,
+      storage
+    });
+
+    await expect(counter.recordAnalysis()).resolves.toBe(5);
+    expect(storage.getItem).not.toHaveBeenCalled();
+    expect(storage.setItem).not.toHaveBeenCalled();
   });
 });

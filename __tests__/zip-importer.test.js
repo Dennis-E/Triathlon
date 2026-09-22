@@ -8,8 +8,28 @@ const {
   buildFitPowerEfforts,
   downsampleTrack,
   simplifyTrackPoints,
-  extractGpsTracksFromZip
+  extractGpsTracksFromZip,
+  extractFitPowerEffortsFromZip,
+  extractGpsAndPowerFromZip
 } = require('../src/zip-importer');
+
+function makeBikeFitRecords(count = 3601) {
+  return Array.from({ length: count }, (_, index) => ({
+    timestamp: new Date(index * 1000),
+    distance: index * 20,
+    power: 220,
+    position_lat: 48.1 + index * 0.00001,
+    position_long: 11.5 + index * 0.00001
+  }));
+}
+
+function makeFakeFitDeps(records) {
+  return {
+    ensureFitParserLoaded: jest.fn().mockResolvedValue(function FakeFitParser() {}),
+    parseFitRecords: jest.fn().mockResolvedValue(records),
+    gunzipUint8Array: jest.fn(bytes => Promise.resolve(bytes))
+  };
+}
 
 describe('zip importer relevant column extraction', () => {
   it('keeps Average Watts when present in original ZIP activities.csv headers', () => {
@@ -313,5 +333,119 @@ describe('FIT power effort helpers', () => {
     }));
 
     expect(buildFitPowerEfforts(rawRecords)).toEqual([]);
+  });
+});
+
+describe('extractGpsAndPowerFromZip (spec 021 - faster bike power import)', () => {
+  function makeZipFile(content) {
+    return { dir: false, async: jest.fn().mockResolvedValue(content) };
+  }
+
+  it('parses each bike activity FIT file only once for both GPS tracks and power efforts (FR-001/FR-006)', async () => {
+    const records = makeBikeFitRecords();
+    const fitDeps = makeFakeFitDeps(records);
+    const zip = { files: { 'activities/999.fit': makeZipFile(new Uint8Array([1, 2, 3])) } };
+    const rawCsv = ['Activity ID,Filename', '999,activities/999.fit'].join('\n');
+    const activitySportById = new Map([['999', 'Bike']]);
+
+    const result = await extractGpsAndPowerFromZip(zip, rawCsv, activitySportById, undefined, fitDeps);
+
+    expect(fitDeps.parseFitRecords).toHaveBeenCalledTimes(1);
+    expect(result.gpsTracksByActivityId['999'].points.length).toBeGreaterThan(0);
+    expect(result.fitBestEffortsByActivityId['999'].powerEfforts.length).toBeGreaterThan(0);
+  });
+
+  it('produces GPS tracks identical to extractGpsTracksFromZip for the same bike FIT input (FR-002/SC-003)', async () => {
+    const records = makeBikeFitRecords();
+    const zip = { files: { 'activities/999.fit': makeZipFile(new Uint8Array([1, 2, 3])) } };
+    const rawCsv = ['Activity ID,Filename', '999,activities/999.fit'].join('\n');
+    const activitySportById = new Map([['999', 'Bike']]);
+
+    const combined = await extractGpsAndPowerFromZip(zip, rawCsv, activitySportById, undefined, makeFakeFitDeps(records));
+    const separate = await extractGpsTracksFromZip(zip, rawCsv, activitySportById, undefined, makeFakeFitDeps(records));
+
+    expect(combined.gpsTracksByActivityId).toEqual(separate);
+  });
+
+  it('produces power efforts identical to extractFitPowerEffortsFromZip for the same bike FIT input (FR-002/SC-003)', async () => {
+    const records = makeBikeFitRecords();
+    const zip = { files: { 'activities/999.fit': makeZipFile(new Uint8Array([1, 2, 3])) } };
+    const rawCsv = ['Activity ID,Filename', '999,activities/999.fit'].join('\n');
+    const activitySportById = new Map([['999', 'Bike']]);
+
+    const combined = await extractGpsAndPowerFromZip(zip, rawCsv, activitySportById, undefined, makeFakeFitDeps(records));
+    const separate = await extractFitPowerEffortsFromZip(zip, rawCsv, activitySportById, undefined, makeFakeFitDeps(records));
+
+    expect(combined.fitBestEffortsByActivityId).toEqual(separate);
+  });
+
+  it('does no FIT parsing when there are no bike activities or no power data (FR-003/FR-005/SC-004)', async () => {
+    const fitDeps = makeFakeFitDeps([]);
+    const gpx = '<gpx><trkpt lat="48.1" lon="11.5"></trkpt></gpx>';
+    const zip = {
+      files: {
+        'activities/111.gpx': makeZipFile(gpx),
+        'activities/222.fit': { dir: false, async: jest.fn().mockRejectedValue(new Error('corrupt')) }
+      }
+    };
+    const rawCsv = ['Activity ID,Filename', '111,activities/111.gpx', '222,activities/222.fit'].join('\n');
+    const activitySportById = new Map([['111', 'Run'], ['222', 'Run']]);
+
+    const result = await extractGpsAndPowerFromZip(zip, rawCsv, activitySportById, undefined, fitDeps);
+
+    expect(result.fitBestEffortsByActivityId).toEqual({});
+    expect(result.gpsTracksByActivityId['111']).toEqual({ sport: 'Run', points: [[48.1, 11.5]] });
+    expect(result.gpsTracksByActivityId['222']).toBeUndefined();
+  });
+
+  it('reports monotonically increasing progress that reaches completion (FR-004)', async () => {
+    const records = makeBikeFitRecords();
+    const fitDeps = makeFakeFitDeps(records);
+    const zip = {
+      files: {
+        'activities/1.fit': makeZipFile(new Uint8Array([1])),
+        'activities/2.fit': makeZipFile(new Uint8Array([2])),
+        'activities/3.gpx': makeZipFile('<gpx><trkpt lat="1" lon="2"></trkpt></gpx>')
+      }
+    };
+    const rawCsv = [
+      'Activity ID,Filename',
+      '1,activities/1.fit',
+      '2,activities/2.fit',
+      '3,activities/3.gpx'
+    ].join('\n');
+    const activitySportById = new Map([['1', 'Bike'], ['2', 'Bike'], ['3', 'Run']]);
+    const progressCalls = [];
+    const onProgress = update => progressCalls.push(update.percent);
+
+    await extractGpsAndPowerFromZip(zip, rawCsv, activitySportById, onProgress, fitDeps);
+
+    expect(progressCalls.length).toBe(3);
+    for (let i = 1; i < progressCalls.length; i++) {
+      expect(progressCalls[i]).toBeGreaterThanOrEqual(progressCalls[i - 1]);
+    }
+    expect(progressCalls[progressCalls.length - 1]).toBe(90);
+  });
+
+  it('handles a large synthetic set of bike activities without introducing a blocking pattern (US3 regression guard)', async () => {
+    const records = makeBikeFitRecords(20);
+    const fitDeps = makeFakeFitDeps(records);
+    const files = {};
+    const csvRows = ['Activity ID,Filename'];
+    const activitySportById = new Map();
+    for (let i = 0; i < 60; i++) {
+      files[`activities/${i}.fit`] = makeZipFile(new Uint8Array([i]));
+      csvRows.push(`${i},activities/${i}.fit`);
+      activitySportById.set(String(i), 'Bike');
+    }
+    const zip = { files };
+    const rawCsv = csvRows.join('\n');
+    const progressCalls = [];
+
+    const result = await extractGpsAndPowerFromZip(zip, rawCsv, activitySportById, update => progressCalls.push(update.percent), fitDeps);
+
+    expect(Object.keys(result.gpsTracksByActivityId).length).toBe(60);
+    expect(Object.keys(result.fitBestEffortsByActivityId).length).toBe(60);
+    expect(progressCalls.length).toBe(60);
   });
 });

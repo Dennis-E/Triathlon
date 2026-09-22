@@ -116,8 +116,7 @@ async function importStravaZip(zipFile, onProgress) {
   reportProgress({ percent: 40, stage: 'Preparing activity data...' });
 
   const activitySportById = parseActivitySportsById(csvText);
-  const gpsTracksByActivityId = await extractGpsTracksFromZip(zip, csvText, activitySportById, reportProgress);
-  const fitBestEffortsByActivityId = await extractFitPowerEffortsFromZip(zip, csvText, activitySportById, reportProgress);
+  const { gpsTracksByActivityId, fitBestEffortsByActivityId } = await extractGpsAndPowerFromZip(zip, csvText, activitySportById, reportProgress);
   reportProgress({ percent: 95, stage: 'Finalizing...' });
 
   return {
@@ -352,7 +351,7 @@ function simplifyTrackPoints(points, options = {}) {
  * @param {Function} [reportProgress] - Optional progress callback ({percent, stage})
  * @returns {Promise<Object>} { [activityId]: { sport, points: [[lat, lon], ...] } }
  */
-async function extractGpsTracksFromZip(zip, rawCsvText, activitySportById, reportProgress) {
+async function extractGpsTracksFromZip(zip, rawCsvText, activitySportById, reportProgress, fitDeps) {
   const notify = typeof reportProgress === 'function' ? reportProgress : () => {};
   const fileIdMap = parseGpsFileIdToActivityId(rawCsvText);
   const entries = Array.from(fileIdMap.entries()).filter(([filename]) => zip.files[filename] && !zip.files[filename].dir);
@@ -377,11 +376,7 @@ async function extractGpsTracksFromZip(zip, rawCsvText, activitySportById, repor
           : await zip.files[filename].async('string');
         points = extractGpxTrackpoints(text);
       } else {
-        const bytes = isGzipped
-          ? await gunzipUint8Array(await zip.files[filename].async('uint8array'))
-          : await zip.files[filename].async('uint8array');
-        const FitParserCtor = await ensureFitParserLoaded();
-        const records = await parseFitRecords(FitParserCtor, bytes);
+        const records = await readAndParseFitFile(zip, filename, fitDeps);
         points = extractFitTrackpoints(records);
       }
 
@@ -401,7 +396,7 @@ async function extractGpsTracksFromZip(zip, rawCsvText, activitySportById, repor
   return result;
 }
 
-async function extractFitPowerEffortsFromZip(zip, rawCsvText, activitySportById, reportProgress) {
+async function extractFitPowerEffortsFromZip(zip, rawCsvText, activitySportById, reportProgress, fitDeps) {
   const notify = typeof reportProgress === 'function' ? reportProgress : () => {};
   const fileIdMap = parseGpsFileIdToActivityId(rawCsvText);
   const entries = Array.from(fileIdMap.entries()).filter(([filename, metadata]) =>
@@ -414,12 +409,7 @@ async function extractFitPowerEffortsFromZip(zip, rawCsvText, activitySportById,
     const [filename, { activityId }] = entries[index];
     notify({ percent: 90 + Math.round(((index + 1) / Math.max(entries.length, 1)) * 5), stage: `Extracting bike power (${index + 1}/${entries.length})...` });
     try {
-      const isGzipped = /\.gz$/i.test(filename);
-      const bytes = isGzipped
-        ? await gunzipUint8Array(await zip.files[filename].async('uint8array'))
-        : await zip.files[filename].async('uint8array');
-      const FitParserCtor = await ensureFitParserLoaded();
-      const records = await parseFitRecords(FitParserCtor, bytes);
+      const records = await readAndParseFitFile(zip, filename, fitDeps);
       const powerEfforts = buildFitPowerEfforts(records);
       if (powerEfforts.length > 0) result[activityId] = { powerEfforts };
     } catch (err) {
@@ -428,6 +418,68 @@ async function extractFitPowerEffortsFromZip(zip, rawCsvText, activitySportById,
   }
 
   return result;
+}
+
+/**
+ * Extract GPS tracks AND bike power efforts in a single pass over the ZIP's activity files.
+ * Unlike calling extractGpsTracksFromZip + extractFitPowerEffortsFromZip separately, each bike
+ * activity's FIT file is read/decompressed/parsed at most once (spec 021 FR-001/FR-006).
+ * @param {Object} zip - Loaded JSZip instance
+ * @param {string} rawCsvText - Raw activities.csv text (with Filename column)
+ * @param {Map<string, string>} activitySportById - activityId -> sport (Run/Bike/Swim)
+ * @param {Function} [reportProgress] - Optional progress callback ({percent, stage})
+ * @param {Object} [fitDeps] - Optional FIT dependency overrides (ensureFitParserLoaded, parseFitRecords, gunzipUint8Array), for testing
+ * @returns {Promise<{gpsTracksByActivityId: Object, fitBestEffortsByActivityId: Object}>}
+ */
+async function extractGpsAndPowerFromZip(zip, rawCsvText, activitySportById, reportProgress, fitDeps) {
+  const notify = typeof reportProgress === 'function' ? reportProgress : () => {};
+  const fileIdMap = parseGpsFileIdToActivityId(rawCsvText);
+  const entries = Array.from(fileIdMap.entries()).filter(([filename]) => zip.files[filename] && !zip.files[filename].dir);
+
+  const gpsTracksByActivityId = {};
+  const fitBestEffortsByActivityId = {};
+  let processed = 0;
+
+  for (const [filename, { activityId, ext }] of entries) {
+    processed++;
+    if (entries.length > 0) {
+      const percent = 40 + Math.round((processed / entries.length) * 50);
+      notify({ percent, stage: `Extracting GPS tracks and bike power (${processed}/${entries.length})...` });
+    }
+
+    try {
+      const isGzipped = /\.gz$/i.test(filename);
+      let points;
+
+      if (ext === 'gpx') {
+        const text = isGzipped
+          ? new TextDecoder('utf-8').decode(await gunzipUint8Array(await zip.files[filename].async('uint8array')))
+          : await zip.files[filename].async('string');
+        points = extractGpxTrackpoints(text);
+      } else {
+        const records = await readAndParseFitFile(zip, filename, fitDeps);
+        points = extractFitTrackpoints(records);
+
+        if (activitySportById && activitySportById.get(activityId) === 'Bike') {
+          const powerEfforts = buildFitPowerEfforts(records);
+          if (powerEfforts.length > 0) fitBestEffortsByActivityId[activityId] = { powerEfforts };
+        }
+      }
+
+      if (!points.length) continue;
+
+      const simplified = simplifyTrackPoints(points, { toleranceMeters: 3, maxPoints: 2000 });
+      gpsTracksByActivityId[activityId] = {
+        sport: (activitySportById && activitySportById.get(activityId)) || null,
+        points: simplified.map(p => [p.lat, p.lon])
+      };
+    } catch (err) {
+      // Skip activities whose GPS/FIT file can't be read/parsed; the rest of the import should still succeed
+      continue;
+    }
+  }
+
+  return { gpsTracksByActivityId, fitBestEffortsByActivityId };
 }
 
 async function ensureFitParserLoaded() {
@@ -445,6 +497,28 @@ async function gunzipUint8Array(input) {
   const stream = new Blob([input]).stream().pipeThrough(new DecompressionStream('gzip'));
   const outputBuffer = await new Response(stream).arrayBuffer();
   return new Uint8Array(outputBuffer);
+}
+
+/**
+ * Read a FIT ZIP entry's bytes (decompressing gzip if needed) and parse it exactly once.
+ * Both GPS trackpoints and bike power efforts are derived from the returned records array,
+ * instead of each caller re-reading/re-parsing the same file (spec 021 FR-001/FR-006).
+ * @param {Object} zip - Loaded JSZip instance
+ * @param {string} filename - ZIP entry path for the FIT file
+ * @param {{ensureFitParserLoaded?: Function, parseFitRecords?: Function, gunzipUint8Array?: Function}} [fitDeps] - Overrides for testing
+ * @returns {Promise<Array>} Parsed FIT records
+ */
+async function readAndParseFitFile(zip, filename, fitDeps) {
+  const deps = fitDeps || {};
+  const doGunzip = deps.gunzipUint8Array || gunzipUint8Array;
+  const loadParser = deps.ensureFitParserLoaded || ensureFitParserLoaded;
+  const doParse = deps.parseFitRecords || parseFitRecords;
+
+  const isGzipped = /\.gz$/i.test(filename);
+  const rawBytes = await zip.files[filename].async('uint8array');
+  const bytes = isGzipped ? await doGunzip(rawBytes) : rawBytes;
+  const FitParserCtor = await loadParser();
+  return doParse(FitParserCtor, bytes);
 }
 
 function parseFitRecords(FitParserCtor, fitBytes) {
@@ -657,6 +731,8 @@ if (typeof module !== 'undefined' && module.exports) {
     extractGpsTracksFromZip,
     normalizeFitRecords,
     buildFitPowerEfforts,
-    extractFitPowerEffortsFromZip
+    extractFitPowerEffortsFromZip,
+    extractGpsAndPowerFromZip,
+    readAndParseFitFile
   };
 }

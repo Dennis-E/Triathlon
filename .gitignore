@@ -2,6 +2,8 @@
 Data/
 TODO.md
 private-data/
+# Internal product-management notes and customer feedback
+private-data/product-management/
 
 # OS/IDE files
 .DS_Store

@@ -18,6 +18,8 @@
   <script src="./src/scatter-utils.js"></script>
   <script src="./src/equipment-utils.js"></script>
   <script src="./src/export-utils.js"></script>
+  <!-- Bike power personal-best helpers -->
+  <script src="./src/power-pb-utils.js"></script>
   <!-- Lucide Icons -->
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.344.0/dist/umd/lucide.min.js"></script>
   <!-- ZIP Importer Utility -->
@@ -4470,8 +4472,8 @@ datasets: [{
           ? 'Window: ' + pb.intervalStartKm.toFixed(2) + ' km to ' + pb.intervalEndKm.toFixed(2) + ' km'
           : 'Window: n/a';
         ttPace.textContent = 'Power: ' + Math.round(pb.watts) + ' W';
-        ttWatts.classList.add('hidden');
-        ttWatts.textContent = '';
+        ttWatts.classList.remove('hidden');
+        ttWatts.textContent = 'Source: duration-specific effort';
         ttRank.textContent = (durationLabel ? durationLabel + ' - ' : '') + (rank === total ? 'Current PB' : 'PB #' + rank + ' of ' + total);
         tooltip.classList.remove('hidden');
         movePbTooltip(e);
@@ -4629,6 +4631,49 @@ datasets: [{
         const color     = PB_SPORT_COLOR[sport];
         const distances = PB_DISTANCES[sport];
         let anyData     = false;
+
+        if (sport === 'Bike' && window.powerPbUtils) {
+          const averagePowerRecords = window.powerPbUtils.createActivityAveragePowerRecords(activities);
+          if (averagePowerRecords.length > 0) {
+            anyData = true;
+            const averagePowerSection = document.createElement('div');
+            averagePowerSection.className = 'space-y-2';
+
+            const averagePowerTitle = document.createElement('p');
+            averagePowerTitle.className = 'text-xs font-semibold text-slate-300';
+            averagePowerTitle.textContent = 'Activity-average power progression (W)';
+            averagePowerSection.appendChild(averagePowerTitle);
+
+            const averagePowerBlock = document.createElement('div');
+            averagePowerBlock.className = 'bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2';
+            averagePowerRecords.forEach(function(record, index) {
+              const row = document.createElement('div');
+              row.className = 'flex items-center justify-between gap-3 text-xs';
+
+              const context = document.createElement('div');
+              context.className = 'min-w-0';
+              const activityLabel = document.createElement('p');
+              activityLabel.className = 'truncate text-slate-300';
+              activityLabel.textContent = record.activityName;
+              const dateLabel = document.createElement('p');
+              dateLabel.className = 'text-[10px] text-slate-500';
+              dateLabel.textContent = formatShortDate(record.date) + ' · Activity average';
+              context.appendChild(activityLabel);
+              context.appendChild(dateLabel);
+
+              const valueLabel = document.createElement('span');
+              valueLabel.className = 'shrink-0 font-mono font-semibold text-teal-300';
+              valueLabel.textContent = Math.round(record.watts) + ' W';
+              if (index === averagePowerRecords.length - 1) valueLabel.title = 'Current activity-average power PB';
+
+              row.appendChild(context);
+              row.appendChild(valueLabel);
+              averagePowerBlock.appendChild(row);
+            });
+            averagePowerSection.appendChild(averagePowerBlock);
+            container.appendChild(averagePowerSection);
+          }
+        }
 
         distances.forEach(function(distDef) {
           const allPbs = computePbsForDistance(activities, sport, distDef.km, distDef.tol);

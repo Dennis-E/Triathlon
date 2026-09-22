@@ -41,6 +41,22 @@ describe('index.html inline script syntax', () => {
     expect(inlineCode.length).toBeGreaterThan(100);
   });
 
+  it('loads the browser power utility before the dashboard script', () => {
+    expect(html).toMatch(/<script src="\.\/src\/power-pb-utils\.js"><\/script>[\s\S]*<script>/);
+  });
+
+  it('renders a distinct activity-average power section for Bike PBs', () => {
+    expect(inlineCode).toContain('Activity-average power progression (W)');
+    expect(inlineCode).toContain('Activity average');
+    expect(inlineCode).toContain('window.powerPbUtils.createActivityAveragePowerRecords(activities)');
+    expect(inlineCode).toContain("Math.round(record.watts) + ' W'");
+  });
+
+  it('identifies duration-specific power effort details', () => {
+    expect(inlineCode).toContain("Source: duration-specific effort");
+    expect(inlineCode).toContain("ttPace.textContent = 'Power: ' + Math.round(pb.watts) + ' W'");
+  });
+
   it('has no syntax errors in any inline <script> block', () => {
     // new Function() parses (but does not execute) the body and throws
     // SyntaxError for malformed JavaScript — unmatched braces, stray tokens, etc.
@@ -145,6 +161,12 @@ describe('index.html inline script syntax', () => {
     expect(inlineCode).toContain('image.src = path');
     expect(inlineCode).not.toContain('fetch(EXPORT');
     expect(inlineCode).not.toContain('analysisCounterClient.recordAnalysis(dataUrl)');
+  });
+
+  it('keeps Bike power processing local to the imported dataset', () => {
+    expect(inlineCode).toContain('fitBestEffortsByActivityId');
+    expect(inlineCode).not.toContain('powerPbUtils.fetch');
+    expect(inlineCode).not.toContain('powerPbUtils.upload');
   });
 
   it('keeps complete record histories and positions compact labels by direction', () => {

@@ -10,6 +10,9 @@ const FIT_TARGET_DISTANCES_KM = {
 };
 
 const FIT_BIKE_POWER_DURATIONS_SECONDS = [300, 600, 1200, 3600];
+const powerPbUtils = typeof module !== 'undefined' && module.exports
+  ? require('./power-pb-utils')
+  : (typeof window !== 'undefined' ? window.powerPbUtils : null);
 
 let fitParserModulePromise = null;
 
@@ -115,11 +118,12 @@ async function importStravaZip(zipFile, onProgress) {
 
   const activitySportById = parseActivitySportsById(csvText);
   const gpsTracksByActivityId = await extractGpsTracksFromZip(zip, csvText, activitySportById, reportProgress);
+  const fitBestEffortsByActivityId = await extractFitPowerEffortsFromZip(zip, csvText, activitySportById, reportProgress);
   reportProgress({ percent: 95, stage: 'Finalizing...' });
 
   return {
     csvText,
-    fitBestEffortsByActivityId: {},
+    fitBestEffortsByActivityId,
     gpsTracksByActivityId
   };
 }
@@ -398,6 +402,35 @@ async function extractGpsTracksFromZip(zip, rawCsvText, activitySportById, repor
   return result;
 }
 
+async function extractFitPowerEffortsFromZip(zip, rawCsvText, activitySportById, reportProgress) {
+  const notify = typeof reportProgress === 'function' ? reportProgress : () => {};
+  const fileIdMap = parseGpsFileIdToActivityId(rawCsvText);
+  const entries = Array.from(fileIdMap.entries()).filter(([filename, metadata]) =>
+    metadata.ext === 'fit' && zip.files[filename] && !zip.files[filename].dir &&
+    activitySportById && activitySportById.get(metadata.activityId) === 'Bike'
+  );
+  const result = {};
+
+  for (let index = 0; index < entries.length; index++) {
+    const [filename, { activityId }] = entries[index];
+    notify({ percent: 90 + Math.round(((index + 1) / Math.max(entries.length, 1)) * 5), stage: `Extracting bike power (${index + 1}/${entries.length})...` });
+    try {
+      const isGzipped = /\.gz$/i.test(filename);
+      const bytes = isGzipped
+        ? await gunzipUint8Array(await zip.files[filename].async('uint8array'))
+        : await zip.files[filename].async('uint8array');
+      const FitParserCtor = await ensureFitParserLoaded();
+      const records = await parseFitRecords(FitParserCtor, bytes);
+      const powerEfforts = buildFitPowerEfforts(records);
+      if (powerEfforts.length > 0) result[activityId] = { powerEfforts };
+    } catch (err) {
+      continue;
+    }
+  }
+
+  return result;
+}
+
 async function ensureFitParserLoaded() {
   if (!fitParserModulePromise) {
     fitParserModulePromise = import('https://esm.sh/fit-file-parser@1.10.0');
@@ -440,6 +473,9 @@ function parseFitRecords(FitParserCtor, fitBytes) {
 }
 
 function normalizeFitRecords(records) {
+  if (powerPbUtils && typeof powerPbUtils.normalizeFitPowerRecords === 'function') {
+    return powerPbUtils.normalizeFitPowerRecords(records);
+  }
   const normalized = [];
   for (const rec of records) {
     const ts = rec && rec.timestamp instanceof Date ? rec.timestamp.getTime() : null;
@@ -473,6 +509,18 @@ function normalizeFitRecords(records) {
   }
   return deduped;
 }
+
+function buildFitPowerEfforts(records) {
+  if (!powerPbUtils || typeof powerPbUtils.calculateRollingPowerEfforts !== 'function') return [];
+  const normalized = normalizeFitRecords(records);
+  const powerEfforts = [];
+  FIT_BIKE_POWER_DURATIONS_SECONDS.forEach(targetSeconds => {
+    const effort = powerPbUtils.calculateRollingPowerEfforts(normalized, targetSeconds)[0];
+    if (effort) powerEfforts.push(effort);
+  });
+  return powerEfforts;
+}
+
 function parseCsvBasic(text) {
   const rows = [];
   let row = [];
@@ -607,6 +655,9 @@ if (typeof module !== 'undefined' && module.exports) {
     extractFitTrackpoints,
     downsampleTrack,
     simplifyTrackPoints,
-    extractGpsTracksFromZip
+    extractGpsTracksFromZip,
+    normalizeFitRecords,
+    buildFitPowerEfforts,
+    extractFitPowerEffortsFromZip
   };
 }

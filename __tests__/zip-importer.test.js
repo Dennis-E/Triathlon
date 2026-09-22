@@ -4,6 +4,8 @@ const {
   parseGpsFileIdToActivityId,
   extractGpxTrackpoints,
   extractFitTrackpoints,
+  normalizeFitRecords,
+  buildFitPowerEfforts,
   downsampleTrack,
   simplifyTrackPoints,
   extractGpsTracksFromZip
@@ -274,5 +276,30 @@ describe('extractGpsTracksFromZip', () => {
     await extractGpsTracksFromZip(zip, rawCsv, new Map(), onProgress);
 
     expect(onProgress).toHaveBeenCalled();
+  });
+});
+
+describe('FIT power effort helpers', () => {
+  it('normalizes power records and creates a qualifying 5-minute effort', () => {
+    const rawRecords = Array.from({ length: 11 }, (_, index) => ({
+      timestamp: new Date(index * 30000),
+      distance: index * 500,
+      power: 220 + index
+    }));
+
+    expect(normalizeFitRecords(rawRecords)).toHaveLength(11);
+    expect(buildFitPowerEfforts(rawRecords)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ targetSeconds: 300, avgPower: 226, startSec: 60, endSec: 300 })
+    ]));
+  });
+
+  it('does not create duration efforts from invalid power samples alone', () => {
+    const rawRecords = Array.from({ length: 11 }, (_, index) => ({
+      timestamp: new Date(index * 30000),
+      distance: index * 500,
+      power: index === 10 ? 0 : null
+    }));
+
+    expect(buildFitPowerEfforts(rawRecords)).toEqual([]);
   });
 });

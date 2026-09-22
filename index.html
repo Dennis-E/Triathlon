@@ -16,6 +16,8 @@
   <script src="./src/tab-navigation.js"></script>
   <!-- Scatter chart helpers -->
   <script src="./src/scatter-utils.js"></script>
+  <!-- Distribution chart helpers -->
+  <script src="./src/distribution-utils.js"></script>
   <script src="./src/equipment-utils.js"></script>
   <script src="./src/export-utils.js"></script>
   <!-- Bike power personal-best helpers -->
@@ -679,6 +681,19 @@
           >
             Heatmap
           </button>
+          <button
+            id="vizTabDistributions"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="vizPanelDistributions"
+            tabindex="-1"
+            onclick="setVisualizationTab('distributions')"
+            onkeydown="handleVisualizationTabKeydown(event, 'distributions')"
+            class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
+          >
+            Distributions
+          </button>
         </div>
       </div>
       
@@ -1075,6 +1090,65 @@
               <p id="heatmapActivityTooltipHeading" class="text-xs font-semibold"></p>
               <p id="heatmapActivityTooltipAvailability" class="mt-1 hidden text-[10px] text-amber-300"></p>
               <div id="heatmapActivityTooltipRows" class="mt-2 max-h-[22rem] space-y-2 overflow-hidden"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="vizPanelDistributions" role="tabpanel" aria-labelledby="vizTabDistributions" class="hidden">
+        <div class="space-y-5">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+            <div class="space-y-1">
+              <h2 class="text-2xl font-bold tracking-tight">Distributions</h2>
+              <p id="distributionsPointCount" class="text-xs text-slate-400">0 activities</p>
+            </div>
+
+            <button type="button" onclick="exportVisualizationTab('distributions')" aria-label="Export for Insta / Strava: Distributions" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
+              <img src="assets/Strava_Logo.svg" alt="Strava" class="h-5 w-8 object-contain">
+              Export for Insta / Strava
+              <img src="assets/Instagram_logo_2016.svg" alt="Instagram" class="h-5 w-5 object-contain">
+            </button>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+              <button onclick="setDistributionsMetric('length')" id="distributionsMetricBtnLength" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">Length</button>
+              <button onclick="setDistributionsMetric('duration')" id="distributionsMetricBtnDuration" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Duration</button>
+              <button onclick="setDistributionsMetric('pace')" id="distributionsMetricBtnPace" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Pace</button>
+              <button onclick="setDistributionsMetric('elevation')" id="distributionsMetricBtnElevation" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Elevation gain</button>
+              <button onclick="setDistributionsMetric('power')" id="distributionsMetricBtnPower" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Power (Watt)</button>
+            </div>
+
+            <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+              <button onclick="setDistributionsSportFilter('All')" id="distributionsSportBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">All Sports</button>
+              <button onclick="setDistributionsSportFilter('Run')" id="distributionsSportBtnRun" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Run</button>
+              <button onclick="setDistributionsSportFilter('Bike')" id="distributionsSportBtnBike" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Bike</button>
+              <button onclick="setDistributionsSportFilter('Swim')" id="distributionsSportBtnSwim" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Swim</button>
+            </div>
+
+            <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+              <button onclick="setDistributionsDisplayMode('histogram')" id="distributionsModeBtnHistogram" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Histogram</button>
+              <button onclick="setDistributionsDisplayMode('line')" id="distributionsModeBtnLine" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">Line</button>
+            </div>
+          </div>
+
+          <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
+            <div class="flex items-center justify-between text-xs text-slate-400">
+              <span>Date range</span>
+              <span id="distributionsRangeLabel">All</span>
+            </div>
+            <div class="relative h-7 dual-range">
+              <div class="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 bg-slate-800 rounded-full"></div>
+              <div id="distributionsRangeSelectedTrack" class="absolute top-1/2 -translate-y-1/2 h-1 bg-indigo-500 rounded-full" style="left:0%; right:0%;"></div>
+              <input id="distributionsDateStart" type="range" oninput="setDistributionsDateRange('start', this.value)">
+              <input id="distributionsDateEnd" type="range" oninput="setDistributionsDateRange('end', this.value)">
+            </div>
+          </div>
+
+          <div id="distributionsChartWrapper" class="relative min-w-0 h-[420px] md:h-[500px]">
+            <canvas id="distributionsChart"></canvas>
+            <div id="distributionsEmptyState" class="hidden absolute inset-0 flex items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/80 px-6 text-center text-sm text-slate-400">
+              No activities available for this metric in the current dataset.
             </div>
           </div>
         </div>
@@ -1528,6 +1602,12 @@
      let heatmapMapInstance = null;
      let routeCanvasLayerInstance = null;
      let leafletLoadPromise = null;
+     let selectedDistributionsMetric = 'length';
+     let selectedDistributionsSportFilter = 'All';
+     let selectedDistributionsDisplayMode = 'line';
+     let distributionsChartInstance = null;
+     let distributionsDateRange = { start: 0, end: 0 };
+     let distributionsDateCandidates = [];
     let selectedTimeframeByAggregation = {
       daily: '3m',
       weekly: '1y',
@@ -1564,6 +1644,14 @@
         { key: '10y', label: '10 Years', amount: 10, unit: 'years' },
         { key: 'all', label: 'All', all: true }
       ]
+    };
+
+    const DISTRIBUTIONS_METRIC_CONFIG = {
+      length: { label: 'Length' },
+      duration: { label: 'Duration' },
+      pace: { label: 'Pace' },
+      elevation: { label: 'Elevation gain' },
+      power: { label: 'Power' }
     };
 
     // Standard Sport Categorization
@@ -1771,6 +1859,7 @@
       setScatterSportBtnActive('scatterSportBtnRun');
       renderTimeframeButtons();
       initScatterDateSlider();
+      initDistributionsDateSlider();
 
       renderDashboard();
       renderHeartratePaceChart();
@@ -2012,7 +2101,7 @@
           equipment,
           duration: durationSeconds,
           avgHeartRate: avgHeartRate,
-          avgWatts: avgWatts,
+          avgWatts: sportCategory === 'Bike' ? avgWatts : null,
           elevationGain: elevationGain,
           name: name
         });
@@ -2668,6 +2757,282 @@ datasets: [{
       selectedScatterSportFilter = sport;
       setScatterSportBtnActive(`scatterSportBtn${sport}`);
       renderHeartratePaceChart();
+    }
+
+    // --- Distributions tab (specs/018-activity-distributions) ---
+
+    function setDistributionsBtnActive(prefix, activeId) {
+      document.querySelectorAll(`[id^="${prefix}"]`).forEach(btn => {
+        btn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200';
+      });
+      const btn = document.getElementById(activeId);
+      if (btn) {
+        btn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25';
+      }
+    }
+
+    function setDistributionsMetric(metricKey) {
+      selectedDistributionsMetric = metricKey;
+      const metricBtnSuffix = metricKey.charAt(0).toUpperCase() + metricKey.slice(1);
+      setDistributionsBtnActive('distributionsMetricBtn', `distributionsMetricBtn${metricBtnSuffix}`);
+      renderDistributionsChart();
+    }
+
+    function setDistributionsSportFilter(sport) {
+      selectedDistributionsSportFilter = sport;
+      setDistributionsBtnActive('distributionsSportBtn', `distributionsSportBtn${sport}`);
+      renderDistributionsChart();
+    }
+
+    function setDistributionsDisplayMode(mode) {
+      selectedDistributionsDisplayMode = mode;
+      const modeBtnSuffix = mode.charAt(0).toUpperCase() + mode.slice(1);
+      setDistributionsBtnActive('distributionsModeBtn', `distributionsModeBtn${modeBtnSuffix}`);
+      renderDistributionsChart();
+    }
+
+    function initDistributionsDateSlider() {
+      const startInput = document.getElementById('distributionsDateStart');
+      const endInput = document.getElementById('distributionsDateEnd');
+      if (!startInput || !endInput) return;
+
+      const uniqueIsoDates = Array.from(new Set(processedActivities.map(a => formatDateIso(a.date)))).sort();
+      distributionsDateCandidates = uniqueIsoDates.map(iso => {
+        const [y, m, d] = iso.split('-').map(Number);
+        return new Date(y, m - 1, d);
+      });
+
+      if (distributionsDateCandidates.length === 0) {
+        distributionsDateCandidates = [new Date()];
+      }
+
+      const maxIndex = distributionsDateCandidates.length - 1;
+      distributionsDateRange.start = 0;
+      distributionsDateRange.end = maxIndex;
+
+      startInput.min = '0';
+      endInput.min = '0';
+      startInput.max = String(maxIndex);
+      endInput.max = String(maxIndex);
+      startInput.step = '1';
+      endInput.step = '1';
+      startInput.value = '0';
+      endInput.value = String(maxIndex);
+
+      updateDistributionsDateRangeLabel();
+      updateDistributionsDateRangeTrack();
+    }
+
+    function updateDistributionsDateRangeLabel() {
+      const label = document.getElementById('distributionsRangeLabel');
+      if (!label || distributionsDateCandidates.length === 0) return;
+
+      const startDate = distributionsDateCandidates[distributionsDateRange.start];
+      const endDate = distributionsDateCandidates[distributionsDateRange.end];
+      const isAll = distributionsDateRange.start === 0 && distributionsDateRange.end === distributionsDateCandidates.length - 1;
+      label.textContent = isAll
+        ? 'All'
+        : `${formatShortDate(startDate)} to ${formatShortDate(endDate)}`;
+    }
+
+    function updateDistributionsDateRangeTrack() {
+      const track = document.getElementById('distributionsRangeSelectedTrack');
+      if (!track || distributionsDateCandidates.length === 0) return;
+
+      const maxIndex = Math.max(1, distributionsDateCandidates.length - 1);
+      const leftPct = (distributionsDateRange.start / maxIndex) * 100;
+      const rightPct = 100 - ((distributionsDateRange.end / maxIndex) * 100);
+
+      track.style.left = `${leftPct}%`;
+      track.style.right = `${rightPct}%`;
+    }
+
+    function getDistributionsDateBounds() {
+      if (distributionsDateCandidates.length === 0) return { minDate: null, maxDate: null };
+      const minDate = distributionsDateCandidates[distributionsDateRange.start];
+      const maxDate = new Date(distributionsDateCandidates[distributionsDateRange.end]);
+      maxDate.setHours(23, 59, 59, 999);
+      return { minDate, maxDate };
+    }
+
+    function setDistributionsDateRange(boundary, value) {
+      const parsed = parseInt(value, 10);
+      if (Number.isNaN(parsed)) return;
+
+      if (boundary === 'start') {
+        distributionsDateRange.start = Math.max(0, Math.min(parsed, distributionsDateRange.end));
+      } else {
+        const maxIndex = distributionsDateCandidates.length - 1;
+        distributionsDateRange.end = Math.min(maxIndex, Math.max(parsed, distributionsDateRange.start));
+      }
+
+      const startInput = document.getElementById('distributionsDateStart');
+      const endInput = document.getElementById('distributionsDateEnd');
+      if (startInput) startInput.value = String(distributionsDateRange.start);
+      if (endInput) endInput.value = String(distributionsDateRange.end);
+
+      updateDistributionsDateRangeLabel();
+      updateDistributionsDateRangeTrack();
+      renderDistributionsChart();
+    }
+
+    function renderDistributionsChart() {
+      const canvas = document.getElementById('distributionsChart');
+      const emptyState = document.getElementById('distributionsEmptyState');
+      if (!canvas) return;
+
+      if (selectedDistributionsMetric === 'elevation' && selectedDistributionsSportFilter === 'Swim') {
+        if (distributionsChartInstance) {
+          distributionsChartInstance.destroy();
+          distributionsChartInstance = null;
+        }
+        canvas.classList.add('hidden');
+        if (emptyState) {
+          emptyState.classList.remove('hidden');
+          emptyState.textContent = 'Elevation gain is not applicable to Swim activities.';
+        }
+        const countEl = document.getElementById('distributionsPointCount');
+        if (countEl) countEl.textContent = 'N/A';
+        return;
+      }
+
+      const { minDate, maxDate } = getDistributionsDateBounds();
+      const qualifyingActivities = window.distributionUtils.filterActivitiesForDistribution(processedActivities, {
+        metric: selectedDistributionsMetric,
+        sport: selectedDistributionsSportFilter,
+        minDate,
+        maxDate
+      });
+
+      const values = qualifyingActivities
+        .map(activity => window.distributionUtils.getMetricValue(activity, selectedDistributionsMetric))
+        .filter(value => Number.isFinite(value));
+
+      const { buckets, activityCount } = window.distributionUtils.computeDistributionBuckets(values, {
+        metricKey: selectedDistributionsMetric,
+        sport: selectedDistributionsSportFilter !== 'All' ? selectedDistributionsSportFilter : null,
+        enableUnderflow: selectedDistributionsMetric === 'pace'
+      });
+
+      const countEl = document.getElementById('distributionsPointCount');
+      if (countEl) {
+        countEl.textContent = `${activityCount} activities`;
+      }
+
+      if (distributionsChartInstance) {
+        distributionsChartInstance.destroy();
+        distributionsChartInstance = null;
+      }
+
+      if (activityCount === 0) {
+        canvas.classList.add('hidden');
+        if (emptyState) {
+          emptyState.classList.remove('hidden');
+          emptyState.textContent = `No activities with ${DISTRIBUTIONS_METRIC_CONFIG[selectedDistributionsMetric].label} data available in the current dataset.`;
+        }
+        return;
+      }
+
+      canvas.classList.remove('hidden');
+      if (emptyState) emptyState.classList.add('hidden');
+
+      const metricConfig = DISTRIBUTIONS_METRIC_CONFIG[selectedDistributionsMetric];
+      const bucketLabels = buckets.map(b => b.label);
+      const bucketCounts = buckets.map(b => b.count);
+
+      const showPerSportLines = selectedDistributionsSportFilter === 'All' && selectedDistributionsDisplayMode === 'line';
+      const shouldReverseAxis = selectedDistributionsMetric === 'pace' &&
+        (selectedDistributionsSportFilter === 'Run' || selectedDistributionsSportFilter === 'Swim');
+      const getBucketLineX = bucket => (bucket.isOverflow ? bucket.rangeStart : bucket.isUnderflow ? bucket.rangeEnd : (bucket.rangeStart + bucket.rangeEnd) / 2);
+      const getColorPositions = count => {
+        const positions = count <= 1 ? [0] : Array.from({ length: count }, (_, i) => i / (count - 1));
+        return shouldReverseAxis ? positions.map(p => 1 - p) : positions;
+      };
+      const bucketFireColors = getColorPositions(buckets.length).map(position => window.distributionUtils.getFireGradientColor(position));
+
+      let datasets;
+      if (showPerSportLines) {
+        const perSport = window.distributionUtils.groupBucketCountsBySport(
+          qualifyingActivities,
+          selectedDistributionsMetric,
+          buckets
+        );
+        if (selectedDistributionsMetric === 'elevation') {
+          delete perSport.Swim;
+        }
+        datasets = Object.keys(perSport).map(sport => {
+          const sportBuckets = perSport[sport].buckets;
+          const sportFireColors = getColorPositions(sportBuckets.length).map(position => window.distributionUtils.getFireGradientColor(position));
+          return {
+            type: 'line',
+            label: sport,
+            data: sportBuckets.map(b => ({ x: getBucketLineX(b), y: b.count })),
+            borderColor: PB_SPORT_COLOR[sport] || '#6366F1',
+            backgroundColor: 'transparent',
+            pointBackgroundColor: sportFireColors,
+            cubicInterpolationMode: 'monotone',
+            tension: 0.4,
+            fill: false,
+            pointRadius: 3
+          };
+        });
+      } else {
+        const dataset = selectedDistributionsDisplayMode === 'line'
+          ? {
+              type: 'line',
+              label: 'Activities',
+              data: buckets.map(b => ({ x: getBucketLineX(b), y: b.count })),
+              borderColor: '#94A3B8',
+              backgroundColor: 'rgba(148, 163, 184, 0.15)',
+              pointBackgroundColor: bucketFireColors,
+              cubicInterpolationMode: 'monotone',
+              tension: 0.4,
+              fill: true,
+              pointRadius: 3
+            }
+          : {
+              type: 'bar',
+              label: 'Activities',
+              data: bucketCounts,
+              backgroundColor: bucketFireColors
+            };
+        datasets = [dataset];
+      }
+
+      const PACE_UNIT_BY_SPORT = { Run: 'min/km', Swim: 'min/100m', Bike: 'km/h' };
+      const axisTitleText = selectedDistributionsMetric === 'pace' && PACE_UNIT_BY_SPORT[selectedDistributionsSportFilter]
+        ? `Pace (${PACE_UNIT_BY_SPORT[selectedDistributionsSportFilter]})`
+        : metricConfig.label;
+
+      distributionsChartInstance = new Chart(canvas, {
+        type: selectedDistributionsDisplayMode === 'line' ? 'line' : 'bar',
+        data: {
+          labels: selectedDistributionsDisplayMode === 'line' ? undefined : bucketLabels,
+          datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              type: selectedDistributionsDisplayMode === 'line' ? 'linear' : 'category',
+              reverse: shouldReverseAxis,
+              title: { display: true, text: axisTitleText },
+              ticks: { color: '#94A3B8' },
+              grid: { color: 'rgba(148, 163, 184, 0.1)' }
+            },
+            y: {
+              title: { display: true, text: 'Activities' },
+              beginAtZero: true,
+              ticks: { color: '#94A3B8' },
+              grid: { color: 'rgba(148, 163, 184, 0.1)' }
+            }
+          },
+          plugins: {
+            legend: { display: showPerSportLines }
+          }
+        }
+      });
     }
 
     // Lazy-load Leaflet only when the heatmap tab is first opened. Route lines are
@@ -5094,6 +5459,8 @@ datasets: [{
           renderPbChart();
         } else if (nextTab === 'heatmap') {
           renderHeatmap();
+        } else if (nextTab === 'distributions') {
+          renderDistributionsChart();
         }
       }
     }
@@ -5177,6 +5544,7 @@ datasets: [{
         tabName === 'equipment' ? 'vizTabEquipment' :
         tabName === 'equipmentTimeline' ? 'vizTabEquipmentTimeline' :
         tabName === 'heatmap' ? 'vizTabHeatmap' :
+        tabName === 'distributions' ? 'vizTabDistributions' :
         'vizTabPersonalBests'
       );
       if (tabButton) tabButton.focus();
@@ -5301,7 +5669,8 @@ datasets: [{
       equipment: 'equipmentChartWrapper',
       equipmentTimeline: 'equipmentTimelineWrapper',
       personalBests: 'pbColumnsContainer',
-      heatmap: 'heatmapMapContainer'
+      heatmap: 'heatmapMapContainer',
+      distributions: 'distributionsChartWrapper'
     };
 
     const EXPORT_DOMAIN = window.exportUtils.getExportBrandConfig().domain;
@@ -5327,7 +5696,8 @@ datasets: [{
         equipment: isEmptyStateHidden('equipmentEmptyState'),
         equipmentTimeline: isEmptyStateHidden('equipmentTimelineEmptyState'),
         personalBests: isEmptyStateHidden('pbEmptyState'),
-        heatmap: isEmptyStateHidden('heatmapEmptyState')
+        heatmap: isEmptyStateHidden('heatmapEmptyState'),
+        distributions: isEmptyStateHidden('distributionsEmptyState')
       };
     }
 
@@ -5357,7 +5727,8 @@ datasets: [{
         'vizTabEquipment',
         'vizTabEquipmentTimeline',
         'vizTabPersonalBests',
-        'vizTabHeatmap'
+        'vizTabHeatmap',
+        'vizTabDistributions'
       ];
       const groups = [getControlGroup('Views', viewIds)];
       const tabGroups = {

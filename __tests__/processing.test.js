@@ -72,18 +72,33 @@ describe('processData', () => {
     expect(result[0].duration).toBe(3600);
   });
 
-  it('should keep equipment, average heart rate, and average watts in the interim activity objects', () => {
+  it('should keep equipment, average heart rate, and average watts in the interim activity objects for Bike activities', () => {
     const data = [
       ['Aktivitätsdatum', 'Aktivitätsart', 'Name der Aktivität', 'Aktivitätsausrüstung', 'Bewegungszeit', 'Durchschnittliche Herzfrequenz', 'Durchschnittliche Wattzahl', 'Distanz'],
-      ['19.07.2026, 14:52:02', 'Lauf', 'Morning run', 'ASICS Novablast 4', '3600', '152', '245', '10000']
+      ['19.07.2026, 14:52:02', 'Radfahrt', 'Morning ride', 'Canyon CF', '3600', '152', '245', '40000']
     ];
 
     const result = processData(data);
 
     expect(result.length).toBe(1);
-    expect(result[0].equipment).toBe('ASICS Novablast 4');
+    expect(result[0].equipment).toBe('Canyon CF');
     expect(result[0].avgHeartRate).toBe(152);
     expect(result[0].avgWatts).toBe(245);
+  });
+
+  it('should exclude average watts for non-Bike activities even when the raw CSV column has a value', () => {
+    const data = [
+      ['Aktivitätsdatum', 'Aktivitätsart', 'Name der Aktivität', 'Bewegungszeit', 'Durchschnittliche Wattzahl', 'Distanz'],
+      ['19.07.2026, 14:52:02', 'Lauf', 'Morning run', '3600', '245', '10000'],
+      ['19.07.2026, 15:52:02', 'Schwimmen', 'Morning swim', '1800', '150', '2000']
+    ];
+
+    const result = processData(data);
+
+    expect(result[0].sport).toBe('Run');
+    expect(result[0].avgWatts).toBeNull();
+    expect(result[1].sport).toBe('Swim');
+    expect(result[1].avgWatts).toBeNull();
   });
 
   it('should parse english average power headers into avgWatts', () => {

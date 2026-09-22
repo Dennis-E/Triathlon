@@ -1,4 +1,4 @@
-const TAB_ORDER = ['totalDistance', 'heartratePace', 'equipment', 'equipmentTimeline', 'personalBests', 'heatmap'];
+const TAB_ORDER = ['totalDistance', 'heartratePace', 'equipment', 'equipmentTimeline', 'personalBests', 'heatmap', 'distributions'];
 
 const TAB_BUTTON_IDS = {
   totalDistance: 'vizTabTotalDistance',
@@ -6,7 +6,8 @@ const TAB_BUTTON_IDS = {
   equipment: 'vizTabEquipment',
   equipmentTimeline: 'vizTabEquipmentTimeline',
   personalBests: 'vizTabPersonalBests',
-  heatmap: 'vizTabHeatmap'
+  heatmap: 'vizTabHeatmap',
+  distributions: 'vizTabDistributions'
 };
 
 const TAB_PANEL_IDS = {
@@ -15,7 +16,8 @@ const TAB_PANEL_IDS = {
   equipment: 'vizPanelEquipment',
   equipmentTimeline: 'vizPanelEquipmentTimeline',
   personalBests: 'vizPanelPersonalBests',
-  heatmap: 'vizPanelHeatmap'
+  heatmap: 'vizPanelHeatmap',
+  distributions: 'vizPanelDistributions'
 };
 
 const TAB_ACTIVE_CLASS = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25';
@@ -40,15 +42,17 @@ function setVisualizationTab(tabName, options = {}) {
   const equipmentTimelineBtn = doc.getElementById(TAB_BUTTON_IDS.equipmentTimeline);
   const personalBestsBtn = doc.getElementById(TAB_BUTTON_IDS.personalBests);
   const heatmapBtn = doc.getElementById(TAB_BUTTON_IDS.heatmap);
+  const distributionsBtn = doc.getElementById(TAB_BUTTON_IDS.distributions);
   const totalDistancePanel = doc.getElementById(TAB_PANEL_IDS.totalDistance);
   const heartratePacePanel = doc.getElementById(TAB_PANEL_IDS.heartratePace);
   const equipmentPanel = doc.getElementById(TAB_PANEL_IDS.equipment);
   const equipmentTimelinePanel = doc.getElementById(TAB_PANEL_IDS.equipmentTimeline);
   const personalBestsPanel = doc.getElementById(TAB_PANEL_IDS.personalBests);
   const heatmapPanel = doc.getElementById(TAB_PANEL_IDS.heatmap);
+  const distributionsPanel = doc.getElementById(TAB_PANEL_IDS.distributions);
 
-  if (!totalDistanceBtn || !heartratePaceBtn || !equipmentBtn || !equipmentTimelineBtn || !personalBestsBtn || !heatmapBtn ||
-      !totalDistancePanel || !heartratePacePanel || !equipmentPanel || !equipmentTimelinePanel || !personalBestsPanel || !heatmapPanel) {
+  if (!totalDistanceBtn || !heartratePaceBtn || !equipmentBtn || !equipmentTimelineBtn || !personalBestsBtn || !heatmapBtn || !distributionsBtn ||
+      !totalDistancePanel || !heartratePacePanel || !equipmentPanel || !equipmentTimelinePanel || !personalBestsPanel || !heatmapPanel || !distributionsPanel) {
     return tabName;
   }
 
@@ -58,6 +62,7 @@ function setVisualizationTab(tabName, options = {}) {
   const isEquipmentTimeline = tabName === 'equipmentTimeline';
   const isPersonalBests = tabName === 'personalBests';
   const isHeatmap = tabName === 'heatmap';
+  const isDistributions = tabName === 'distributions';
 
   totalDistanceBtn.setAttribute('aria-selected', isTotalDistance ? 'true' : 'false');
   totalDistanceBtn.setAttribute('tabindex', isTotalDistance ? '0' : '-1');
@@ -83,12 +88,17 @@ function setVisualizationTab(tabName, options = {}) {
   heatmapBtn.setAttribute('tabindex', isHeatmap ? '0' : '-1');
   heatmapBtn.className = isHeatmap ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
 
+  distributionsBtn.setAttribute('aria-selected', isDistributions ? 'true' : 'false');
+  distributionsBtn.setAttribute('tabindex', isDistributions ? '0' : '-1');
+  distributionsBtn.className = isDistributions ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
+
   totalDistancePanel.classList.toggle('hidden', !isTotalDistance);
   heartratePacePanel.classList.toggle('hidden', !isHeartratePace);
   equipmentPanel.classList.toggle('hidden', !isEquipment);
   equipmentTimelinePanel.classList.toggle('hidden', !isEquipmentTimeline);
   personalBestsPanel.classList.toggle('hidden', !isPersonalBests);
   heatmapPanel.classList.toggle('hidden', !isHeatmap);
+  distributionsPanel.classList.toggle('hidden', !isDistributions);
 
   if (options.focusTab) {
     (isTotalDistance ? totalDistanceBtn :
@@ -96,7 +106,8 @@ function setVisualizationTab(tabName, options = {}) {
      isEquipment ? equipmentBtn :
      isEquipmentTimeline ? equipmentTimelineBtn :
      isPersonalBests ? personalBestsBtn :
-     heatmapBtn).focus();
+     isHeatmap ? heatmapBtn :
+     distributionsBtn).focus();
   }
 
   return tabName;

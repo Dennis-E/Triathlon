@@ -284,7 +284,7 @@ function processData(rawCsvData) {
       equipment,
       duration: durationSeconds,
       avgHeartRate,
-      avgWatts,
+      avgWatts: sportCategory === 'Bike' ? avgWatts : null,
       elevationGain,
       name: name
     });

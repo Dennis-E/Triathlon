@@ -210,4 +210,74 @@ describe('index.html inline script syntax', () => {
     expect(inlineCode).toContain('const labelLayouts = records.map');
     expect(inlineCode).toContain('labelLayouts.forEach(layout =>');
   });
+
+  it('renders the Distributions chart via distributionUtils and toggles the empty state (US1)', () => {
+    expect(inlineCode).toContain('function setDistributionsMetric(');
+    expect(inlineCode).toContain('function renderDistributionsChart(');
+    expect(inlineCode).toContain('window.distributionUtils.filterActivitiesForDistribution');
+    expect(inlineCode).toContain('window.distributionUtils.computeDistributionBuckets');
+    expect(inlineCode).toContain("distributionsEmptyState");
+    expect(inlineCode).toContain('activityCount === 0');
+  });
+
+  it('filters the Distributions chart by sport and time horizon (US2)', () => {
+    expect(inlineCode).toContain('function setDistributionsSportFilter(');
+    expect(inlineCode).toContain('function setDistributionsDateRange(');
+    expect(inlineCode).toContain('selectedDistributionsSportFilter');
+    expect(inlineCode).toContain('getDistributionsDateBounds()');
+  });
+
+  it('toggles the Distributions chart between histogram and smoothed line (US3)', () => {
+    expect(inlineCode).toContain('function setDistributionsDisplayMode(');
+    expect(inlineCode).toContain('selectedDistributionsDisplayMode');
+    expect(inlineCode).toContain("cubicInterpolationMode: 'monotone'");
+  });
+
+  it('excludes average watts for non-Bike activities in processData() (019-distributions-refinements US1)', () => {
+    expect(inlineCode).toContain("avgWatts: sportCategory === 'Bike' ? avgWatts : null");
+  });
+
+  it('renders one line per sport when All Sports + Line mode are both selected (019-distributions-refinements US2)', () => {
+    expect(inlineCode).toContain('groupBucketCountsBySport');
+    expect(inlineCode).toContain('showPerSportLines');
+    expect(inlineCode).toMatch(/PB_SPORT_COLOR\[sport\]/);
+  });
+
+  it('uses the shared formatMetricValue helper for bucket labels instead of ad-hoc per-metric formatters (019-distributions-refinements US3)', () => {
+    expect(inlineCode).not.toMatch(/formatValue:\s*v\s*=>/);
+    expect(inlineCode).toContain('metricKey: selectedDistributionsMetric');
+  });
+
+  it('renders overflow buckets using an Infinity-safe x-value in both combined and per-sport line datasets (019-distributions-refinements US4)', () => {
+    expect(inlineCode).toContain('getBucketLineX');
+    expect(inlineCode).toContain('bucket.isOverflow ? bucket.rangeStart');
+  });
+
+  it('defaults the Distributions tab to All Sports + Line mode on first render (020-distributions-visual-polish US1)', () => {
+    expect(inlineCode).toContain("let selectedDistributionsSportFilter = 'All';");
+    expect(inlineCode).toContain("let selectedDistributionsDisplayMode = 'line';");
+  });
+
+  it('applies the fire color gradient to bars and line points while keeping per-sport stroke colors (020-distributions-visual-polish US2)', () => {
+    expect(inlineCode).toContain('window.distributionUtils.getFireGradientColor');
+    expect(inlineCode).toContain('bucketFireColors');
+    expect(inlineCode).toContain('borderColor: PB_SPORT_COLOR[sport]');
+  });
+
+  it('shows the Pace unit once on the axis title per sport, falling back to a plain label for All Sports (020-distributions-visual-polish US4)', () => {
+    expect(inlineCode).toContain("PACE_UNIT_BY_SPORT = { Run: 'min/km', Swim: 'min/100m', Bike: 'km/h' }");
+    expect(inlineCode).toContain('axisTitleText');
+  });
+
+  it('enables the Pace underflow bucket and reverses the axis only for single-sport Run/Swim Pace views (020-distributions-visual-polish US5)', () => {
+    expect(inlineCode).toContain("enableUnderflow: selectedDistributionsMetric === 'pace'");
+    expect(inlineCode).toMatch(/shouldReverseAxis = selectedDistributionsMetric === 'pace' &&/);
+    expect(inlineCode).toContain('reverse: shouldReverseAxis');
+  });
+
+  it('shows an N/A indicator for Elevation gain + Swim and excludes Swim from per-sport Elevation lines (020-distributions-visual-polish US6)', () => {
+    expect(inlineCode).toContain("selectedDistributionsMetric === 'elevation' && selectedDistributionsSportFilter === 'Swim'");
+    expect(inlineCode).toContain('Elevation gain is not applicable to Swim activities.');
+    expect(inlineCode).toContain('delete perSport.Swim;');
+  });
 });

@@ -43,12 +43,14 @@ function createMockDocument() {
     vizTabEquipmentTimeline: createMockElement(),
     vizTabPersonalBests: createMockElement(),
     vizTabHeatmap: createMockElement(),
+    vizTabDistributions: createMockElement(),
     vizPanelTotalDistance: createMockElement(),
     vizPanelHeartratePace: createMockElement(),
     vizPanelEquipment: createMockElement(),
     vizPanelEquipmentTimeline: createMockElement(),
     vizPanelPersonalBests: createMockElement(),
-    vizPanelHeatmap: createMockElement()
+    vizPanelHeatmap: createMockElement(),
+    vizPanelDistributions: createMockElement()
   };
 
   return {
@@ -66,8 +68,9 @@ describe('tab navigation helpers', () => {
     expect(getNextVisualizationTab('equipment', 1)).toBe('equipmentTimeline');
     expect(getNextVisualizationTab('equipmentTimeline', 1)).toBe('personalBests');
     expect(getNextVisualizationTab('personalBests', 1)).toBe('heatmap');
-    expect(getNextVisualizationTab('heatmap', 1)).toBe('totalDistance');
-    expect(getNextVisualizationTab('totalDistance', -1)).toBe('heatmap');
+    expect(getNextVisualizationTab('heatmap', 1)).toBe('distributions');
+    expect(getNextVisualizationTab('distributions', 1)).toBe('totalDistance');
+    expect(getNextVisualizationTab('totalDistance', -1)).toBe('distributions');
     expect(getNextVisualizationTab('unknown', 1)).toBe('totalDistance');
   });
 
@@ -110,9 +113,9 @@ describe('tab navigation helpers', () => {
 
     const nextTab = handleVisualizationTabKeydown(event, 'totalDistance', { onTabChange });
 
-    expect(nextTab).toBe('heatmap');
+    expect(nextTab).toBe('distributions');
     expect(event.preventDefault).toHaveBeenCalledTimes(1);
-    expect(onTabChange).toHaveBeenCalledWith('heatmap', { focusTab: true });
+    expect(onTabChange).toHaveBeenCalledWith('distributions', { focusTab: true });
   });
 
   it('activates equipmentTimeline tab correctly', () => {
@@ -138,6 +141,19 @@ describe('tab navigation helpers', () => {
     expect(mockDocument.elements.vizPanelHeatmap.classList.contains('hidden')).toBe(false);
     expect(mockDocument.elements.vizPanelPersonalBests.classList.contains('hidden')).toBe(true);
     expect(mockDocument.elements.vizTabHeatmap.focused).toBe(true);
+  });
+
+  it('activates distributions tab correctly and deactivates the previous tab', () => {
+    const mockDocument = createMockDocument();
+    setVisualizationTab('heatmap', { document: mockDocument });
+    const selected = setVisualizationTab('distributions', { document: mockDocument, focusTab: true });
+
+    expect(selected).toBe('distributions');
+    expect(mockDocument.elements.vizTabDistributions.getAttribute('aria-selected')).toBe('true');
+    expect(mockDocument.elements.vizTabHeatmap.getAttribute('aria-selected')).toBe('false');
+    expect(mockDocument.elements.vizPanelDistributions.classList.contains('hidden')).toBe(false);
+    expect(mockDocument.elements.vizPanelHeatmap.classList.contains('hidden')).toBe(true);
+    expect(mockDocument.elements.vizTabDistributions.focused).toBe(true);
   });
 
   it('ignores unrelated keys', () => {

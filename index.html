@@ -105,7 +105,6 @@
         </div>
         <div>
           <h2 class="font-semibold text-lg">Importing Strava Data</h2>
-          <p id="importProgressStage" class="text-xs text-slate-400 mt-1">Preparing...</p>
         </div>
       </div>
 
@@ -118,6 +117,33 @@
         <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
           <div id="importProgressBar" class="h-full bg-gradient-to-r from-indigo-600 to-indigo-400 rounded-full transition-all duration-300" style="width: 0%"></div>
         </div>
+      </div>
+
+      <!-- Prepared previews of existing TriAnalytica visualizations -->
+      <div id="importProgressPreview" class="mt-6 overflow-hidden rounded-lg border border-slate-800 bg-slate-950" aria-live="polite">
+        <div data-import-preview="0" class="p-4">
+          <div class="mb-3 flex items-center justify-between">
+            <span class="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-300">Training volume</span>
+            <span class="text-[10px] text-slate-500">Dashboard preview</span>
+          </div>
+          <svg viewBox="0 0 320 88" class="h-20 w-full" role="img" aria-label="Training volume chart preview">
+            <path d="M8 72 C42 64 48 42 78 50 S118 68 148 38 S196 46 222 24 S274 30 312 10" fill="none" stroke="#818cf8" stroke-width="4" stroke-linecap="round" />
+            <path d="M8 72 C42 64 48 42 78 50 S118 68 148 38 S196 46 222 24 S274 30 312 10 V88 H8 Z" fill="#6366f1" opacity=".14" />
+            <path d="M8 80 H312" stroke="#334155" />
+          </svg>
+        </div>
+        <div data-import-preview="1" class="hidden p-4">
+          <div class="mb-3 flex items-center justify-between">
+            <span class="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">GPS heatmap</span>
+            <span class="text-[10px] text-slate-500">Dashboard preview</span>
+          </div>
+          <svg viewBox="0 0 320 88" class="h-20 w-full" role="img" aria-label="GPS heatmap preview">
+            <path d="M24 64 C48 16 82 76 112 34 S162 20 184 56 S238 70 292 22" fill="none" stroke="#34d399" stroke-width="16" opacity=".18" stroke-linecap="round" />
+            <path d="M24 64 C48 16 82 76 112 34 S162 20 184 56 S238 70 292 22" fill="none" stroke="#34d399" stroke-width="4" stroke-linecap="round" />
+            <circle cx="112" cy="34" r="5" fill="#fbbf24" /><circle cx="184" cy="56" r="5" fill="#fb7185" />
+          </svg>
+        </div>
+        <p id="importProgressMessage" class="border-t border-slate-800 px-4 py-3 text-center text-xs italic text-slate-400">Crunching your kilometers...</p>
       </div>
 
       <!-- Details -->

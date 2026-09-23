@@ -6,6 +6,17 @@
       'schwimmen': 'Swim', 'swim': 'Swim', 'swimming': 'Swim'
     };
 
+    let importPreviewTimer = null;
+    let importPreviewIndex = 0;
+    const IMPORT_PREVIEW_MESSAGES = [
+      'Crunching your kilometers...',
+      'Looking for suspiciously fast segments...',
+      'Turning sweat into charts...',
+      'Finding out which bike you actually ride...',
+      'Your Strava history has opinions.',
+      'Almost there - the charts are warming up.'
+    ];
+
     function findHeaderIndex(headers, matcher) {
       if (!Array.isArray(headers)) return -1;
 
@@ -92,13 +103,43 @@
       if (!modal) return;
       modal.classList.remove('hidden');
       modal.classList.add('flex');
+      startImportPreviewRotation();
     }
 
     function hideImportProgressModal() {
       const modal = document.getElementById('importProgressModal');
       if (!modal) return;
+      stopImportPreviewRotation();
       modal.classList.add('hidden');
       modal.classList.remove('flex');
+    }
+
+    function renderImportPreview(index) {
+      const previews = document.querySelectorAll('[data-import-preview]');
+      const message = document.getElementById('importProgressMessage');
+      if (!previews.length || !message) return;
+
+      importPreviewIndex = index % previews.length;
+      previews.forEach((preview, previewIndex) => {
+        preview.classList.toggle('hidden', previewIndex !== importPreviewIndex);
+      });
+      message.textContent = IMPORT_PREVIEW_MESSAGES[importPreviewIndex % IMPORT_PREVIEW_MESSAGES.length];
+    }
+
+    function startImportPreviewRotation() {
+      stopImportPreviewRotation();
+      importPreviewIndex = 0;
+      renderImportPreview(importPreviewIndex);
+      importPreviewTimer = setInterval(() => {
+        renderImportPreview(importPreviewIndex + 1);
+      }, 1800);
+    }
+
+    function stopImportPreviewRotation() {
+      if (importPreviewTimer !== null) {
+        clearInterval(importPreviewTimer);
+        importPreviewTimer = null;
+      }
     }
 
     function importCsvText(csvText, options = {}) {
@@ -366,16 +407,15 @@
       const modal = document.getElementById('importProgressModal');
       const bar = document.getElementById('importProgressBar');
       const percentEl = document.getElementById('importProgressPercent');
-      const stageEl = document.getElementById('importProgressStage');
       const detailEl = document.getElementById('importProgressDetail');
       const errorDiv = document.getElementById('importProgressError');
 
       bar.style.width = percent + '%';
       percentEl.textContent = percent + '%';
-      stageEl.textContent = stage;
       detailEl.textContent = stage;
 
       if (isError) {
+        stopImportPreviewRotation();
         setImportModalVisualState('alert-circle', false);
       }
     }

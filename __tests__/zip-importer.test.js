@@ -2,6 +2,8 @@ const {
   extractRelevantColumns,
   parseCsvBasic,
   parseGpsFileIdToActivityId,
+  parseGpsFileEntries,
+  segmentFitRecordsByActivity,
   extractGpxTrackpoints,
   extractFitTrackpoints,
   normalizeFitRecords,
@@ -96,6 +98,38 @@ describe('parseGpsFileIdToActivityId', () => {
   it('returns an empty map when required columns are missing', () => {
     const csv = ['Activity ID,Activity Name', '1,Run'].join('\n');
     expect(parseGpsFileIdToActivityId(csv).size).toBe(0);
+  });
+});
+
+describe('FIT multisport GPS segmentation', () => {
+  it('keeps only records inside each child activity session range', () => {
+    const records = [0, 10, 20, 30, 40, 50].map((seconds, index) => ({
+      timestamp: new Date(seconds * 1000),
+      position_lat: 48 + index,
+      position_long: 11 + index
+    }));
+    const sessions = [
+      { activityId: 'swim', startTime: new Date(0), endTime: new Date(20000) },
+      { activityId: 'bike', startTime: new Date(30000), endTime: new Date(50000) }
+    ];
+
+    expect(segmentFitRecordsByActivity(records, sessions)).toEqual({
+      swim: records.slice(0, 3),
+      bike: records.slice(3)
+    });
+  });
+
+  it('retains repeated FIT filename rows as separate activity sessions', () => {
+    const csv = [
+      'Activity ID,Activity Date,Activity Type,Moving Time,Filename',
+      'swim,2026-07-19 14:00:00,Swim,600,activities/tri.fit',
+      'bike,2026-07-19 14:10:00,Bike,3600,activities/tri.fit'
+    ].join('\n');
+
+    expect(parseGpsFileEntries(csv).get('activities/tri.fit')).toEqual([
+      expect.objectContaining({ activityId: 'swim', ext: 'fit' }),
+      expect.objectContaining({ activityId: 'bike', ext: 'fit' })
+    ]);
   });
 });
 
@@ -371,6 +405,33 @@ describe('extractGpsAndPowerFromZip (spec 021 - faster bike power import)', () =
     expect(fitDeps.parseFitRecords).toHaveBeenCalledTimes(1);
     expect(result.gpsTracksByActivityId['999'].points.length).toBeGreaterThan(0);
     expect(result.fitBestEffortsByActivityId['999'].powerEfforts.length).toBeGreaterThan(0);
+  });
+
+  it('creates independent GPS tracks for child activities sharing one multisport FIT file', async () => {
+    const records = [0, 10, 20, 30].map((seconds, index) => ({
+      timestamp: new Date(seconds * 1000),
+      position_lat: [48, 49.1, 48.2, 51][index],
+      position_long: 11 + index,
+      distance: index * 20,
+      power: 220
+    }));
+    const fitDeps = makeFakeFitDeps(records);
+    const zip = { files: { 'activities/tri.fit': makeZipFile(new Uint8Array([1, 2, 3])) } };
+    const rawCsv = [
+      'Activity ID,Activity Date,Activity Type,Moving Time,Filename',
+      'swim,1970-01-01 00:00:00,Swim,20,activities/tri.fit',
+      'run,1970-01-01 00:00:30,Run,10,activities/tri.fit'
+    ].join('\n');
+    const sports = new Map([['swim', 'Swim'], ['run', 'Run']]);
+
+    const result = await extractGpsAndPowerFromZip(zip, rawCsv, sports, undefined, fitDeps);
+
+    expect(result.gpsTracksByActivityId.swim.points).toEqual([
+      [48, 11], [49.1, 12], [48.2, 13]
+    ]);
+    expect(result.gpsTracksByActivityId.run.points).toEqual([[51, 14]]);
+    expect(Object.keys(result.gpsTracksByActivityId)).toHaveLength(2);
+    expect(fitDeps.parseFitRecords).toHaveBeenCalledTimes(1);
   });
 
   it('produces GPS tracks identical to extractGpsTracksFromZip for the same bike FIT input (FR-002/SC-003)', async () => {

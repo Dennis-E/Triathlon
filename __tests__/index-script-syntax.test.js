@@ -71,6 +71,24 @@ describe('index.html inline script syntax', () => {
     expect(html).toMatch(/<script src="\.\/src\/power-pb-utils\.js"><\/script>[\s\S]*<script>/);
   });
 
+  it('provides rotating prepared import previews and humorous messages', () => {
+    expect(html).toContain('id="importProgressPreview"');
+    expect(html).toContain('data-import-preview="0"');
+    expect(html).toContain('data-import-preview="1"');
+    expect(inlineCode).toContain('startImportPreviewRotation');
+    expect(inlineCode).toContain('stopImportPreviewRotation');
+    expect(inlineCode).toContain('Crunching your kilometers...');
+    expect(inlineCode).toContain('Looking for suspiciously fast segments...');
+  });
+
+  it('keeps one import headline and one black detail status box', () => {
+    expect((html.match(/<h2 class="font-semibold text-lg">Importing Strava Data<\/h2>/g) || []).length).toBe(1);
+    expect(html).toContain('id="importProgressDetail"');
+    expect(html).toContain('bg-slate-950 border border-slate-800 rounded-lg');
+    expect(html).not.toContain('id="importProgressStage"');
+    expect(inlineCode).not.toContain('stageEl.textContent = stage');
+  });
+
   it('renders a distinct activity-average power section for Bike PBs', () => {
     expect(inlineCode).not.toContain('Activity-average power progression (W)');
     expect(inlineCode).not.toContain('createActivityAveragePowerRecords(activities)');

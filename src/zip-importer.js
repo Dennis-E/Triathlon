@@ -211,6 +211,90 @@ function parseGpsFileIdToActivityId(rawCsvText) {
   return result;
 }
 
+function parseActivityTimestamp(value) {
+  if (!value) return null;
+  const text = String(value).trim();
+  const germanMatch = text.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:[ ,]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (germanMatch) {
+    const [, day, month, year, hour = '0', minute = '0', second = '0'] = germanMatch;
+    const parsed = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  const isoWithoutOffset = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(text);
+  const normalizedText = isoWithoutOffset
+    ? `${text.replace(' ', 'T')}Z`
+    : text.replace(' UTC', 'Z');
+  const parsed = new Date(normalizedText);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function parseGpsFileEntries(rawCsvText) {
+  const rows = parseCsvBasic(rawCsvText);
+  if (rows.length < 2) return new Map();
+
+  const headers = rows[0];
+  const activityIdIdx = headers.findIndex(h => h === 'Activity ID' || h === 'Aktivitäts-ID');
+  const filenameIdx = headers.findIndex(h => h === 'Filename' || h === 'Dateiname');
+  const dateIdx = headers.findIndex(h => h === 'Activity Date' || h === 'Aktivitätsdatum');
+  const durationIdx = headers.findIndex(h => h === 'Moving Time' || h === 'Bewegungszeit');
+  const sportIdx = headers.findIndex(h => h === 'Activity Type' || h === 'Aktivitätsart' || h === 'Sport Type');
+  const result = new Map();
+
+  if (activityIdIdx === -1 || filenameIdx === -1) return result;
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const activityId = row[activityIdIdx] ? String(row[activityIdIdx]).trim() : '';
+    const filename = row[filenameIdx] ? String(row[filenameIdx]).trim() : '';
+    const match = filename.match(/^activities\/(.+)\.(gpx|fit)(?:\.gz)?$/i);
+    if (!activityId || !match) continue;
+
+    const startTime = dateIdx === -1 ? null : parseActivityTimestamp(row[dateIdx]);
+    const durationSeconds = durationIdx === -1 ? 0 : Number.parseFloat(row[durationIdx]);
+    const endTime = startTime && Number.isFinite(durationSeconds)
+      ? new Date(startTime.getTime() + Math.max(0, durationSeconds) * 1000)
+      : null;
+    const entries = result.get(filename) || [];
+    entries.push({
+      activityId,
+      ext: match[2].toLowerCase(),
+      sport: sportIdx === -1 ? null : row[sportIdx] || null,
+      startTime,
+      endTime
+    });
+    result.set(filename, entries);
+  }
+
+  for (const entries of result.values()) {
+    entries.sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+    entries.forEach((entry, index) => {
+      if (!entry.endTime && entry.startTime && entries[index + 1] && entries[index + 1].startTime) {
+        entry.endTime = entries[index + 1].startTime;
+      }
+    });
+  }
+
+  return result;
+}
+
+function segmentFitRecordsByActivity(records, sessions) {
+  const result = {};
+  if (!Array.isArray(records) || !Array.isArray(sessions)) return result;
+
+  for (const session of sessions) {
+    if (!session || !session.activityId) continue;
+    const startMs = session.startTime instanceof Date ? session.startTime.getTime() : null;
+    const endMs = session.endTime instanceof Date ? session.endTime.getTime() : null;
+    result[session.activityId] = records.filter(record => {
+      const timestamp = record && record.timestamp instanceof Date ? record.timestamp.getTime() : null;
+      if (!Number.isFinite(timestamp)) return false;
+      return (startMs === null || timestamp >= startMs) && (endMs === null || timestamp <= endMs);
+    });
+  }
+
+  return result;
+}
+
 /**
  * Extract latitude/longitude trackpoints from GPX XML text (regex-based, no DOMParser needed)
  * @param {string} xmlText - GPX file content
@@ -446,14 +530,14 @@ async function extractGpsAndPowerFromZip(zip, rawCsvText, activitySportById, rep
         }
       }
     : () => {};
-  const fileIdMap = parseGpsFileIdToActivityId(rawCsvText);
-  const entries = Array.from(fileIdMap.entries()).filter(([filename]) => zip.files[filename] && !zip.files[filename].dir);
+  const fileEntries = parseGpsFileEntries(rawCsvText);
+  const entries = Array.from(fileEntries.entries()).filter(([filename]) => zip.files[filename] && !zip.files[filename].dir);
 
   const gpsTracksByActivityId = {};
   const fitBestEffortsByActivityId = {};
   let processed = 0;
 
-  for (const [filename, { activityId, ext }] of entries) {
+  for (const [filename, fileMetadata] of entries) {
     processed++;
     if (entries.length > 0) {
       const percent = 40 + Math.round((processed / entries.length) * 50);
@@ -468,7 +552,9 @@ async function extractGpsAndPowerFromZip(zip, rawCsvText, activitySportById, rep
       let gpsMs = 0;
       let powerMs = 0;
 
+      const ext = fileMetadata[0].ext;
       if (ext === 'gpx') {
+        const activityId = fileMetadata[0].activityId;
         const parseStartedAt = now();
         const text = isGzipped
           ? new TextDecoder('utf-8').decode(await gunzipUint8Array(await zip.files[filename].async('uint8array')))
@@ -489,27 +575,38 @@ async function extractGpsAndPowerFromZip(zip, rawCsvText, activitySportById, rep
         const records = await readAndParseFitFile(zip, filename, fitDeps);
         parseMs = Math.max(0, now() - parseStartedAt);
         recordCount = records.length;
-        const gpsStartedAt = now();
-        points = extractFitTrackpoints(records);
-        const simplified = simplifyTrackPoints(points, { toleranceMeters: 3, maxPoints: 2000 });
-        gpsMs = Math.max(0, now() - gpsStartedAt);
+        const segmentedRecords = segmentFitRecordsByActivity(records, fileMetadata);
+        const hasTimedSessions = fileMetadata.some(metadata => metadata.startTime || metadata.endTime);
+        const activityRecords = hasTimedSessions
+          ? segmentedRecords
+          : { [fileMetadata[0].activityId]: records };
 
-        if (activitySportById && activitySportById.get(activityId) === 'Bike') {
-          const powerStartedAt = now();
-          const powerEfforts = buildFitPowerEfforts(records);
-          powerMs = Math.max(0, now() - powerStartedAt);
-          if (powerEfforts.length > 0) fitBestEffortsByActivityId[activityId] = { powerEfforts };
-        }
+        for (const metadata of fileMetadata) {
+          const activityId = metadata.activityId;
+          const selectedRecords = activityRecords[activityId] || [];
+          const gpsStartedAt = now();
+          points = extractFitTrackpoints(selectedRecords);
+          const simplified = simplifyTrackPoints(points, { toleranceMeters: 3, maxPoints: 2000 });
+          gpsMs += Math.max(0, now() - gpsStartedAt);
 
-        if (simplified.length > 0) {
-          gpsTracksByActivityId[activityId] = {
-            sport: (activitySportById && activitySportById.get(activityId)) || null,
-            points: simplified.map(p => [p.lat, p.lon])
-          };
+          const sport = (activitySportById && activitySportById.get(activityId)) || null;
+          if (sport === 'Bike') {
+            const powerStartedAt = now();
+            const powerEfforts = buildFitPowerEfforts(selectedRecords);
+            powerMs += Math.max(0, now() - powerStartedAt);
+            if (powerEfforts.length > 0) fitBestEffortsByActivityId[activityId] = { powerEfforts };
+          }
+
+          if (simplified.length > 0) {
+            gpsTracksByActivityId[activityId] = {
+              sport,
+              points: simplified.map(p => [p.lat, p.lon])
+            };
+          }
         }
       }
 
-      reportTiming({ activityId, sourceType: ext, recordCount, parseMs, gpsMs, powerMs });
+      reportTiming({ activityId: fileMetadata[0].activityId, sourceType: ext, recordCount, parseMs, gpsMs, powerMs });
     } catch (err) {
       // Skip activities whose GPS/FIT file can't be read/parsed; the rest of the import should still succeed
       continue;
@@ -756,6 +853,8 @@ if (typeof module !== 'undefined' && module.exports) {
     serializeCsvBasic,
     extractRelevantColumns,
     parseGpsFileIdToActivityId,
+    parseGpsFileEntries,
+    segmentFitRecordsByActivity,
     extractGpxTrackpoints,
     extractFitTrackpoints,
     downsampleTrack,

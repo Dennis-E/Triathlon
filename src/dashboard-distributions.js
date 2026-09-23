@@ -1,6 +1,7 @@
      let selectedDistributionsMetric = 'length';
      let selectedDistributionsSportFilter = 'All';
      let selectedDistributionsDisplayMode = 'line';
+    let selectedDistributionsColorScheme = 'fire';
      let distributionsChartInstance = null;
      let distributionsDateRange = { start: 0, end: 0 };
      let distributionsDateCandidates = [];
@@ -42,6 +43,11 @@
       selectedDistributionsDisplayMode = mode;
       const modeBtnSuffix = mode.charAt(0).toUpperCase() + mode.slice(1);
       setDistributionsBtnActive('distributionsModeBtn', `distributionsModeBtn${modeBtnSuffix}`);
+      renderDistributionsChart();
+    }
+
+    function setDistributionsColorScheme(scheme) {
+      selectedDistributionsColorScheme = scheme === 'monochrome-blue' ? scheme : 'fire';
       renderDistributionsChart();
     }
 
@@ -109,6 +115,22 @@
       return { minDate, maxDate };
     }
 
+    function showDistributionsEmptyState(message) {
+      if (distributionsChartInstance) {
+        distributionsChartInstance.destroy();
+        distributionsChartInstance = null;
+      }
+      const canvas = document.getElementById('distributionsChart');
+      const emptyState = document.getElementById('distributionsEmptyState');
+      const countEl = document.getElementById('distributionsPointCount');
+      if (canvas) canvas.classList.add('hidden');
+      if (emptyState) {
+        emptyState.classList.remove('hidden');
+        emptyState.textContent = message;
+      }
+      if (countEl) countEl.textContent = 'N/A';
+    }
+
     function setDistributionsDateRange(boundary, value) {
       const parsed = parseInt(value, 10);
       if (Number.isNaN(parsed)) return;
@@ -135,18 +157,13 @@
       const emptyState = document.getElementById('distributionsEmptyState');
       if (!canvas) return;
 
+      if (selectedDistributionsSportFilter === 'All' && selectedDistributionsDisplayMode === 'histogram') {
+        showDistributionsEmptyState('N/A: Histogram is not available for All Sports.');
+        return;
+      }
+
       if (selectedDistributionsMetric === 'elevation' && selectedDistributionsSportFilter === 'Swim') {
-        if (distributionsChartInstance) {
-          distributionsChartInstance.destroy();
-          distributionsChartInstance = null;
-        }
-        canvas.classList.add('hidden');
-        if (emptyState) {
-          emptyState.classList.remove('hidden');
-          emptyState.textContent = 'Elevation gain is not applicable to Swim activities.';
-        }
-        const countEl = document.getElementById('distributionsPointCount');
-        if (countEl) countEl.textContent = 'N/A';
+        showDistributionsEmptyState('N/A: Elevation gain is not applicable to Swim activities.');
         return;
       }
 
@@ -159,7 +176,9 @@
       });
 
       const values = qualifyingActivities
-        .map(activity => window.distributionUtils.getMetricValue(activity, selectedDistributionsMetric))
+        .map(activity => window.distributionUtils.getMetricValue(activity, selectedDistributionsMetric, {
+          normalizePaceToSpeed: selectedDistributionsMetric === 'pace' && selectedDistributionsSportFilter === 'All'
+        }))
         .filter(value => Number.isFinite(value));
 
       const { buckets, activityCount } = window.distributionUtils.computeDistributionBuckets(values, {
@@ -179,11 +198,7 @@
       }
 
       if (activityCount === 0) {
-        canvas.classList.add('hidden');
-        if (emptyState) {
-          emptyState.classList.remove('hidden');
-          emptyState.textContent = `No activities with ${DISTRIBUTIONS_METRIC_CONFIG[selectedDistributionsMetric].label} data available in the current dataset.`;
-        }
+        showDistributionsEmptyState(`N/A: No activities with ${DISTRIBUTIONS_METRIC_CONFIG[selectedDistributionsMetric].label} data available in the current dataset.`);
         return;
       }
 
@@ -191,7 +206,11 @@
       if (emptyState) emptyState.classList.add('hidden');
 
       const metricConfig = DISTRIBUTIONS_METRIC_CONFIG[selectedDistributionsMetric];
-      const bucketLabels = buckets.map(b => b.label);
+      const getBucketDisplayLabel = bucket => {
+        if (bucket.isOverflow || bucket.isUnderflow) return bucket.label;
+        return window.distributionUtils.getHistogramBoundaryTicks([bucket], selectedDistributionsMetric, selectedDistributionsSportFilter !== 'All' ? selectedDistributionsSportFilter : null)[0] || bucket.label;
+      };
+      const bucketLabels = buckets.map(getBucketDisplayLabel);
       const bucketCounts = buckets.map(b => b.count);
 
       const showPerSportLines = selectedDistributionsSportFilter === 'All' && selectedDistributionsDisplayMode === 'line';
@@ -202,7 +221,23 @@
         const positions = count <= 1 ? [0] : Array.from({ length: count }, (_, i) => i / (count - 1));
         return shouldReverseAxis ? positions.map(p => 1 - p) : positions;
       };
-      const bucketFireColors = getColorPositions(buckets.length).map(position => window.distributionUtils.getFireGradientColor(position));
+      const getDistributionColor = position => window.distributionUtils.getDistributionColor(position, selectedDistributionsColorScheme);
+      const bucketColors = getColorPositions(buckets.length).map(getDistributionColor);
+      const histogramColors = selectedDistributionsColorScheme === 'monochrome-blue'
+        ? bucketColors.map(() => getDistributionColor(0.5))
+        : bucketColors;
+      const getBucketLabelForX = value => {
+        let closestBucket = buckets[0];
+        let closestDistance = Infinity;
+        buckets.forEach(bucket => {
+          const distance = Math.abs(getBucketLineX(bucket) - value);
+          if (distance < closestDistance) {
+            closestBucket = bucket;
+            closestDistance = distance;
+          }
+        });
+        return closestBucket ? getBucketDisplayLabel(closestBucket) : value;
+      };
 
       let datasets;
       if (showPerSportLines) {
@@ -214,20 +249,24 @@
         if (selectedDistributionsMetric === 'elevation') {
           delete perSport.Swim;
         }
-        datasets = Object.keys(perSport).map(sport => {
+        const sports = Object.keys(perSport);
+        datasets = sports.map((sport, sportIndex) => {
           const sportBuckets = perSport[sport].buckets;
-          const sportFireColors = getColorPositions(sportBuckets.length).map(position => window.distributionUtils.getFireGradientColor(position));
+          const sportStrokeColor = selectedDistributionsColorScheme === 'monochrome-blue'
+            ? getDistributionColor(sports.length <= 1 ? 0.5 : sportIndex / (sports.length - 1))
+            : PB_SPORT_COLOR[sport] || '#6366F1';
+          const sportFillColor = `${sportStrokeColor}33`;
           return {
             type: 'line',
             label: sport,
             data: sportBuckets.map(b => ({ x: getBucketLineX(b), y: b.count })),
-            borderColor: PB_SPORT_COLOR[sport] || '#6366F1',
-            backgroundColor: 'transparent',
-            pointBackgroundColor: sportFireColors,
+            borderColor: sportStrokeColor,
+            backgroundColor: sportFillColor,
             cubicInterpolationMode: 'monotone',
             tension: 0.4,
-            fill: false,
-            pointRadius: 3
+            fill: true,
+            pointRadius: 0,
+            pointHoverRadius: 0
           };
         });
       } else {
@@ -236,27 +275,34 @@
               type: 'line',
               label: 'Activities',
               data: buckets.map(b => ({ x: getBucketLineX(b), y: b.count })),
-              borderColor: '#94A3B8',
-              backgroundColor: 'rgba(148, 163, 184, 0.15)',
-              pointBackgroundColor: bucketFireColors,
+              borderColor: getDistributionColor(0.75),
+              backgroundColor: `${getDistributionColor(0.75)}33`,
               cubicInterpolationMode: 'monotone',
               tension: 0.4,
               fill: true,
-              pointRadius: 3
+              pointRadius: 0,
+              pointHoverRadius: 0
             }
           : {
               type: 'bar',
               label: 'Activities',
               data: bucketCounts,
-              backgroundColor: bucketFireColors
+              backgroundColor: histogramColors
             };
         datasets = [dataset];
       }
 
       const PACE_UNIT_BY_SPORT = { Run: 'min/km', Swim: 'min/100m', Bike: 'km/h' };
-      const axisTitleText = selectedDistributionsMetric === 'pace' && PACE_UNIT_BY_SPORT[selectedDistributionsSportFilter]
-        ? `Pace (${PACE_UNIT_BY_SPORT[selectedDistributionsSportFilter]})`
-        : metricConfig.label;
+      const axisTitleText = selectedDistributionsMetric === 'pace'
+        ? (PACE_UNIT_BY_SPORT[selectedDistributionsSportFilter]
+          ? `Pace (${PACE_UNIT_BY_SPORT[selectedDistributionsSportFilter]})`
+          : 'Pace (km/h)')
+        : ({
+            length: 'Length (km)',
+            duration: 'Duration (h:m)',
+            elevation: 'Elevation gain (m)',
+            power: 'Power (W)'
+          }[selectedDistributionsMetric] || metricConfig.label);
 
       distributionsChartInstance = new Chart(canvas, {
         type: selectedDistributionsDisplayMode === 'line' ? 'line' : 'bar',
@@ -272,7 +318,12 @@
               type: selectedDistributionsDisplayMode === 'line' ? 'linear' : 'category',
               reverse: shouldReverseAxis,
               title: { display: true, text: axisTitleText },
-              ticks: { color: '#94A3B8' },
+              ticks: {
+                color: '#94A3B8',
+                callback: value => selectedDistributionsDisplayMode === 'line'
+                  ? getBucketLabelForX(Number(value))
+                  : bucketLabels[Number(value)] || value
+              },
               grid: { color: 'rgba(148, 163, 184, 0.1)' }
             },
             y: {
@@ -283,7 +334,13 @@
             }
           },
           plugins: {
-            legend: { display: showPerSportLines }
+            legend: {
+              display: showPerSportLines,
+              labels: {
+                usePointStyle: true,
+                pointStyle: 'circle'
+              }
+            }
           }
         }
       });

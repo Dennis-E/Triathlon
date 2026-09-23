@@ -1157,6 +1157,14 @@
               <button onclick="setDistributionsDisplayMode('histogram')" id="distributionsModeBtnHistogram" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Histogram</button>
               <button onclick="setDistributionsDisplayMode('line')" id="distributionsModeBtnLine" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">Line</button>
             </div>
+
+            <label class="flex items-center gap-2 text-xs text-slate-400">
+              <span>Color scheme</span>
+              <select id="distributionsColorScheme" onchange="setDistributionsColorScheme(this.value)" class="rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-300">
+                <option value="fire" selected>On fire</option>
+                <option value="monochrome-blue">Monochrome blue</option>
+              </select>
+            </label>
           </div>
 
           <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">

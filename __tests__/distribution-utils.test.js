@@ -6,7 +6,10 @@ const {
   groupBucketCountsBySport,
   computeIqrOutlierThreshold,
   getFireGradientColor,
-  computeDurationNiceStep
+  computeDurationNiceStep,
+  getDistributionColor,
+  getHistogramBoundaryTicks,
+  getAllSportsPaceValue
 } = require('../src/distribution-utils');
 
 function makeActivity(overrides = {}) {
@@ -86,10 +89,20 @@ describe('distribution-utils', () => {
       expect(result[0].sport).toBe('Bike');
     });
 
-    it('combines multiple sports for pace when sport is All, without unit conversion', () => {
+    it('combines multiple sports for pace when sport is All using km/h values', () => {
       const result = filterActivitiesForDistribution(activities, { metric: 'pace', sport: 'All' });
       const sports = result.map(a => a.sport);
       expect(sports).toEqual(expect.arrayContaining(['Run', 'Bike', 'Swim']));
+      expect(getAllSportsPaceValue(activities[0])).toBe(12);
+    });
+
+    it('excludes invalid All Sports Pace conversions without mutating activities', () => {
+      const activity = makeActivity({ sport: 'Run', distance: 10, duration: 3000 });
+      const snapshot = { ...activity };
+      expect(getAllSportsPaceValue(activity)).toBe(12);
+      expect(getAllSportsPaceValue(makeActivity({ distance: 0 }))).toBeNull();
+      expect(getAllSportsPaceValue(makeActivity({ duration: 0 }))).toBeNull();
+      expect(activity).toEqual(snapshot);
     });
   });
 
@@ -133,6 +146,15 @@ describe('distribution-utils', () => {
       const values = Array.from({ length: 50 }, (_, i) => i + 1);
       const { buckets } = computeDistributionBuckets(values);
       expect(buckets.some(b => b.isOverflow)).toBe(false);
+    });
+
+    it('labels a Length overflow bucket as 50+ without adding one to shorter datasets', () => {
+      const values = [...Array.from({ length: 49 }, (_, i) => i + 1), 500];
+      const result = computeDistributionBuckets(values, { metricKey: 'length', sport: null });
+      expect(result.buckets.find(bucket => bucket.isOverflow).label).toBe('50+');
+
+      const shortResult = computeDistributionBuckets([1, 2, 3, 4, 5], { metricKey: 'length', sport: null });
+      expect(shortResult.buckets.some(bucket => bucket.label === '50+')).toBe(false);
     });
 
     it('formats bucket labels using the sport-specific formatter when a single sport is provided, without repeating the unit (per 020-distributions-visual-polish FR-006)', () => {
@@ -180,13 +202,14 @@ describe('distribution-utils', () => {
     });
 
     it('formats pace as a decimal km/h speed for Bike', () => {
-      expect(formatMetricValue('pace', 32, 'Bike')).toBe('32.0 km/h');
+      expect(formatMetricValue('pace', 32, 'Bike')).toBe('32 km/h');
+      expect(formatMetricValue('pace', 32.6, 'Bike')).toBe('33 km/h');
     });
 
     it('omits the unit when includeUnit is false for pace', () => {
       expect(formatMetricValue('pace', 5.5, 'Run', { includeUnit: false })).toBe('5:30');
       expect(formatMetricValue('pace', 1.75, 'Swim', { includeUnit: false })).toBe('1:45');
-      expect(formatMetricValue('pace', 32, 'Bike', { includeUnit: false })).toBe('32.0');
+      expect(formatMetricValue('pace', 32, 'Bike', { includeUnit: false })).toBe('32');
     });
 
     it('formats elevation as whole meters', () => {
@@ -248,6 +271,75 @@ describe('distribution-utils', () => {
     it('clamps positions outside [0, 1]', () => {
       expect(getFireGradientColor(-0.2)).toBe(getFireGradientColor(0));
       expect(getFireGradientColor(1.5)).toBe(getFireGradientColor(1));
+    });
+  });
+
+  describe('getDistributionColor', () => {
+    it('uses fire as the default scheme and preserves fire endpoints', () => {
+      expect(getDistributionColor(0)).toBe('#FDE047');
+      expect(getDistributionColor(1, 'fire')).toBe('#DC2626');
+    });
+
+    it('provides one stable monochrome-blue color and clamps positions', () => {
+      const start = getDistributionColor(0, 'monochrome-blue');
+      const middle = getDistributionColor(0.5, 'monochrome-blue');
+      const end = getDistributionColor(1, 'monochrome-blue');
+      expect(start).toBe('#2563EB');
+      expect(middle).toBe(start);
+      expect(end).toBe(start);
+      expect(getDistributionColor(-1, 'monochrome-blue')).toBe(start);
+      expect(getDistributionColor(2, 'monochrome-blue')).toBe(end);
+    });
+  });
+
+  describe('getHistogramBoundaryTicks', () => {
+    it('returns individual numeric boundaries and removes duplicate labels', () => {
+      const buckets = [
+        { rangeStart: 0, rangeEnd: 50, label: '0-50 km' },
+        { rangeStart: 50, rangeEnd: 100, label: '50-100 km' },
+        { rangeStart: 100, rangeEnd: 150, label: '100-150 km' }
+      ];
+      expect(getHistogramBoundaryTicks(buckets, 'length')).toEqual(['0', '50', '100', '150']);
+      expect(getHistogramBoundaryTicks([
+        { rangeStart: 0, rangeEnd: 50.01, label: '0-50 km' },
+        { rangeStart: 50.004, rangeEnd: 100, label: '50-100 km' }
+      ], 'length')).toEqual(['0', '50', '100']);
+    });
+
+    it('preserves open-ended overflow meaning without range labels', () => {
+      const buckets = [
+        { rangeStart: 0, rangeEnd: 50, label: '0-50 km' },
+        { rangeStart: 50, rangeEnd: Infinity, label: '50+', isOverflow: true }
+      ];
+      expect(getHistogramBoundaryTicks(buckets, 'length')).toEqual(['0', '50', '50+']);
+    });
+
+    it('formats the supported metric units for Histogram boundaries', () => {
+      expect(getHistogramBoundaryTicks([
+        { rangeStart: 0, rangeEnd: 20 },
+        { rangeStart: 20, rangeEnd: 40 }
+      ], 'elevation', 'Run')).toEqual(['0', '20', '40']);
+      expect(getHistogramBoundaryTicks([
+        { rangeStart: 0, rangeEnd: 600 },
+        { rangeStart: 600, rangeEnd: 1200 }
+      ], 'duration')).toEqual(['0m', '10m', '20m']);
+      expect(getHistogramBoundaryTicks([
+        { rangeStart: 4, rangeEnd: 5 },
+        { rangeStart: 5, rangeEnd: 6 }
+      ], 'pace', 'Run')).toEqual(['4:00', '5:00', '6:00']);
+      expect(getHistogramBoundaryTicks([
+        { rangeStart: 100, rangeEnd: 150 },
+        { rangeStart: 150, rangeEnd: 200 }
+      ], 'power', 'Bike')).toEqual(['100', '150', '200']);
+    });
+
+    it('preserves bucket counts while creating visible boundary ticks', () => {
+      const buckets = [
+        { rangeStart: 0, rangeEnd: 10, label: '0-10 km', count: 3 },
+        { rangeStart: 10, rangeEnd: 20, label: '10-20 km', count: 5 }
+      ];
+      expect(getHistogramBoundaryTicks(buckets, 'length')).toEqual(['0', '10', '20']);
+      expect(buckets.map(bucket => bucket.count)).toEqual([3, 5]);
     });
   });
 

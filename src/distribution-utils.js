@@ -4,7 +4,14 @@ const resolveSportPerformanceMetric = (typeof module !== 'undefined' && module.e
 
 const DEFAULT_TARGET_BUCKET_COUNT = 12;
 
-function getMetricValue(activity, metricKey) {
+function getAllSportsPaceValue(activity) {
+  if (!activity || !Number.isFinite(activity.distance) || !Number.isFinite(activity.duration)) return null;
+  if (activity.distance <= 0 || activity.duration <= 0) return null;
+  const speedKmH = activity.distance / (activity.duration / 3600);
+  return Number.isFinite(speedKmH) && speedKmH > 0 ? speedKmH : null;
+}
+
+function getMetricValue(activity, metricKey, options = {}) {
   if (!activity) return null;
 
   if (metricKey === 'length') {
@@ -24,6 +31,7 @@ function getMetricValue(activity, metricKey) {
   }
 
   if (metricKey === 'pace') {
+    if (options.normalizePaceToSpeed) return getAllSportsPaceValue(activity);
     const metric = resolveSportPerformanceMetric(activity);
     return metric ? metric.value : null;
   }
@@ -42,7 +50,7 @@ function filterActivitiesForDistribution(activities, filters = {}) {
     if (minDate && (!activity.date || activity.date < minDate)) return false;
     if (maxDate && (!activity.date || activity.date > maxDate)) return false;
 
-    const value = getMetricValue(activity, metric);
+    const value = getMetricValue(activity, metric, { normalizePaceToSpeed: metric === 'pace' && sport === 'All' });
     return Number.isFinite(value);
   });
 }
@@ -118,9 +126,12 @@ function computeDistributionBuckets(values, options = {}) {
   const buildLabel = (start, end) => (metricKey
     ? `${formatMetricValue(metricKey, start, sport, { includeUnit: metricKey !== 'pace' })}-${formatMetricValue(metricKey, end, sport, { includeUnit: metricKey !== 'pace' })}`
     : formatRangeLabel(start, end));
-  const buildOverflowLabel = start => (metricKey
-    ? `> ${formatMetricValue(metricKey, start, sport, { includeUnit: metricKey !== 'pace' })}`
-    : `> ${Math.round(start * 100) / 100}`);
+  const buildOverflowLabel = start => {
+    if (metricKey === 'length' && start >= 50) return '50+';
+    return metricKey
+      ? `> ${formatMetricValue(metricKey, start, sport, { includeUnit: metricKey !== 'pace' })}`
+      : `> ${Math.round(start * 100) / 100}`;
+  };
   const buildUnderflowLabel = end => (metricKey
     ? `< ${formatMetricValue(metricKey, end, sport, { includeUnit: metricKey !== 'pace' })}`
     : `< ${Math.round(end * 100) / 100}`);
@@ -222,6 +233,69 @@ function getFireGradientColor(position) {
   return toHexColor(rgb);
 }
 
+const MONOCHROME_BLUE_GRADIENT_STOPS = [
+  { at: 0, color: [219, 234, 254] },
+  { at: 0.5, color: [59, 130, 246] },
+  { at: 1, color: [30, 64, 175] }
+];
+
+function getGradientColor(position, stops) {
+  const clamped = Math.max(0, Math.min(1, Number.isFinite(position) ? position : 0));
+  const segmentEnd = stops.find(stop => clamped <= stop.at) || stops[stops.length - 1];
+  const segmentStartIndex = Math.max(0, stops.indexOf(segmentEnd) - 1);
+  const segmentStart = stops[segmentStartIndex];
+  const span = segmentEnd.at - segmentStart.at;
+  const t = span === 0 ? 0 : (clamped - segmentStart.at) / span;
+  const rgb = [0, 1, 2].map(i => interpolateChannel(segmentStart.color[i], segmentEnd.color[i], t));
+  return toHexColor(rgb);
+}
+
+function getDistributionColor(position, scheme = 'fire') {
+  return scheme === 'monochrome-blue'
+    ? MONOCHROME_BLUE_COLOR
+    : getGradientColor(position, FIRE_GRADIENT_STOPS);
+}
+
+const MONOCHROME_BLUE_COLOR = '#2563EB';
+
+function getHistogramBoundaryTicks(buckets, metricKey, sport = null) {
+  if (!Array.isArray(buckets) || buckets.length === 0) return [];
+
+  const ticks = [];
+  const seen = new Set();
+  const formatTickValue = value => {
+    const formatted = formatMetricValue(metricKey, value, sport, { includeUnit: false });
+    return metricKey === 'length' || metricKey === 'elevation' || metricKey === 'power'
+      ? formatted.replace(/\s+(km|m|W)$/, '')
+      : formatted.replace(/\s+(km\/h|min\/km|min\/100m)$/, '');
+  };
+  const addTick = (value, label = null) => {
+    const key = label || String(Math.round(value * 100) / 100);
+    if (seen.has(key)) return;
+    seen.add(key);
+    ticks.push(label || formatTickValue(value));
+  };
+
+  buckets.forEach((bucket, index) => {
+    if (bucket.isUnderflow) {
+      addTick(bucket.rangeEnd, `< ${formatTickValue(bucket.rangeEnd)}`);
+      return;
+    }
+    if (Number.isFinite(bucket.rangeStart)) addTick(bucket.rangeStart);
+    if (bucket.isOverflow) {
+      const overflowLabel = bucket.isOverflow && metricKey === 'length' && bucket.rangeStart >= 50
+        ? '50+'
+        : `> ${formatTickValue(bucket.rangeStart)}`;
+      addTick(bucket.rangeStart);
+      addTick(Number.isFinite(bucket.rangeEnd) ? bucket.rangeEnd : bucket.rangeStart, overflowLabel);
+    } else if (index === buckets.length - 1 && Number.isFinite(bucket.rangeEnd)) {
+      addTick(bucket.rangeEnd);
+    }
+  });
+
+  return ticks;
+}
+
 function groupBucketCountsBySport(activities, metricKey, buckets) {
   if (!Array.isArray(activities) || !Array.isArray(buckets) || buckets.length === 0) {
     return {};
@@ -243,7 +317,7 @@ function groupBucketCountsBySport(activities, metricKey, buckets) {
 
     activities.forEach(activity => {
       if (!activity || activity.sport !== sport) return;
-      const value = getMetricValue(activity, metricKey);
+      const value = getMetricValue(activity, metricKey, { normalizePaceToSpeed: metricKey === 'pace' });
       if (!Number.isFinite(value)) return;
 
       const index = findBucketIndexForValue(sportBuckets, value);
@@ -276,7 +350,8 @@ function formatMetricValue(metricKey, value, sport, options = {}) {
 
   if (metricKey === 'pace') {
     if (sport === 'Bike') {
-      return includeUnit ? `${value.toFixed(1)} km/h` : value.toFixed(1);
+      const roundedValue = String(Math.round(value));
+      return includeUnit ? `${roundedValue} km/h` : roundedValue;
     }
     if (!sport) {
       // Combined "All Sports" bucket labels mix Run/Swim/Bike units without
@@ -311,6 +386,7 @@ function formatMetricValue(metricKey, value, sport, options = {}) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     getMetricValue,
+    getAllSportsPaceValue,
     filterActivitiesForDistribution,
     computeDistributionBuckets,
     formatMetricValue,
@@ -319,6 +395,8 @@ if (typeof module !== 'undefined' && module.exports) {
     computeNiceStep,
     computeNiceBoundary,
     getFireGradientColor,
+    getDistributionColor,
+    getHistogramBoundaryTicks,
     computeDurationNiceStep
   };
 }
@@ -326,6 +404,7 @@ if (typeof module !== 'undefined' && module.exports) {
 if (typeof window !== 'undefined') {
   window.distributionUtils = {
     getMetricValue,
+    getAllSportsPaceValue,
     filterActivitiesForDistribution,
     computeDistributionBuckets,
     formatMetricValue,
@@ -334,6 +413,8 @@ if (typeof window !== 'undefined') {
     computeNiceStep,
     computeNiceBoundary,
     getFireGradientColor,
+    getDistributionColor,
+    getHistogramBoundaryTicks,
     computeDurationNiceStep
   };
 }

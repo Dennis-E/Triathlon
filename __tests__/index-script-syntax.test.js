@@ -317,13 +317,65 @@ describe('index.html inline script syntax', () => {
     expect(inlineCode).toContain("let selectedDistributionsDisplayMode = 'line';");
   });
 
-  it('applies the fire color gradient to bars and line points while keeping per-sport stroke colors (020-distributions-visual-polish US2)', () => {
-    expect(inlineCode).toContain('window.distributionUtils.getFireGradientColor');
-    expect(inlineCode).toContain('bucketFireColors');
-    expect(inlineCode).toContain('borderColor: PB_SPORT_COLOR[sport]');
+  it('applies the selected distribution palette to bars and line points while keeping per-sport stroke colors (026-distributions-labels-colors US3)', () => {
+    expect(inlineCode).toContain('window.distributionUtils.getDistributionColor');
+    expect(inlineCode).toContain('selectedDistributionsColorScheme');
+    expect(inlineCode).toContain('bucketColors');
+    expect(inlineCode).toContain('PB_SPORT_COLOR[sport]');
   });
 
-  it('shows the Pace unit once on the axis title per sport, falling back to a plain label for All Sports (020-distributions-visual-polish US4)', () => {
+  it('exposes the two distribution color schemes and keeps fire as the default (026-distributions-labels-colors US3)', () => {
+    expect(inlineCode).toContain("let selectedDistributionsColorScheme = 'fire';");
+    expect(inlineCode).toContain('function setDistributionsColorScheme(');
+    expect(html).toContain('id="distributionsColorScheme"');
+    expect(html).toContain('value="fire" selected>On fire</option>');
+    expect(html).toContain('value="monochrome-blue">Monochrome blue</option>');
+  });
+
+  it('uses filled circular markers and explicit metric axis units (026-distributions-labels-colors US1)', () => {
+    expect(inlineCode).toContain('usePointStyle: true');
+    expect(inlineCode).toContain("pointStyle: 'circle'");
+    expect(inlineCode).toContain("length: 'Length (km)'");
+    expect(inlineCode).toContain("elevation: 'Elevation gain (m)'");
+    expect(inlineCode).toContain("power: 'Power (W)'");
+    expect(inlineCode).toContain("'Pace (km/h)'");
+  });
+
+  it('shows N/A for All Sports histograms before rendering data (026-distributions-labels-colors US2)', () => {
+    expect(inlineCode).toContain("selectedDistributionsSportFilter === 'All' && selectedDistributionsDisplayMode === 'histogram'");
+    expect(inlineCode).toContain("N/A: Histogram is not available for All Sports.");
+    expect(inlineCode).toContain('function showDistributionsEmptyState(');
+    expect(inlineCode).toContain('distributionsChartInstance.destroy()');
+  });
+
+  it('uses boundary ticks, hides line points, and applies line/fill colors for distribution cleanup (027-distribution-chart-cleanup)', () => {
+    expect(inlineCode).toContain('getHistogramBoundaryTicks');
+    expect(inlineCode).toContain('pointRadius: 0');
+    expect(inlineCode).toContain('pointHoverRadius: 0');
+    expect(inlineCode).toContain('borderColor:');
+    expect(inlineCode).toContain('backgroundColor:');
+  });
+
+  it('uses one km/h axis title and flat monochrome histogram color (027-distribution-chart-cleanup)', () => {
+    expect(inlineCode).toContain("'Pace (km/h)'");
+    expect(inlineCode).not.toContain("'Pace (mixed units)'");
+    expect(inlineCode).toContain("selectedDistributionsColorScheme === 'monochrome-blue'");
+  });
+
+  it('maps Histogram category positions to metric boundary labels (028-distribution-axis-units)', () => {
+    expect(inlineCode).toContain('getHistogramBoundaryTicks([bucket]');
+    expect(inlineCode).toContain('bucketLabels[Number(value)]');
+    expect(inlineCode).not.toContain('callback: value => selectedDistributionsDisplayMode === \'line\' ? getBucketLabelForX(Number(value)) : value');
+  });
+
+  it('keeps Histogram N/A cleanup and metric axis titles while rebuilding ticks (028-distribution-axis-units)', () => {
+    expect(inlineCode).toContain('showDistributionsEmptyState(');
+    expect(inlineCode).toContain("length: 'Length (km)'");
+    expect(inlineCode).toContain("elevation: 'Elevation gain (m)'");
+    expect(inlineCode).toContain("power: 'Power (W)'");
+  });
+
+  it('shows the Pace unit once on the axis title per sport and uses km/h for All Sports (027-distribution-chart-cleanup)', () => {
     expect(inlineCode).toContain("PACE_UNIT_BY_SPORT = { Run: 'min/km', Swim: 'min/100m', Bike: 'km/h' }");
     expect(inlineCode).toContain('axisTitleText');
   });

@@ -184,8 +184,10 @@ describe('index.html inline script syntax', () => {
     expect(html).toContain('role="dialog" aria-modal="true"');
     expect(inlineCode).toContain("icon.setAttribute('data-lucide', 'maximize-2')");
     expect((inlineCode.match(/function appendPbDetailButton\(header,/g) || [])).toHaveLength(1);
-    expect((inlineCode.match(/^\s*appendPbDetailButton\(header,/gm) || [])).toHaveLength(3);
+    expect((inlineCode.match(/^\s*appendPbDetailButton\((?:header|profileHeader),/gm) || [])).toHaveLength(4);
+    expect(inlineCode).toContain("title: 'Bike power all-time profile'");
     expect(inlineCode).toContain('border border-slate-600 bg-slate-900 text-slate-200');
+    expect(inlineCode).toContain('container.appendChild(section);\n          if (window.lucide) window.lucide.createIcons();');
     expect(inlineCode).toContain('window.lucide.createIcons()');
     expect(inlineCode).toContain("if (event.target.id === 'pbDetailOverlay') closePbDetail()");
   });

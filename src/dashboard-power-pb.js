@@ -1071,10 +1071,22 @@
         if (profilePoints.length >= 2) {
           const profileBlock = document.createElement('div');
           profileBlock.className = 'bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2';
-          const profileTitle = document.createElement('p');
+          const profileHeader = document.createElement('div');
+          profileHeader.className = 'flex items-center';
+          const profileTitle = document.createElement('span');
           profileTitle.className = 'text-xs font-semibold text-slate-300';
           profileTitle.textContent = 'All-time power profile';
-          profileBlock.appendChild(profileTitle);
+          profileHeader.appendChild(profileTitle);
+          appendPbDetailButton(profileHeader, {
+            title: 'Bike power all-time profile',
+            exportKey: 'Bike-power-all-time-profile',
+            axisLabel: 'Power (W)',
+            color,
+            direction: 'up',
+            formatValue: value => Math.round(value) + ' W',
+            records: profilePoints.map(point => ({ date: point.date, value: point.watts, title: point.title || 'Activity' }))
+          }, profileBlock);
+          profileBlock.appendChild(profileHeader);
 
           const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
           const width = 320;
@@ -1165,6 +1177,7 @@
           if (heading) heading.classList.remove('hidden');
           if (divider) divider.classList.remove('hidden');
           container.appendChild(section);
+          if (window.lucide) window.lucide.createIcons();
         }
       }
 

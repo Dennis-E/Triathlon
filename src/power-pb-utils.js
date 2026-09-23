@@ -50,13 +50,89 @@ function normalizeFitPowerRecords(records) {
   return normalized;
 }
 
-function calculateRollingPowerEfforts(records, targetSeconds, coverageThreshold = 0.8) {
-  if (!Array.isArray(records) || !Number.isFinite(targetSeconds) || targetSeconds <= 0) return [];
+function preparePowerRecords(records) {
+  if (!Array.isArray(records)) {
+    return { points: [], usablePowerCount: 0, integerFastPath: false };
+  }
+
   const points = records
     .filter(record => record && Number.isFinite(record.tSec) && Number.isFinite(record.distKm))
-    .map(record => ({ ...record, power: normalizePowerValue(record.power) }))
-    .sort((a, b) => a.tSec - b.tSec);
-  const efforts = [];
+    .map((record, index) => ({
+      tSec: record.tSec,
+      distKm: record.distKm,
+      power: normalizePowerValue(record.power),
+      inputIndex: index
+    }))
+    .sort((a, b) => a.tSec - b.tSec || a.inputIndex - b.inputIndex)
+    .map(({ inputIndex, ...point }) => point);
+
+  let usablePowerCount = 0;
+  let integerFastPath = true;
+  let totalPower = 0;
+  for (const point of points) {
+    if (point.power === null) continue;
+    usablePowerCount++;
+    integerFastPath = integerFastPath && Number.isSafeInteger(point.power);
+    totalPower += point.power;
+    integerFastPath = integerFastPath && Number.isSafeInteger(totalPower);
+  }
+
+  return { points, usablePowerCount, integerFastPath };
+}
+
+function createEffort(start, end, targetSeconds, avgPower) {
+  return {
+    targetSeconds,
+    avgPower,
+    startSec: start.tSec,
+    endSec: end.tSec,
+    startKm: start.distKm,
+    endKm: end.distKm
+  };
+}
+
+function calculateIntegerPowerEffort(points, targetSeconds, coverageThreshold) {
+  let leftIndex = 0;
+  let endIndex = -1;
+  let validCount = 0;
+  let powerSum = 0;
+  let best = null;
+
+  for (let startIndex = 0; startIndex < points.length; startIndex++) {
+    const start = points[startIndex];
+
+    while (leftIndex < points.length && points[leftIndex].tSec < start.tSec) {
+      if (leftIndex <= endIndex && points[leftIndex].power !== null) {
+        powerSum -= points[leftIndex].power;
+        validCount--;
+      }
+      leftIndex++;
+    }
+
+    while (endIndex + 1 < points.length && points[endIndex + 1].tSec <= start.tSec + targetSeconds) {
+      endIndex++;
+      if (points[endIndex].power !== null) {
+        powerSum += points[endIndex].power;
+        validCount++;
+      }
+    }
+
+    const windowCount = endIndex - leftIndex + 1;
+    if (windowCount < 2) continue;
+    const end = points[endIndex];
+    const observedSpan = end.tSec - start.tSec;
+    const coverage = Math.min(1, observedSpan / targetSeconds) * (validCount / windowCount);
+    if (coverage < coverageThreshold || validCount === 0) continue;
+
+    const effort = createEffort(start, end, targetSeconds, powerSum / validCount);
+    if (!best || effort.avgPower > best.avgPower) best = effort;
+  }
+
+  return best;
+}
+
+function calculateExactPowerEffort(points, targetSeconds, coverageThreshold) {
+  let best = null;
 
   for (let startIndex = 0; startIndex < points.length; startIndex++) {
     const start = points[startIndex];
@@ -68,19 +144,39 @@ function calculateRollingPowerEfforts(records, targetSeconds, coverageThreshold 
     const coverage = Math.min(1, observedSpan / targetSeconds) * (validPoints.length / window.length);
     if (coverage < coverageThreshold || validPoints.length === 0) continue;
 
-    efforts.push({
-      targetSeconds,
-      avgPower: validPoints.reduce((sum, point) => sum + point.power, 0) / validPoints.length,
-      startSec: start.tSec,
-      endSec: end.tSec,
-      startKm: start.distKm,
-      endKm: end.distKm
-    });
+    const avgPower = validPoints.reduce((sum, point) => sum + point.power, 0) / validPoints.length;
+    const effort = createEffort(start, end, targetSeconds, avgPower);
+    if (!best || effort.avgPower > best.avgPower) best = effort;
   }
 
-  if (efforts.length === 0) return [];
-  const best = efforts.reduce((current, effort) => effort.avgPower > current.avgPower ? effort : current);
-  return [best];
+  return best;
+}
+
+function calculatePreparedPowerEffort(prepared, targetSeconds, coverageThreshold) {
+  if (!Number.isFinite(targetSeconds) || targetSeconds <= 0 || prepared.usablePowerCount === 0) return null;
+  return prepared.integerFastPath
+    ? calculateIntegerPowerEffort(prepared.points, targetSeconds, coverageThreshold)
+    : calculateExactPowerEffort(prepared.points, targetSeconds, coverageThreshold);
+}
+
+function calculateRollingPowerEfforts(records, targetSeconds, coverageThreshold = 0.8) {
+  if (!Array.isArray(records) || !Number.isFinite(targetSeconds) || targetSeconds <= 0) return [];
+  const effort = calculatePreparedPowerEffort(preparePowerRecords(records), targetSeconds, coverageThreshold);
+  return effort ? [effort] : [];
+}
+
+function calculatePowerEffortsForDurations(records, durations, coverageThreshold = 0.8) {
+  if (!Array.isArray(records) || !Array.isArray(durations)) return [];
+  const prepared = preparePowerRecords(records);
+  if (prepared.usablePowerCount === 0) return [];
+
+  const efforts = [];
+  durations.forEach(duration => {
+    const targetSeconds = Number.isFinite(duration) ? duration : duration && duration.seconds;
+    const effort = calculatePreparedPowerEffort(prepared, targetSeconds, coverageThreshold);
+    if (effort) efforts.push(effort);
+  });
+  return efforts;
 }
 
 function buildAllTimePowerProfile(records) {
@@ -119,6 +215,7 @@ if (typeof module !== 'undefined' && module.exports) {
     normalizePowerValue,
     normalizeFitPowerRecords,
     calculateRollingPowerEfforts,
+    calculatePowerEffortsForDurations,
     buildAllTimePowerProfile,
     getPowerProfileWattRange,
     markPowerProfileLabelVisibility
@@ -131,6 +228,7 @@ if (typeof window !== 'undefined') {
     normalizePowerValue,
     normalizeFitPowerRecords,
     calculateRollingPowerEfforts,
+    calculatePowerEffortsForDurations,
     buildAllTimePowerProfile,
     getPowerProfileWattRange,
     markPowerProfileLabelVisibility

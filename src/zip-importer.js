@@ -433,6 +433,19 @@ async function extractFitPowerEffortsFromZip(zip, rawCsvText, activitySportById,
  */
 async function extractGpsAndPowerFromZip(zip, rawCsvText, activitySportById, reportProgress, fitDeps) {
   const notify = typeof reportProgress === 'function' ? reportProgress : () => {};
+  const deps = fitDeps || {};
+  const now = typeof deps.now === 'function'
+    ? deps.now
+    : () => (typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now());
+  const reportTiming = typeof deps.onTiming === 'function'
+    ? timing => {
+        try {
+          deps.onTiming(timing);
+        } catch (err) {
+          // Timing observers must not affect import results.
+        }
+      }
+    : () => {};
   const fileIdMap = parseGpsFileIdToActivityId(rawCsvText);
   const entries = Array.from(fileIdMap.entries()).filter(([filename]) => zip.files[filename] && !zip.files[filename].dir);
 
@@ -450,29 +463,53 @@ async function extractGpsAndPowerFromZip(zip, rawCsvText, activitySportById, rep
     try {
       const isGzipped = /\.gz$/i.test(filename);
       let points;
+      let recordCount = 0;
+      let parseMs = 0;
+      let gpsMs = 0;
+      let powerMs = 0;
 
       if (ext === 'gpx') {
+        const parseStartedAt = now();
         const text = isGzipped
           ? new TextDecoder('utf-8').decode(await gunzipUint8Array(await zip.files[filename].async('uint8array')))
           : await zip.files[filename].async('string');
+        parseMs = Math.max(0, now() - parseStartedAt);
+        const gpsStartedAt = now();
         points = extractGpxTrackpoints(text);
+        const simplified = simplifyTrackPoints(points, { toleranceMeters: 3, maxPoints: 2000 });
+        gpsMs = Math.max(0, now() - gpsStartedAt);
+        if (simplified.length > 0) {
+          gpsTracksByActivityId[activityId] = {
+            sport: (activitySportById && activitySportById.get(activityId)) || null,
+            points: simplified.map(p => [p.lat, p.lon])
+          };
+        }
       } else {
+        const parseStartedAt = now();
         const records = await readAndParseFitFile(zip, filename, fitDeps);
+        parseMs = Math.max(0, now() - parseStartedAt);
+        recordCount = records.length;
+        const gpsStartedAt = now();
         points = extractFitTrackpoints(records);
+        const simplified = simplifyTrackPoints(points, { toleranceMeters: 3, maxPoints: 2000 });
+        gpsMs = Math.max(0, now() - gpsStartedAt);
 
         if (activitySportById && activitySportById.get(activityId) === 'Bike') {
+          const powerStartedAt = now();
           const powerEfforts = buildFitPowerEfforts(records);
+          powerMs = Math.max(0, now() - powerStartedAt);
           if (powerEfforts.length > 0) fitBestEffortsByActivityId[activityId] = { powerEfforts };
+        }
+
+        if (simplified.length > 0) {
+          gpsTracksByActivityId[activityId] = {
+            sport: (activitySportById && activitySportById.get(activityId)) || null,
+            points: simplified.map(p => [p.lat, p.lon])
+          };
         }
       }
 
-      if (!points.length) continue;
-
-      const simplified = simplifyTrackPoints(points, { toleranceMeters: 3, maxPoints: 2000 });
-      gpsTracksByActivityId[activityId] = {
-        sport: (activitySportById && activitySportById.get(activityId)) || null,
-        points: simplified.map(p => [p.lat, p.lon])
-      };
+      reportTiming({ activityId, sourceType: ext, recordCount, parseMs, gpsMs, powerMs });
     } catch (err) {
       // Skip activities whose GPS/FIT file can't be read/parsed; the rest of the import should still succeed
       continue;
@@ -584,14 +621,9 @@ function normalizeFitRecords(records) {
 }
 
 function buildFitPowerEfforts(records) {
-  if (!powerPbUtils || typeof powerPbUtils.calculateRollingPowerEfforts !== 'function') return [];
+  if (!powerPbUtils || typeof powerPbUtils.calculatePowerEffortsForDurations !== 'function') return [];
   const normalized = normalizeFitRecords(records);
-  const powerEfforts = [];
-  powerPbUtils.POWER_DURATIONS.forEach(duration => {
-    const effort = powerPbUtils.calculateRollingPowerEfforts(normalized, duration.seconds)[0];
-    if (effort) powerEfforts.push(effort);
-  });
-  return powerEfforts;
+  return powerPbUtils.calculatePowerEffortsForDurations(normalized, powerPbUtils.POWER_DURATIONS);
 }
 
 function parseCsvBasic(text) {

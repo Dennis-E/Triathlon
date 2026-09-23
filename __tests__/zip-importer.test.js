@@ -12,6 +12,10 @@ const {
   extractFitPowerEffortsFromZip,
   extractGpsAndPowerFromZip
 } = require('../src/zip-importer');
+const {
+  POWER_DURATIONS,
+  calculateRollingPowerEfforts
+} = require('../src/power-pb-utils');
 
 function makeBikeFitRecords(count = 3601) {
   return Array.from({ length: count }, (_, index) => ({
@@ -334,6 +338,20 @@ describe('FIT power effort helpers', () => {
 
     expect(buildFitPowerEfforts(rawRecords)).toEqual([]);
   });
+
+  it('matches the compatible per-duration API in duration order', () => {
+    const rawRecords = Array.from({ length: 3601 }, (_, index) => ({
+      timestamp: new Date(index * 1000),
+      distance: index * 20,
+      power: index % 13 === 0 ? null : 200 + (index % 80)
+    }));
+    const normalized = normalizeFitRecords(rawRecords);
+    const expected = POWER_DURATIONS
+      .map(duration => calculateRollingPowerEfforts(normalized, duration.seconds)[0])
+      .filter(Boolean);
+
+    expect(buildFitPowerEfforts(rawRecords)).toEqual(expected);
+  });
 });
 
 describe('extractGpsAndPowerFromZip (spec 021 - faster bike power import)', () => {
@@ -447,5 +465,72 @@ describe('extractGpsAndPowerFromZip (spec 021 - faster bike power import)', () =
     expect(Object.keys(result.gpsTracksByActivityId).length).toBe(60);
     expect(Object.keys(result.fitBestEffortsByActivityId).length).toBe(60);
     expect(progressCalls.length).toBe(60);
+  });
+
+  it('reports privacy-safe non-negative phase timings with an injected clock', async () => {
+    const records = makeBikeFitRecords(20);
+    const clockValues = [0, 5, 5, 8, 8, 12];
+    const onTiming = jest.fn();
+    const fitDeps = {
+      ...makeFakeFitDeps(records),
+      now: jest.fn(() => clockValues.shift()),
+      onTiming
+    };
+    const zip = { files: { 'activities/999.fit': makeZipFile(new Uint8Array([1, 2, 3])) } };
+    const rawCsv = ['Activity ID,Filename', '999,activities/999.fit'].join('\n');
+
+    await extractGpsAndPowerFromZip(zip, rawCsv, new Map([['999', 'Bike']]), undefined, fitDeps);
+
+    expect(onTiming).toHaveBeenCalledWith({
+      activityId: '999',
+      sourceType: 'fit',
+      recordCount: records.length,
+      parseMs: 5,
+      gpsMs: 3,
+      powerMs: 4
+    });
+    expect(Object.keys(onTiming.mock.calls[0][0]).sort()).toEqual([
+      'activityId', 'gpsMs', 'parseMs', 'powerMs', 'recordCount', 'sourceType'
+    ]);
+  });
+
+  it('isolates timing callback failures from import results', async () => {
+    const records = makeBikeFitRecords(20);
+    const fitDeps = {
+      ...makeFakeFitDeps(records),
+      now: jest.fn(() => 0),
+      onTiming: jest.fn(() => { throw new Error('observer failed'); })
+    };
+    const zip = { files: { 'activities/999.fit': makeZipFile(new Uint8Array([1])) } };
+    const rawCsv = ['Activity ID,Filename', '999,activities/999.fit'].join('\n');
+
+    const result = await extractGpsAndPowerFromZip(zip, rawCsv, new Map([['999', 'Bike']]), undefined, fitDeps);
+
+    expect(result.gpsTracksByActivityId['999']).toBeDefined();
+    expect(result.fitBestEffortsByActivityId['999']).toBeDefined();
+  });
+
+  it('gunzips a compressed FIT once and continues after another FIT fails', async () => {
+    const records = makeBikeFitRecords(20);
+    const fitDeps = makeFakeFitDeps(records);
+    const zip = {
+      files: {
+        'activities/1.fit': { dir: false, async: jest.fn().mockRejectedValue(new Error('corrupt')) },
+        'activities/2.fit.gz': makeZipFile(new Uint8Array([2]))
+      }
+    };
+    const rawCsv = [
+      'Activity ID,Filename',
+      '1,activities/1.fit',
+      '2,activities/2.fit.gz'
+    ].join('\n');
+    const sports = new Map([['1', 'Bike'], ['2', 'Bike']]);
+
+    const result = await extractGpsAndPowerFromZip(zip, rawCsv, sports, undefined, fitDeps);
+
+    expect(result.gpsTracksByActivityId['1']).toBeUndefined();
+    expect(result.gpsTracksByActivityId['2']).toBeDefined();
+    expect(result.fitBestEffortsByActivityId['2']).toBeDefined();
+    expect(fitDeps.gunzipUint8Array).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Power PB Performance Test</title>
+  <style>
+    body { margin: 0; background: #101820; color: #f4f7f8; font-family: Consolas, monospace; }
+    main { max-width: 900px; margin: 0 auto; padding: 32px 20px; }
+    button { padding: 10px 16px; border: 0; background: #f4c430; color: #101820; font: inherit; font-weight: 700; cursor: pointer; }
+    button:disabled { opacity: 0.55; cursor: wait; }
+    pre { margin-top: 20px; padding: 16px; background: #18242d; border-left: 4px solid #f4c430; overflow: auto; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Power PB Performance Test</h1>
+    <button id="runBenchmark" type="button">Run benchmark</button>
+    <pre id="output">Ready.</pre>
+  </main>
+  <script src="../src/power-pb-utils.js"></script>
+  <script>
+    const WARM_UP_RUNS = 3;
+    const MEASURED_RUNS = 7;
+
+    function makeRecords(count) {
+      return Array.from({ length: count }, (_, index) => ({
+        tSec: index,
+        distKm: index * 0.01,
+        power: 200 + (index % 100)
+      }));
+    }
+
+    function median(values) {
+      return values.slice().sort((a, b) => a - b)[Math.floor(values.length / 2)];
+    }
+
+    function measure(callback) {
+      for (let index = 0; index < WARM_UP_RUNS; index++) callback();
+      const measurements = [];
+      for (let index = 0; index < MEASURED_RUNS; index++) {
+        const startedAt = performance.now();
+        callback();
+        measurements.push(performance.now() - startedAt);
+      }
+      return median(measurements);
+    }
+
+    async function runBenchmark() {
+      const button = document.getElementById('runBenchmark');
+      const output = document.getElementById('output');
+      button.disabled = true;
+      output.textContent = 'Running...';
+      await new Promise(resolve => requestAnimationFrame(resolve));
+
+      const fourHourRecords = makeRecords(14401);
+      const parseStartedAt = performance.now();
+      const parsedRecords = fourHourRecords.map(record => ({ ...record }));
+      const parseMs = performance.now() - parseStartedAt;
+      const gpsStartedAt = performance.now();
+      const gpsPoints = parsedRecords.map(record => [48 + record.tSec * 0.000001, 11 + record.tSec * 0.000001]);
+      const gpsMs = performance.now() - gpsStartedAt;
+      const fourHourMedianMs = measure(() => {
+        window.powerPbUtils.calculatePowerEffortsForDurations(parsedRecords, window.powerPbUtils.POWER_DURATIONS);
+      });
+
+      let lastProgressAt = performance.now();
+      let longestProgressGapMs = 0;
+      const historyStartedAt = lastProgressAt;
+      for (let activity = 0; activity < 100; activity++) {
+        window.powerPbUtils.calculatePowerEffortsForDurations(makeRecords(7201), window.powerPbUtils.POWER_DURATIONS);
+        const progressAt = performance.now();
+        longestProgressGapMs = Math.max(longestProgressGapMs, progressAt - lastProgressAt);
+        lastProgressAt = progressAt;
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+
+      const report = {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        logicalProcessors: navigator.hardwareConcurrency || null,
+        warmUpRuns: WARM_UP_RUNS,
+        measuredRuns: MEASURED_RUNS,
+        fourHourRecords: fourHourRecords.length,
+        fourHourMedianMs: Number(fourHourMedianMs.toFixed(2)),
+        historyActivities: 100,
+        historyRecords: 720000,
+        historyTotalMs: Number((performance.now() - historyStartedAt).toFixed(2)),
+        longestProgressGapMs: Number(longestProgressGapMs.toFixed(2)),
+        phaseTotalsMs: {
+          parse: Number(parseMs.toFixed(2)),
+          gps: Number(gpsMs.toFixed(2)),
+          power: Number(fourHourMedianMs.toFixed(2))
+        },
+        gpsPointCount: gpsPoints.length,
+        passesTwoSecondCalculationTarget: fourHourMedianMs <= 2000,
+        passesTwoSecondProgressTarget: longestProgressGapMs <= 2000
+      };
+      output.textContent = JSON.stringify(report, null, 2);
+      button.disabled = false;
+    }
+
+    document.getElementById('runBenchmark').addEventListener('click', runBenchmark);
+  </script>
+</body>
+</html>

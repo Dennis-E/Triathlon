@@ -8,6 +8,7 @@
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "benchmark:power-pb": "node scripts/benchmark-power-pb.js",
     "prepare": "husky install"
   },
   "keywords": [],

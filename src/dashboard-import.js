@@ -132,7 +132,7 @@
       renderImportPreview(importPreviewIndex);
       importPreviewTimer = setInterval(() => {
         renderImportPreview(importPreviewIndex + 1);
-      }, 1800);
+      }, 5000);
     }
 
     function stopImportPreviewRotation() {
@@ -407,11 +407,13 @@
       const modal = document.getElementById('importProgressModal');
       const bar = document.getElementById('importProgressBar');
       const percentEl = document.getElementById('importProgressPercent');
+      const stageEl = document.getElementById('importProgressStage');
       const detailEl = document.getElementById('importProgressDetail');
       const errorDiv = document.getElementById('importProgressError');
 
       bar.style.width = percent + '%';
       percentEl.textContent = percent + '%';
+      stageEl.textContent = stage;
       detailEl.textContent = stage;
 
       if (isError) {

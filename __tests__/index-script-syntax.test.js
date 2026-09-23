@@ -85,8 +85,23 @@ describe('index.html inline script syntax', () => {
     expect((html.match(/<h2 class="font-semibold text-lg">Importing Strava Data<\/h2>/g) || []).length).toBe(1);
     expect(html).toContain('id="importProgressDetail"');
     expect(html).toContain('bg-slate-950 border border-slate-800 rounded-lg');
-    expect(html).not.toContain('id="importProgressStage"');
-    expect(inlineCode).not.toContain('stageEl.textContent = stage');
+    expect(html).toContain('id="importProgressStage"');
+    expect(inlineCode).toContain('stageEl.textContent = stage');
+  });
+
+  it('places the factual import stage above the progress bar', () => {
+    const statusIndex = html.indexOf('id="importProgressStage"');
+    const progressBarIndex = html.indexOf('id="importProgressBar"');
+    expect(statusIndex).toBeGreaterThan(-1);
+    expect(statusIndex).toBeLessThan(progressBarIndex);
+    expect(inlineCode).toContain('stageEl.textContent = stage');
+  });
+
+  it('uses a calm five-second preview timer independent of progress updates', () => {
+    expect(inlineCode).toContain('}, 5000);');
+    expect(inlineCode).not.toContain('}, 1800);');
+    expect(inlineCode).toContain('startImportPreviewRotation();');
+    expect(inlineCode).toContain('stopImportPreviewRotation();');
   });
 
   it('renders a distinct activity-average power section for Bike PBs', () => {

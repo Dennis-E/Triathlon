@@ -13,7 +13,8 @@
       personalBests: 'pbColumnsContainer',
       heatmap: 'heatmapMapContainer',
       distributions: 'distributionsChartWrapper',
-      workoutTime: 'workoutTimeChartWrapper'
+      workoutTime: 'workoutTimeChartWrapper',
+      trainingCalendar: 'trainingCalendarYears'
     };
 
     const EXPORT_DOMAIN = window.exportUtils.getExportBrandConfig().domain;
@@ -41,7 +42,8 @@
         personalBests: isEmptyStateHidden('pbEmptyState'),
         heatmap: isEmptyStateHidden('heatmapEmptyState'),
         distributions: isEmptyStateHidden('distributionsEmptyState'),
-        workoutTime: isEmptyStateHidden('workoutTimeEmptyState')
+        workoutTime: isEmptyStateHidden('workoutTimeEmptyState'),
+        trainingCalendar: typeof processedActivities !== 'undefined' && processedActivities.length > 0
       };
     }
 
@@ -73,7 +75,8 @@
         'vizTabPersonalBests',
         'vizTabHeatmap',
         'vizTabDistributions',
-        'vizTabWorkoutTime'
+        'vizTabWorkoutTime',
+        'vizTabTrainingCalendar'
       ];
       const groups = [getControlGroup('Views', viewIds)];
       const tabGroups = {
@@ -100,6 +103,10 @@
         workoutTime: [
           getControlGroup('Granularity', ['workoutTimeGranularityBtnDay', 'workoutTimeGranularityBtnWeek', 'workoutTimeGranularityBtnMonth', 'workoutTimeGranularityBtnYear']),
           getControlGroup('Sport', ['workoutTimeSportBtnAll', 'workoutTimeSportBtnRun', 'workoutTimeSportBtnBike', 'workoutTimeSportBtnSwim'])
+        ],
+        trainingCalendar: [
+          getControlGroup('Palette', ['trainingCalendarPaletteGreen', 'trainingCalendarPaletteBlue', 'trainingCalendarPaletteFire']),
+          getControlGroup('Sport', Array.from(document.querySelectorAll('#trainingCalendarSportFilters button')).map(button => button.id))
         ]
       };
       return window.exportUtils.summarizeAvailableControls(groups.concat(tabGroups[tabName] || []));
@@ -131,6 +138,10 @@
           { label: 'Granularity', value: getActiveButtonText(['workoutTimeGranularityBtnDay', 'workoutTimeGranularityBtnWeek', 'workoutTimeGranularityBtnMonth', 'workoutTimeGranularityBtnYear']) },
           { label: 'Sport', value: getActiveButtonText(['workoutTimeSportBtnAll', 'workoutTimeSportBtnRun', 'workoutTimeSportBtnBike', 'workoutTimeSportBtnSwim']) },
           { label: 'Date range', value: document.getElementById('workoutTimeRangeLabel')?.textContent.trim() }
+        ],
+        trainingCalendar: [
+          { label: 'Palette', value: getActiveButtonText(['trainingCalendarPaletteGreen', 'trainingCalendarPaletteBlue', 'trainingCalendarPaletteFire']) },
+          { label: 'Sport', value: getActiveButtonText(Array.from(document.querySelectorAll('#trainingCalendarSportFilters button')).map(button => button.id)) }
         ]
       };
       return window.exportUtils.summarizeFilters(contexts[tabName] || []);
@@ -391,7 +402,10 @@
       }
 
       exportRequestState = 'capturing';
+      const tooltip = document.getElementById('trainingCalendarDayTooltip');
+      const tooltipWasVisible = tooltip && !tooltip.classList.contains('hidden');
       try {
+        if (tooltipWasVisible) tooltip.classList.add('hidden');
         await waitForChartRenderSettle();
         const assets = await loadExportAssets();
 
@@ -409,6 +423,8 @@
         console.error('Export failed', error);
         exportRequestState = 'idle';
         showExportToast(error.message || 'Could not export this visualization. Please try again.');
+      } finally {
+        if (tooltip && tooltipWasVisible) tooltip.classList.remove('hidden');
       }
     }
 

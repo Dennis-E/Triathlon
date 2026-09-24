@@ -33,6 +33,19 @@ describe('export-utils', () => {
     });
   });
 
+  it('supports the Training Calendar export target', () => {
+    expect(getTabDisplayTitle('trainingCalendar')).toBe('Training Calendar');
+    expect(generateExportFilename('trainingCalendar', new Date(2026, 8, 24, 12, 30, 0))).toContain('training-calendar');
+    expect(createExportTarget({
+      kind: 'tab',
+      key: 'trainingCalendar',
+      title: 'Training Calendar',
+      targetElementId: 'trainingCalendarYears',
+      hasData: true,
+      filters: [{ label: 'Palette', value: 'Fire' }, { label: 'Sport', value: 'All Sports' }]
+    })).toMatchObject({ targetElementId: 'trainingCalendarYears', hasData: true });
+  });
+
   describe('computeSquareFit', () => {
     it('fits a wider-than-tall source fully inside the square, centered vertically', () => {
       const result = computeSquareFit(800, 400, 500);

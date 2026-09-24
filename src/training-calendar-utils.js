@@ -1,5 +1,11 @@
 const SUPPORTED_SPORTS = ['Run', 'Bike', 'Swim'];
 const CALENDAR_SPORTS = [...SUPPORTED_SPORTS, 'Other'];
+const EMPTY_DAY_COLOR = 'rgba(241,245,249,0.5)';
+const PALETTES = Object.freeze({
+  green: Object.freeze(['#DCFCE7', '#86EFAC', '#22C55E', '#16A34A', '#166534']),
+  blue: Object.freeze(['#DBEAFE', '#93C5FD', '#3B82F6', '#2563EB', '#1D4ED8']),
+  fire: Object.freeze(['#FDE047', '#F59E0B', '#F97316', '#EF4444', '#B91C1C'])
+});
 
 function isValidDate(value) {
   return value instanceof Date && Number.isFinite(value.getTime());
@@ -54,6 +60,8 @@ function createEmptyDay(date) {
     metricKind: 'count',
     sports: [],
     bySport: {},
+    tooltipActivities: [],
+    hasTooltipActivities: false,
     intensityLevel: 0
   };
 }
@@ -69,6 +77,13 @@ function addMetric(day, activity, category) {
   }
   const sportTotals = day.bySport[category];
   sportTotals.activityCount += 1;
+  day.tooltipActivities.push({
+    id: String(activity.id || `${day.dateKey}-${day.tooltipActivities.length}`),
+    name: String(activity.name || activity.title || 'Activity'),
+    sport: category,
+    durationSeconds: isValidMetric(activity.duration) ? activity.duration : null,
+    distanceKm: isValidMetric(activity.distance) ? activity.distance : null
+  });
 
   if (isValidMetric(activity.duration)) {
     day.durationSeconds = (day.durationSeconds || 0) + activity.duration;
@@ -81,6 +96,7 @@ function addMetric(day, activity, category) {
 }
 
 function finalizeDay(day) {
+  day.hasTooltipActivities = day.tooltipActivities.length > 0;
   day.sports = Object.keys(day.bySport).sort((first, second) => {
     return CALENDAR_SPORTS.indexOf(first) - CALENDAR_SPORTS.indexOf(second);
   });
@@ -169,14 +185,41 @@ function buildCalendarModel(activities = [], options = {}) {
   };
 }
 
+function buildMultiYearCalendarModel(activities = [], options = {}) {
+  const availableYears = getAvailableYears(activities);
+  if (availableYears.length === 0) {
+    return { years: [], availableYears: [], availableSports: [], sport: options.sport || 'All' };
+  }
+
+  const newestYear = availableYears[availableYears.length - 1];
+  const oldestYear = availableYears[0];
+  const years = [];
+  for (let year = newestYear; year >= oldestYear; year -= 1) {
+    years.push(buildCalendarModel(activities, {
+      year,
+      sport: options.sport || 'All'
+    }));
+  }
+
+  return {
+    years,
+    availableYears,
+    availableSports: getAvailableSports(activities, {}),
+    sport: options.sport || 'All'
+  };
+}
+
 const trainingCalendarUtils = {
   SUPPORTED_SPORTS,
   CALENDAR_SPORTS,
+  EMPTY_DAY_COLOR,
+  PALETTES,
   getDateKey,
   getSportCategory,
   getAvailableYears,
   getAvailableSports,
-  buildCalendarModel
+  buildCalendarModel,
+  buildMultiYearCalendarModel
 };
 
 if (typeof module !== 'undefined' && module.exports) {

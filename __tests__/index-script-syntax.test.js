@@ -90,18 +90,50 @@ describe('index.html inline script syntax', () => {
   });
 
   it('provides Training Calendar details, filters, and import reset controls', () => {
-    expect(html).toContain('id="trainingCalendarYearSelect"');
+    expect(html).toContain('id="trainingCalendarYears"');
+    expect(html).toContain('id="trainingCalendarPaletteFilters"');
+    expect(html).not.toContain('id="trainingCalendarYearSelect"');
     expect(html).toContain('id="trainingCalendarSportFilters"');
-    expect(html).toContain('id="trainingCalendarDetails"');
+    expect(html).not.toContain('id="trainingCalendarDetails"');
     expect(html).toContain('id="trainingCalendarEmptyState"');
-    expect(inlineCode).toContain('selectTrainingCalendarDayByKey');
+    expect(html).toContain('data-palette="green"');
+    expect(html).toContain('data-palette="blue"');
+    expect(html).toContain('data-palette="fire"');
+    expect(inlineCode).toContain('showTrainingCalendarDayTooltipByKey');
     expect(inlineCode).toContain('setTrainingCalendarSportFilter');
     expect(inlineCode).toContain('initTrainingCalendarControls();');
+    expect(inlineCode).toContain('setTrainingCalendarPalette');
+    expect(inlineCode).toContain('buildMultiYearCalendarModel');
+  });
+
+  it('provides a local tooltip and removes the global calendar detail surface', () => {
+    expect(html).toContain('id="trainingCalendarDayTooltip"');
+    expect(html).not.toContain('id="trainingCalendarDetails"');
+    expect(inlineCode).toContain('tooltipActivities');
+    expect(inlineCode).toContain('mouseenter');
+    expect(inlineCode).toContain('mouseleave');
+    expect(inlineCode).toContain('focus');
+    expect(inlineCode).toContain('blur');
+    expect(html).toContain('max-h-');
   });
 
   it('keeps the Training Calendar renderer local-only', () => {
     expect(trainingCalendarCode).not.toMatch(/fetch\s*\(|XMLHttpRequest|navigator\.sendBeacon/);
     expect(trainingCalendarCode).toContain('window.trainingCalendarUtils');
+  });
+
+  it('uses a bright palette-independent empty day and renders all year blocks', () => {
+    expect(trainingCalendarCode).toContain('rgba(241,245,249,0.5)');
+    expect(trainingCalendarCode).toContain('trainingCalendarYears');
+    expect(trainingCalendarCode).toContain('PALETTES');
+  });
+
+  it('wires Training Calendar export to the full multi-year target', () => {
+    expect(html).toContain("exportVisualizationTab('trainingCalendar')");
+    expect(html).toContain('id="trainingCalendarYears"');
+    expect(inlineCode).toContain('trainingCalendar:');
+    expect(inlineCode).toContain('trainingCalendarYears');
+    expect(inlineCode).toContain('trainingCalendarDayTooltip');
   });
 
   it('wires the Workout Time tab and its dashboard renderer', () => {

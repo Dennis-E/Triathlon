@@ -70,6 +70,7 @@
 
       setBtnActive('sportBtnAll');
       setScatterSportBtnActive('scatterSportBtnRun');
+      if (typeof selectedTrainingCalendarPalette !== 'undefined') selectedTrainingCalendarPalette = 'green';
       renderTimeframeButtons();
       initScatterDateSlider();
       initDistributionsDateSlider();

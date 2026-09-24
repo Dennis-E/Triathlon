@@ -1,11 +1,16 @@
 const {
   getAvailableYears,
   getSportCategory,
-  buildCalendarModel
+  buildCalendarModel,
+  buildMultiYearCalendarModel,
+  PALETTES,
+  EMPTY_DAY_COLOR
 } = require('../src/training-calendar-utils');
 
 function activity({ date, sport = 'Run', duration, distance }) {
   return {
+    id: `${date}-${sport}`,
+    name: `${sport} session`,
     date: new Date(`${date}T12:00:00`),
     sport,
     duration,
@@ -108,5 +113,44 @@ describe('training-calendar-utils', () => {
 
     expect(model.activityCount).toBe(10000);
     expect(elapsed).toBeLessThan(2000);
+  });
+
+  it('builds every year in the inclusive newest-to-oldest range', () => {
+    const model = buildMultiYearCalendarModel([
+      activity({ date: '2024-01-01', duration: 100 }),
+      activity({ date: '2026-01-01', duration: 100 })
+    ]);
+
+    expect(model.years.map(year => year.year)).toEqual([2026, 2025, 2024]);
+    expect(model.years[1].activityCount).toBe(0);
+    expect(model.years[1].days).toHaveLength(365);
+  });
+
+  it('defines the three ordered palettes with a shared bright empty level', () => {
+    expect(Object.keys(PALETTES)).toEqual(['green', 'blue', 'fire']);
+    expect(PALETTES.green).toHaveLength(5);
+    expect(PALETTES.blue).toHaveLength(5);
+    expect(PALETTES.fire).toHaveLength(5);
+    expect(PALETTES.fire).toEqual(['#FDE047', '#F59E0B', '#F97316', '#EF4444', '#B91C1C']);
+    expect(EMPTY_DAY_COLOR).toBe('rgba(241,245,249,0.5)');
+  });
+
+  it('creates display-safe tooltip activity summaries without mutating source data', () => {
+    const source = [
+      activity({ date: '2026-01-10', sport: 'Run', duration: 1800, distance: 5 }),
+      { ...activity({ date: '2026-01-10', sport: 'Yoga', duration: null, distance: 2 }), name: '' }
+    ];
+    const model = buildCalendarModel(source, { year: 2026 });
+    const day = model.days.find(item => item.dateKey === '2026-01-10');
+
+    expect(day.tooltipActivities).toEqual([
+      { id: '2026-01-10-Run', name: 'Run session', sport: 'Run', durationSeconds: 1800, distanceKm: 5 },
+      { id: '2026-01-10-Yoga', name: 'Activity', sport: 'Other', durationSeconds: null, distanceKm: 2 }
+    ]);
+    expect(source[1].sport).toBe('Yoga');
+  });
+
+  it('defines the export-safe transparent empty-cell token', () => {
+    expect(EMPTY_DAY_COLOR).toBe('rgba(241,245,249,0.5)');
   });
 });

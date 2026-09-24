@@ -21,7 +21,7 @@ test-covered logic changes.
 
 **Primary Dependencies**: None — CDN-script static site per existing convention; no image-processing library added (icon variants are pre-rendered files, not generated at runtime)
 
-**Storage**: Static files only (`social-preview.png`, `favicon.ico`, `favicon-16x16.png`, `favicon-32x32.png`, `apple-touch-icon.png`, `android-chrome-192x192.png`, `android-chrome-512x512.png`) served from the repository root alongside `index.html`
+**Storage**: Static files only (social preview and favicon/app-icon files under `assets/`) served by GitHub Pages
 
 **Testing**: Root Jest suite (`npm test`) for regression coverage of existing suites (e.g. [__tests__/preview-assets.test.js](../../__tests__/preview-assets.test.js), [__tests__/legal-footer.test.js](../../__tests__/legal-footer.test.js)) plus manual verification via Open Graph/Twitter card debugger and direct asset URL checks
 
@@ -78,13 +78,13 @@ specs/035-social-share-branding/
 
 ```text
 index.html                          # canonical <head> edit: title, description, OG/Twitter meta, icon <link> tags
-social-preview.png                  # new: 1200x630 social share image (repo root, served at site root)
-favicon.ico                         # new: multi-size legacy favicon (repo root)
-favicon-16x16.png                   # new
-favicon-32x32.png                   # new
-apple-touch-icon.png                # new: 180x180
-android-chrome-192x192.png          # new
-android-chrome-512x512.png          # new
+assets/social-preview.png           # new: 1200x630 social share image
+assets/favicon.ico                  # new: multi-size legacy favicon
+assets/favicon-16x16.png            # new
+assets/favicon-32x32.png            # new
+assets/apple-touch-icon.png         # new: 180x180
+assets/android-chrome-192x192.png   # new
+assets/android-chrome-512x512.png   # new
 assets/
 ├── Square Logo.png                 # existing circular emblem source artwork used to derive favicons
 └── logo.png                        # existing wide wordmark — explicitly NOT used for favicon-sized assets

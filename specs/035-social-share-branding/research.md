@@ -2,22 +2,20 @@
 
 ## Decision: Asset storage location and URL resolution
 
-- **Decision**: Place all new static assets (`social-preview.png`, `favicon.ico`,
+- **Decision**: Place `social-preview.png` and all icon assets (`favicon.ico`,
   `favicon-16x16.png`, `favicon-32x32.png`, `apple-touch-icon.png`,
   `android-chrome-192x192.png`, `android-chrome-512x512.png`) directly at the
-  repository root, alongside `index.html`.
+  under `assets/`; GitHub Pages serves them at the corresponding `/Triathlon/assets/` paths.
 - **Rationale**: GitHub Pages serves this repository's root as
   `https://dennis-e.github.io/Triathlon/`. Files placed at the repo root are
   reachable at `https://dennis-e.github.io/Triathlon/<filename>`, matching the
-  spec's required `social-preview.png` URL without any path rewriting. This also
-  matches the project's no-bundler convention (Principle I) — there is no asset
-  pipeline that would relocate or hash-rename files.
+  asset folder is served unchanged by GitHub Pages and matches the project's
+  no-bundler convention (Principle I) — there is no asset pipeline that would
+  relocate or hash-rename files.
 - **Alternatives considered**: An `assets/` subfolder (already used for
   `logo.png`, preview screenshots, etc.) was considered, but the task explicitly
-  requires the image at the site root (`/Triathlon/social-preview.png`), so a
-  subfolder would require a different final URL and was rejected. Favicon assets
-  conventionally live at the site root as well (browsers request `/favicon.ico`
-  by default), reinforcing the root placement.
+  requires the image at the site root, so keeping all public branding assets in
+  `assets/` provides one consistent static asset location.
 
 ## Decision: Absolute vs. relative URLs in metadata
 

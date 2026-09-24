@@ -13,6 +13,8 @@ const PREVIEWS = [
   ['distributions', 'distributions.png'],
   ['workoutTime', 'workout-time.png']
 ];
+const SOCIAL_PREVIEW_PATH = path.join(ROOT, 'assets', 'social-preview.png');
+const SOCIAL_IMAGE_URL = 'https://dennis-e.github.io/Triathlon/assets/social-preview.png';
 
 function readIndex() {
   return fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -44,6 +46,37 @@ describe('landing visualization previews', () => {
   it('does not reference private source data from landing-page runtime markup', () => {
     expect(html).not.toMatch(/private-data[\\/]export_39173135\.zip/i);
     expect(html).not.toMatch(/(?:href|src)="[^"]*\.(?:csv|gpx|fit|zip)"/i);
+  });
+
+  it('exposes one canonical social metadata set for the production site', () => {
+    expect((html.match(/<title>/g) || []).length).toBe(1);
+    expect((html.match(/<meta name="description"/g) || []).length).toBe(1);
+    expect(html).toContain('<title>TriAnalytica</title>');
+    expect(html).toContain('content="Explore your long-term training data with interactive running, cycling and swimming analytics directly in your browser."');
+    expect(html).toContain('<meta property="og:title" content="TriAnalytica"');
+    expect(html).toContain('<meta property="og:description" content="Training data. Clearer insights. Explore your long-term running, cycling and swimming history."');
+    expect(html).toContain('<meta property="og:url" content="https://dennis-e.github.io/Triathlon/"');
+    expect(html).toContain(`<meta property="og:image" content="${SOCIAL_IMAGE_URL}"`);
+    expect(html).toContain(`<meta name="twitter:image" content="${SOCIAL_IMAGE_URL}"`);
+    expect((html.match(/property="og:image"/g) || []).length).toBe(1);
+    expect((html.match(/name="twitter:image"/g) || []).length).toBe(1);
+    expect(html).not.toMatch(/og:image[^>]+(?:Strava|logo\.png)/i);
+  });
+
+  it('provides the required social preview asset at 1200x630', () => {
+    expect(fs.existsSync(SOCIAL_PREVIEW_PATH)).toBe(true);
+    expect(fs.readFileSync(SOCIAL_PREVIEW_PATH).subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+    const header = fs.readFileSync(SOCIAL_PREVIEW_PATH).subarray(16, 24);
+    expect(header.readUInt32BE(0)).toBe(1200);
+    expect(header.readUInt32BE(4)).toBe(630);
+  });
+
+  it('uses only GitHub Pages scoped favicon paths', () => {
+    ['favicon.ico', 'favicon-32x32.png', 'favicon-16x16.png', 'apple-touch-icon.png'].forEach((assetName) => {
+      expect(html).toContain(`/Triathlon/assets/${assetName}`);
+      expect(fs.existsSync(path.join(ROOT, 'assets', assetName))).toBe(true);
+    });
+    expect(html).not.toMatch(/<link[^>]+(?:assets\/)?logo\.png/i);
   });
 
   it('has all approved preview assets in the expected readable image format', () => {

@@ -67,7 +67,7 @@ A developer or search engine inspects the page source. They need a single, unamb
 - **FR-002**: The page MUST expose a single meta description summarizing the product as long-term running, cycling, and swimming analytics explored in the browser.
 - **FR-003**: The page MUST expose Open Graph metadata (`og:type`, `og:site_name`, `og:title`, `og:description`, `og:url`, `og:image`, `og:image:secure_url`, `og:image:type`, `og:image:width`, `og:image:height`, `og:image:alt`) with values consistent with the title/description and pointing to the absolute production URL of the branded preview image.
 - **FR-004**: The page MUST expose Twitter/X card metadata (`twitter:card` = "summary_large_image", `twitter:title`, `twitter:description`, `twitter:image`, `twitter:image:alt`) consistent with the Open Graph values.
-- **FR-005**: A 1200x630 branded social preview image MUST be published as a static asset at the site's production root path so it is reachable at `https://dennis-e.github.io/Triathlon/social-preview.png`, preserved exactly (no recompression that changes dimensions or introduces visible quality loss).
+- **FR-005**: A 1200x630 branded social preview image MUST be published as a static asset under `assets/` so it is reachable at `https://dennis-e.github.io/Triathlon/assets/social-preview.png`, with the approved proportional resize preserved.
 - **FR-006**: The site MUST provide favicon/app icon assets derived from the circular TriAnalytica emblem (not the wide wordmark) in the standard sizes: `.ico`, 16x16 PNG, 32x32 PNG, 180x180 Apple touch icon, 192x192 and 512x512 Android Chrome icons.
 - **FR-007**: The page MUST link the favicon/app icon assets via appropriate `<link>` elements, using paths that resolve correctly under the GitHub Pages subpath `/Triathlon/`.
 - **FR-008**: All new metadata and asset references MUST be added to the existing canonical HTML entry point rather than introducing a second, conflicting set of tags.
@@ -94,7 +94,7 @@ A developer or search engine inspects the page source. They need a single, unamb
 ## Assumptions
 
 - The 1200x630 branded preview image and the circular emblem source artwork are supplied by the requester as-is; this feature covers publishing and referencing them, not designing new artwork from scratch.
-- The production site is served from GitHub Pages at `https://dennis-e.github.io/Triathlon/`, and static assets placed at the repository root (alongside `index.html`) are served under that same subpath.
+- The production site is served from GitHub Pages at `https://dennis-e.github.io/Triathlon/`, and static assets placed under `assets/` are served under `https://dennis-e.github.io/Triathlon/assets/`.
 - No build/bundler step exists (per project conventions); metadata and asset links are added directly to `index.html`, the canonical HTML entry point.
 - Third-party platforms (Strava, LinkedIn, WhatsApp, Facebook, Slack) may cache previously scraped previews; cache-busting on those external platforms is out of scope.
 - "Do not use the wide wordmark for favicon-sized assets" is interpreted as: favicon/app icons are cropped/derived from the circular emblem portion of the existing brand artwork, not the full horizontal logo lockup.

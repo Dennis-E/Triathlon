@@ -21,6 +21,8 @@
           renderDistributionsChart();
         } else if (nextTab === 'workoutTime') {
           renderWorkoutTimeChart();
+        } else if (nextTab === 'trainingCalendar') {
+          renderTrainingCalendar();
         }
       }
     }
@@ -64,6 +66,8 @@
         tabName === 'equipmentTimeline' ? 'vizTabEquipmentTimeline' :
         tabName === 'heatmap' ? 'vizTabHeatmap' :
         tabName === 'distributions' ? 'vizTabDistributions' :
+        tabName === 'workoutTime' ? 'vizTabWorkoutTime' :
+        tabName === 'trainingCalendar' ? 'vizTabTrainingCalendar' :
         'vizTabPersonalBests'
       );
       if (tabButton) tabButton.focus();

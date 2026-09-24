@@ -50,6 +50,7 @@
   <!-- ZIP Importer Utility -->
   <script src="./src/zip-importer.js"></script>
   <script src="./src/heatmap-utils.js"></script>
+  <script src="./src/training-calendar-utils.js"></script>
   <script src="./src/analysis-counter.js"></script>
   <style>
     /* Custom scrollbar for modern feel */
@@ -802,6 +803,19 @@
           >
             Workout Time
           </button>
+          <button
+            id="vizTabTrainingCalendar"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="vizPanelTrainingCalendar"
+            tabindex="-1"
+            onclick="setVisualizationTab('trainingCalendar')"
+            onkeydown="handleVisualizationTabKeydown(event, 'trainingCalendar')"
+            class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
+          >
+            Training Calendar
+          </button>
         </div>
       </div>
       
@@ -1323,6 +1337,50 @@
         </div>
       </div>
 
+      <div id="vizPanelTrainingCalendar" role="tabpanel" aria-labelledby="vizTabTrainingCalendar" class="hidden">
+        <div class="space-y-5">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+            <div class="space-y-1">
+              <h2 class="text-2xl font-bold tracking-tight">Training Calendar</h2>
+              <p id="trainingCalendarActivityCount" class="text-xs text-slate-400">0 activities</p>
+            </div>
+            <label class="flex items-center gap-2 text-xs text-slate-400" for="trainingCalendarYearSelect">
+              Year
+              <select id="trainingCalendarYearSelect" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-slate-200"></select>
+            </label>
+          </div>
+
+          <div id="trainingCalendarSportFilters" class="flex flex-wrap gap-2" aria-label="Training sport filter"></div>
+
+          <div class="flex flex-wrap items-center gap-2 text-xs text-slate-400" id="trainingCalendarLegend" aria-label="Training intensity legend">
+            <span>Less</span>
+            <span class="h-3 w-3 rounded-sm bg-slate-800" title="No activity"></span>
+            <span class="h-3 w-3 rounded-sm bg-emerald-950" title="Intensity 1"></span>
+            <span class="h-3 w-3 rounded-sm bg-emerald-800" title="Intensity 2"></span>
+            <span class="h-3 w-3 rounded-sm bg-emerald-600" title="Intensity 3"></span>
+            <span class="h-3 w-3 rounded-sm bg-emerald-400" title="Intensity 4"></span>
+            <span class="h-3 w-3 rounded-sm bg-emerald-300" title="Intensity 5"></span>
+            <span>More</span>
+          </div>
+
+          <div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950 p-4">
+            <div class="flex min-w-max gap-3">
+              <div class="grid grid-rows-7 gap-1 pt-5 text-[10px] leading-3 text-slate-500" aria-hidden="true">
+                <span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span></span>
+              </div>
+              <div id="trainingCalendarGrid" class="grid min-w-max auto-cols-[14px] grid-flow-col grid-rows-[16px_repeat(7,14px)] gap-1" aria-label="Training calendar"></div>
+            </div>
+          </div>
+
+          <div id="trainingCalendarEmptyState" class="hidden rounded-xl border border-dashed border-slate-700 bg-slate-950/80 px-6 py-4 text-sm text-slate-400">
+            No activities are available for the selected year and sport filter.
+          </div>
+          <div id="trainingCalendarDetails" class="rounded-xl border border-slate-800 bg-slate-950 p-4 text-sm text-slate-300" tabindex="-1" aria-live="polite">
+            Select a calendar day to see training details.
+          </div>
+        </div>
+      </div>
+
     </div>
 
   </main>
@@ -1745,6 +1803,7 @@
   <script src="./src/dashboard-workout-time.js"></script>
   <script src="./src/dashboard-scatter.js"></script>
   <script src="./src/dashboard-heatmap.js"></script>
+  <script src="./src/dashboard-training-calendar.js"></script>
   <script src="./src/dashboard-export.js"></script>
   <script src="./src/dashboard-tabs.js"></script>
 </body>

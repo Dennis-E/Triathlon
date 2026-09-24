@@ -45,6 +45,7 @@ function createMockDocument() {
     vizTabHeatmap: createMockElement(),
     vizTabDistributions: createMockElement(),
     vizTabWorkoutTime: createMockElement(),
+    vizTabTrainingCalendar: createMockElement(),
     vizPanelTotalDistance: createMockElement(),
     vizPanelHeartratePace: createMockElement(),
     vizPanelEquipment: createMockElement(),
@@ -52,7 +53,8 @@ function createMockDocument() {
     vizPanelPersonalBests: createMockElement(),
     vizPanelHeatmap: createMockElement(),
     vizPanelDistributions: createMockElement(),
-    vizPanelWorkoutTime: createMockElement()
+    vizPanelWorkoutTime: createMockElement(),
+    vizPanelTrainingCalendar: createMockElement()
   };
 
   return {
@@ -72,8 +74,10 @@ describe('tab navigation helpers', () => {
     expect(getNextVisualizationTab('personalBests', 1)).toBe('heatmap');
     expect(getNextVisualizationTab('heatmap', 1)).toBe('distributions');
     expect(getNextVisualizationTab('distributions', 1)).toBe('workoutTime');
-    expect(getNextVisualizationTab('workoutTime', 1)).toBe('totalDistance');
-    expect(getNextVisualizationTab('totalDistance', -1)).toBe('workoutTime');
+    expect(getNextVisualizationTab('workoutTime', 1)).toBe('trainingCalendar');
+    expect(getNextVisualizationTab('trainingCalendar', 1)).toBe('totalDistance');
+    expect(getNextVisualizationTab('totalDistance', -1)).toBe('trainingCalendar');
+    expect(getNextVisualizationTab('workoutTime', -1)).toBe('distributions');
     expect(getNextVisualizationTab('unknown', 1)).toBe('totalDistance');
   });
 
@@ -116,9 +120,9 @@ describe('tab navigation helpers', () => {
 
     const nextTab = handleVisualizationTabKeydown(event, 'totalDistance', { onTabChange });
 
-    expect(nextTab).toBe('workoutTime');
+    expect(nextTab).toBe('trainingCalendar');
     expect(event.preventDefault).toHaveBeenCalledTimes(1);
-    expect(onTabChange).toHaveBeenCalledWith('workoutTime', { focusTab: true });
+    expect(onTabChange).toHaveBeenCalledWith('trainingCalendar', { focusTab: true });
   });
 
   it('cycles from distributions to Workout Time', () => {
@@ -173,6 +177,18 @@ describe('tab navigation helpers', () => {
     expect(mockDocument.elements.vizPanelWorkoutTime.classList.contains('hidden')).toBe(false);
     expect(mockDocument.elements.vizPanelDistributions.classList.contains('hidden')).toBe(true);
     expect(mockDocument.elements.vizTabWorkoutTime.focused).toBe(true);
+  });
+
+  it('activates Training Calendar tab correctly', () => {
+    const mockDocument = createMockDocument();
+    const selected = setVisualizationTab('trainingCalendar', { document: mockDocument, focusTab: true });
+
+    expect(selected).toBe('trainingCalendar');
+    expect(mockDocument.elements.vizTabTrainingCalendar.getAttribute('aria-selected')).toBe('true');
+    expect(mockDocument.elements.vizTabWorkoutTime.getAttribute('aria-selected')).toBe('false');
+    expect(mockDocument.elements.vizPanelTrainingCalendar.classList.contains('hidden')).toBe(false);
+    expect(mockDocument.elements.vizPanelWorkoutTime.classList.contains('hidden')).toBe(true);
+    expect(mockDocument.elements.vizTabTrainingCalendar.focused).toBe(true);
   });
 
   it('ignores unrelated keys', () => {

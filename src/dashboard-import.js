@@ -73,11 +73,13 @@
       renderTimeframeButtons();
       initScatterDateSlider();
       initDistributionsDateSlider();
+      initTrainingCalendarControls();
 
       renderDashboard();
       renderHeartratePaceChart();
       renderEquipmentChart();
       renderPbChart();
+      renderTrainingCalendar();
 
       if (options.openDashboard) {
         openDashboardTab('totalDistance');

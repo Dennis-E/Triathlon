@@ -29,6 +29,7 @@ const DASHBOARD_MODULE_FILES = [
   'dashboard-workout-time.js',
   'dashboard-scatter.js',
   'dashboard-heatmap.js',
+  'dashboard-training-calendar.js',
   'dashboard-export.js',
   'dashboard-tabs.js'
 ];
@@ -48,6 +49,7 @@ function extractInlineScripts(html) {
 describe('index.html inline script syntax', () => {
   let html;
   let inlineCode;
+  let trainingCalendarCode;
 
   beforeAll(() => {
     const htmlPath = path.join(__dirname, '../index.html');
@@ -56,6 +58,7 @@ describe('index.html inline script syntax', () => {
       .map(fileName => fs.readFileSync(path.join(__dirname, '../src', fileName), 'utf-8'))
       .join('\n');
     inlineCode = extractInlineScripts(html) + '\n' + dashboardModulesCode;
+    trainingCalendarCode = fs.readFileSync(path.join(__dirname, '../src/dashboard-training-calendar.js'), 'utf-8');
   });
 
   it('contains at least one inline script block', () => {
@@ -70,6 +73,35 @@ describe('index.html inline script syntax', () => {
 
   it('loads the browser power utility before the dashboard script', () => {
     expect(html).toMatch(/<script src="\.\/src\/power-pb-utils\.js"><\/script>[\s\S]*<script>/);
+  });
+
+  it('loads the Training Calendar utility before its dashboard renderer', () => {
+    expect(html).toMatch(/<script src="\.\/src\/training-calendar-utils\.js"><\/script>/);
+    expect(html).toMatch(/<script src="\.\/src\/dashboard-training-calendar\.js"><\/script>/);
+    expect(html.indexOf('./src/training-calendar-utils.js')).toBeLessThan(html.indexOf('./src/dashboard-training-calendar.js'));
+  });
+
+  it('wires the Training Calendar tab and renderer', () => {
+    expect(html).toContain('id="vizTabTrainingCalendar"');
+    expect(html).toContain('id="vizPanelTrainingCalendar"');
+    expect(html).toContain("onclick=\"setVisualizationTab('trainingCalendar')\"");
+    expect(inlineCode).toContain("nextTab === 'trainingCalendar'");
+    expect(inlineCode).toContain('renderTrainingCalendar();');
+  });
+
+  it('provides Training Calendar details, filters, and import reset controls', () => {
+    expect(html).toContain('id="trainingCalendarYearSelect"');
+    expect(html).toContain('id="trainingCalendarSportFilters"');
+    expect(html).toContain('id="trainingCalendarDetails"');
+    expect(html).toContain('id="trainingCalendarEmptyState"');
+    expect(inlineCode).toContain('selectTrainingCalendarDayByKey');
+    expect(inlineCode).toContain('setTrainingCalendarSportFilter');
+    expect(inlineCode).toContain('initTrainingCalendarControls();');
+  });
+
+  it('keeps the Training Calendar renderer local-only', () => {
+    expect(trainingCalendarCode).not.toMatch(/fetch\s*\(|XMLHttpRequest|navigator\.sendBeacon/);
+    expect(trainingCalendarCode).toContain('window.trainingCalendarUtils');
   });
 
   it('wires the Workout Time tab and its dashboard renderer', () => {

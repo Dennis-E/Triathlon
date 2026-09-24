@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="News and development updates from TriAnalytica.">
+  <title>TriAnalytica News</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #f8fafc;
+      --muted: #a8b4c5;
+      --line: rgba(148, 163, 184, 0.2);
+      --surface: rgba(15, 23, 42, 0.78);
+      --accent: #fbbf24;
+      --accent-soft: rgba(251, 191, 36, 0.12);
+    }
+
+    body {
+      background:
+        radial-gradient(circle at 15% 0%, rgba(30, 64, 175, 0.34), transparent 34rem),
+        radial-gradient(circle at 90% 20%, rgba(13, 148, 136, 0.18), transparent 28rem),
+        #020617;
+      color: var(--ink);
+    }
+
+    .news-shell {
+      width: min(100% - 2rem, 72rem);
+      margin-inline: auto;
+    }
+
+    .news-panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.24);
+      backdrop-filter: blur(18px);
+    }
+
+    .article-copy p {
+      color: var(--muted);
+      line-height: 1.8;
+    }
+
+    @media (min-width: 640px) {
+      .news-shell {
+        width: min(100% - 3rem, 72rem);
+      }
+    }
+  </style>
+</head>
+<body class="min-h-full font-sans antialiased">
+  <header class="fixed top-0 z-50 w-full border-b border-slate-800/80 bg-slate-950/70 px-4 py-4 backdrop-blur sm:px-6">
+    <div class="news-shell flex items-center justify-between gap-4">
+      <a href="./index.html" class="flex min-w-0 items-center gap-3 text-slate-100 transition-opacity hover:opacity-80" aria-label="Back to TriAnalytica dashboard">
+        <img src="assets/logo.png" alt="TriAnalytica logo" class="h-9 w-auto">
+        <span class="hidden truncate text-xs text-slate-400 sm:block">Triathlon Performance Insights</span>
+      </a>
+      <a href="./index.html" class="shrink-0 text-sm text-slate-300 transition-colors hover:text-white">Back to dashboard</a>
+    </div>
+  </header>
+
+  <main class="news-shell pt-28 pb-12 sm:pt-36 sm:pb-20" id="newsArticles" aria-label="Published news">
+    <div class="mb-10 max-w-2xl">
+      <p class="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-amber-300">Development updates</p>
+      <h1 class="text-4xl font-semibold tracking-tight text-white sm:text-5xl">News</h1>
+      <p class="mt-4 text-lg leading-8 text-slate-300">A place for the latest news from the development of TriAnalytica.</p>
+    </div>
+
+    <article class="news-panel max-w-3xl rounded-2xl p-6 sm:p-10">
+      <h2 class="max-w-2xl text-2xl font-semibold leading-tight text-white sm:text-3xl">TriAnalytica is now in alpha</h2>
+      <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-slate-400">
+        <time datetime="2026-09-24">September 24, 2026</time>
+        <span aria-hidden="true">&middot;</span>
+        <span>First published update</span>
+      </div>
+      <div class="article-copy mt-6 space-y-5 text-base">
+        <p>Today I am happy to announce the alpha launch of TriAnalytica. The platform is a way to explore your training history and turn your Strava data into useful views of your endurance journey.</p>
+        <p>I am very happy if this is also interesting for fellow athletes. Building this platform is a learning process, and I would be extremely happy to receive your feedback, suggestions, and wishes as it grows.</p>
+        <p>Thank you for taking a look at TriAnalytica and for helping shape what it can become.</p>
+      </div>
+      <a href="mailto:myaidevproject@gmail.com?subject=TriAnalytica%20News%20Feedback" class="mt-8 inline-flex items-center rounded-lg border border-amber-300/40 bg-amber-300/10 px-4 py-2.5 text-sm font-medium text-amber-200 transition-colors hover:bg-amber-300/20">Send feedback</a>
+    </article>
+  </main>
+</body>
+</html>

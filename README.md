@@ -61,6 +61,13 @@ The dashboard currently includes the following filters and controls:
 
 This project is currently in alpha.
 
+## News
+
+Read the latest development updates on the [TriAnalytica News page](news.html).
+The first article announces the alpha launch and welcomes feedback, suggestions,
+and wishes from fellow athletes. You can also use the existing feedback address
+shown on the News page to get in touch.
+
 ## Local development
 
 If you want to run the project locally:

@@ -18,6 +18,8 @@
   <script src="./src/scatter-utils.js"></script>
   <!-- Distribution chart helpers -->
   <script src="./src/distribution-utils.js"></script>
+  <!-- Workout Time chart helpers -->
+  <script src="./src/workout-time-utils.js"></script>
   <script src="./src/equipment-utils.js"></script>
   <script src="./src/export-utils.js"></script>
   <!-- Bike power personal-best helpers -->
@@ -721,6 +723,19 @@
           >
             Distributions
           </button>
+          <button
+            id="vizTabWorkoutTime"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="vizPanelWorkoutTime"
+            tabindex="-1"
+            onclick="setVisualizationTab('workoutTime')"
+            onkeydown="handleVisualizationTabKeydown(event, 'workoutTime')"
+            class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
+          >
+            Workout Time
+          </button>
         </div>
       </div>
       
@@ -1189,6 +1204,59 @@
         </div>
       </div>
 
+      <div id="vizPanelWorkoutTime" role="tabpanel" aria-labelledby="vizTabWorkoutTime" class="hidden">
+        <div class="space-y-5">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+            <div class="space-y-1">
+              <h2 class="text-2xl font-bold tracking-tight">Workout Time</h2>
+              <p id="workoutTimeActivityCount" class="text-xs text-slate-400">0 activities</p>
+            </div>
+
+            <button type="button" onclick="exportVisualizationTab('workoutTime')" aria-label="Export for Insta / Strava: Workout Time" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
+              <img src="assets/Strava_Logo.svg" alt="Strava" class="h-5 w-8 object-contain">
+              Export for Insta / Strava
+              <img src="assets/Instagram_logo_2016.svg" alt="Instagram" class="h-5 w-5 object-contain">
+            </button>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-3">
+            <div id="workoutTimeGranularity" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+              <button type="button" onclick="setWorkoutTimeGranularity('day')" id="workoutTimeGranularityBtnDay" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">Day</button>
+              <button type="button" onclick="setWorkoutTimeGranularity('week')" id="workoutTimeGranularityBtnWeek" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Week</button>
+              <button type="button" onclick="setWorkoutTimeGranularity('month')" id="workoutTimeGranularityBtnMonth" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Month</button>
+              <button type="button" onclick="setWorkoutTimeGranularity('year')" id="workoutTimeGranularityBtnYear" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Year</button>
+            </div>
+
+            <div id="workoutTimeSportFilter" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+              <button type="button" onclick="setWorkoutTimeSportFilter('All')" id="workoutTimeSportBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">All Sports</button>
+              <button type="button" onclick="setWorkoutTimeSportFilter('Run')" id="workoutTimeSportBtnRun" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Run</button>
+              <button type="button" onclick="setWorkoutTimeSportFilter('Bike')" id="workoutTimeSportBtnBike" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Bike</button>
+              <button type="button" onclick="setWorkoutTimeSportFilter('Swim')" id="workoutTimeSportBtnSwim" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Swim</button>
+            </div>
+          </div>
+
+          <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
+            <div class="flex items-center justify-between text-xs text-slate-400">
+              <span>Date range</span>
+              <span id="workoutTimeRangeLabel">All</span>
+            </div>
+            <div class="relative h-7 dual-range">
+              <div class="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 bg-slate-800 rounded-full"></div>
+              <div id="workoutTimeRangeSelectedTrack" class="absolute top-1/2 -translate-y-1/2 h-1 bg-indigo-500 rounded-full" style="left:0%; right:0%;"></div>
+              <input id="workoutTimeDateStart" type="range" oninput="setWorkoutTimeDateRange('start', this.value)">
+              <input id="workoutTimeDateEnd" type="range" oninput="setWorkoutTimeDateRange('end', this.value)">
+            </div>
+          </div>
+
+          <div id="workoutTimeChartWrapper" class="relative min-w-0 h-[420px] md:h-[500px]">
+            <canvas id="workoutTimeChart"></canvas>
+            <div id="workoutTimeEmptyState" class="hidden absolute inset-0 flex items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/80 px-6 text-center text-sm text-slate-400">
+              No activities with valid start times are available for the current filters.
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
 
   </main>
@@ -1608,6 +1676,7 @@
   <script src="./src/dashboard-equipment.js"></script>
   <script src="./src/dashboard-power-pb.js"></script>
   <script src="./src/dashboard-distributions.js"></script>
+  <script src="./src/dashboard-workout-time.js"></script>
   <script src="./src/dashboard-scatter.js"></script>
   <script src="./src/dashboard-heatmap.js"></script>
   <script src="./src/dashboard-export.js"></script>

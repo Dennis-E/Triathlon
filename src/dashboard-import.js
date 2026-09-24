@@ -264,8 +264,10 @@
         if (row.length <= Math.max(dateIdx, sportIdx)) continue;
 
         const rawDate = row[dateIdx];
-        const date = parseGermanDate(rawDate);
-        if (!date) continue; // Invalid date
+        const startTime = parseGermanDate(rawDate);
+        if (!startTime) continue; // Invalid date
+        const date = new Date(startTime);
+        date.setHours(0, 0, 0, 0);
 
         const rawSport = row[sportIdx] || '';
         const sportCategory = SPORT_MAP[rawSport.toLowerCase().trim()] || null;
@@ -318,6 +320,7 @@
         nextProcessedActivities.push({
           id: row[0],
           date: date,
+          startTime: startTime,
           monday: getMonday(date),
           sportRaw: rawSport,
           sport: sportCategory, // 'Run', 'Bike', 'Swim' or null

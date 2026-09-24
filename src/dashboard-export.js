@@ -12,7 +12,8 @@
       equipmentTimeline: 'equipmentTimelineWrapper',
       personalBests: 'pbColumnsContainer',
       heatmap: 'heatmapMapContainer',
-      distributions: 'distributionsChartWrapper'
+      distributions: 'distributionsChartWrapper',
+      workoutTime: 'workoutTimeChartWrapper'
     };
 
     const EXPORT_DOMAIN = window.exportUtils.getExportBrandConfig().domain;
@@ -39,7 +40,8 @@
         equipmentTimeline: isEmptyStateHidden('equipmentTimelineEmptyState'),
         personalBests: isEmptyStateHidden('pbEmptyState'),
         heatmap: isEmptyStateHidden('heatmapEmptyState'),
-        distributions: isEmptyStateHidden('distributionsEmptyState')
+        distributions: isEmptyStateHidden('distributionsEmptyState'),
+        workoutTime: isEmptyStateHidden('workoutTimeEmptyState')
       };
     }
 
@@ -70,7 +72,8 @@
         'vizTabEquipmentTimeline',
         'vizTabPersonalBests',
         'vizTabHeatmap',
-        'vizTabDistributions'
+        'vizTabDistributions',
+        'vizTabWorkoutTime'
       ];
       const groups = [getControlGroup('Views', viewIds)];
       const tabGroups = {
@@ -93,6 +96,10 @@
         personalBests: [],
         heatmap: [
           getControlGroup('Sport', ['heatmapSportBtnAll', 'heatmapSportBtnRun', 'heatmapSportBtnBike', 'heatmapSportBtnSwim'])
+        ],
+        workoutTime: [
+          getControlGroup('Granularity', ['workoutTimeGranularityBtnDay', 'workoutTimeGranularityBtnWeek', 'workoutTimeGranularityBtnMonth', 'workoutTimeGranularityBtnYear']),
+          getControlGroup('Sport', ['workoutTimeSportBtnAll', 'workoutTimeSportBtnRun', 'workoutTimeSportBtnBike', 'workoutTimeSportBtnSwim'])
         ]
       };
       return window.exportUtils.summarizeAvailableControls(groups.concat(tabGroups[tabName] || []));
@@ -119,6 +126,11 @@
         personalBests: [],
         heatmap: [
           { label: 'Sport', value: getActiveButtonText(['heatmapSportBtnAll', 'heatmapSportBtnRun', 'heatmapSportBtnBike', 'heatmapSportBtnSwim']) }
+        ],
+        workoutTime: [
+          { label: 'Granularity', value: getActiveButtonText(['workoutTimeGranularityBtnDay', 'workoutTimeGranularityBtnWeek', 'workoutTimeGranularityBtnMonth', 'workoutTimeGranularityBtnYear']) },
+          { label: 'Sport', value: getActiveButtonText(['workoutTimeSportBtnAll', 'workoutTimeSportBtnRun', 'workoutTimeSportBtnBike', 'workoutTimeSportBtnSwim']) },
+          { label: 'Date range', value: document.getElementById('workoutTimeRangeLabel')?.textContent.trim() }
         ]
       };
       return window.exportUtils.summarizeFilters(contexts[tabName] || []);

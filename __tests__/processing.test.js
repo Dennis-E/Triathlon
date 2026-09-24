@@ -70,6 +70,7 @@ describe('processData', () => {
     expect(result[0].name).toBe('Morning run');
     expect(result[0].distance).toBe(10); // meters to km
     expect(result[0].duration).toBe(3600);
+    expect(result[0].startTime).toEqual(new Date(2026, 6, 19, 14, 52, 2));
   });
 
   it('should keep equipment, average heart rate, and average watts in the interim activity objects for Bike activities', () => {

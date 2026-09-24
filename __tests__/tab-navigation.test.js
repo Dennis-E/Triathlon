@@ -44,13 +44,15 @@ function createMockDocument() {
     vizTabPersonalBests: createMockElement(),
     vizTabHeatmap: createMockElement(),
     vizTabDistributions: createMockElement(),
+    vizTabWorkoutTime: createMockElement(),
     vizPanelTotalDistance: createMockElement(),
     vizPanelHeartratePace: createMockElement(),
     vizPanelEquipment: createMockElement(),
     vizPanelEquipmentTimeline: createMockElement(),
     vizPanelPersonalBests: createMockElement(),
     vizPanelHeatmap: createMockElement(),
-    vizPanelDistributions: createMockElement()
+    vizPanelDistributions: createMockElement(),
+    vizPanelWorkoutTime: createMockElement()
   };
 
   return {
@@ -69,8 +71,9 @@ describe('tab navigation helpers', () => {
     expect(getNextVisualizationTab('equipmentTimeline', 1)).toBe('personalBests');
     expect(getNextVisualizationTab('personalBests', 1)).toBe('heatmap');
     expect(getNextVisualizationTab('heatmap', 1)).toBe('distributions');
-    expect(getNextVisualizationTab('distributions', 1)).toBe('totalDistance');
-    expect(getNextVisualizationTab('totalDistance', -1)).toBe('distributions');
+    expect(getNextVisualizationTab('distributions', 1)).toBe('workoutTime');
+    expect(getNextVisualizationTab('workoutTime', 1)).toBe('totalDistance');
+    expect(getNextVisualizationTab('totalDistance', -1)).toBe('workoutTime');
     expect(getNextVisualizationTab('unknown', 1)).toBe('totalDistance');
   });
 
@@ -113,9 +116,13 @@ describe('tab navigation helpers', () => {
 
     const nextTab = handleVisualizationTabKeydown(event, 'totalDistance', { onTabChange });
 
-    expect(nextTab).toBe('distributions');
+    expect(nextTab).toBe('workoutTime');
     expect(event.preventDefault).toHaveBeenCalledTimes(1);
-    expect(onTabChange).toHaveBeenCalledWith('distributions', { focusTab: true });
+    expect(onTabChange).toHaveBeenCalledWith('workoutTime', { focusTab: true });
+  });
+
+  it('cycles from distributions to Workout Time', () => {
+    expect(getNextVisualizationTab('distributions', 1)).toBe('workoutTime');
   });
 
   it('activates equipmentTimeline tab correctly', () => {
@@ -154,6 +161,18 @@ describe('tab navigation helpers', () => {
     expect(mockDocument.elements.vizPanelDistributions.classList.contains('hidden')).toBe(false);
     expect(mockDocument.elements.vizPanelHeatmap.classList.contains('hidden')).toBe(true);
     expect(mockDocument.elements.vizTabDistributions.focused).toBe(true);
+  });
+
+  it('activates Workout Time tab correctly', () => {
+    const mockDocument = createMockDocument();
+    const selected = setVisualizationTab('workoutTime', { document: mockDocument, focusTab: true });
+
+    expect(selected).toBe('workoutTime');
+    expect(mockDocument.elements.vizTabWorkoutTime.getAttribute('aria-selected')).toBe('true');
+    expect(mockDocument.elements.vizTabDistributions.getAttribute('aria-selected')).toBe('false');
+    expect(mockDocument.elements.vizPanelWorkoutTime.classList.contains('hidden')).toBe(false);
+    expect(mockDocument.elements.vizPanelDistributions.classList.contains('hidden')).toBe(true);
+    expect(mockDocument.elements.vizTabWorkoutTime.focused).toBe(true);
   });
 
   it('ignores unrelated keys', () => {

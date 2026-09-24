@@ -1,4 +1,4 @@
-const TAB_ORDER = ['totalDistance', 'heartratePace', 'equipment', 'equipmentTimeline', 'personalBests', 'heatmap', 'distributions'];
+const TAB_ORDER = ['totalDistance', 'heartratePace', 'equipment', 'equipmentTimeline', 'personalBests', 'heatmap', 'distributions', 'workoutTime'];
 
 const TAB_BUTTON_IDS = {
   totalDistance: 'vizTabTotalDistance',
@@ -7,7 +7,8 @@ const TAB_BUTTON_IDS = {
   equipmentTimeline: 'vizTabEquipmentTimeline',
   personalBests: 'vizTabPersonalBests',
   heatmap: 'vizTabHeatmap',
-  distributions: 'vizTabDistributions'
+  distributions: 'vizTabDistributions',
+  workoutTime: 'vizTabWorkoutTime'
 };
 
 const TAB_PANEL_IDS = {
@@ -17,7 +18,8 @@ const TAB_PANEL_IDS = {
   equipmentTimeline: 'vizPanelEquipmentTimeline',
   personalBests: 'vizPanelPersonalBests',
   heatmap: 'vizPanelHeatmap',
-  distributions: 'vizPanelDistributions'
+  distributions: 'vizPanelDistributions',
+  workoutTime: 'vizPanelWorkoutTime'
 };
 
 const TAB_ACTIVE_CLASS = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25';
@@ -43,6 +45,7 @@ function setVisualizationTab(tabName, options = {}) {
   const personalBestsBtn = doc.getElementById(TAB_BUTTON_IDS.personalBests);
   const heatmapBtn = doc.getElementById(TAB_BUTTON_IDS.heatmap);
   const distributionsBtn = doc.getElementById(TAB_BUTTON_IDS.distributions);
+  const workoutTimeBtn = doc.getElementById(TAB_BUTTON_IDS.workoutTime);
   const totalDistancePanel = doc.getElementById(TAB_PANEL_IDS.totalDistance);
   const heartratePacePanel = doc.getElementById(TAB_PANEL_IDS.heartratePace);
   const equipmentPanel = doc.getElementById(TAB_PANEL_IDS.equipment);
@@ -50,9 +53,10 @@ function setVisualizationTab(tabName, options = {}) {
   const personalBestsPanel = doc.getElementById(TAB_PANEL_IDS.personalBests);
   const heatmapPanel = doc.getElementById(TAB_PANEL_IDS.heatmap);
   const distributionsPanel = doc.getElementById(TAB_PANEL_IDS.distributions);
+    const workoutTimePanel = doc.getElementById(TAB_PANEL_IDS.workoutTime);
 
-  if (!totalDistanceBtn || !heartratePaceBtn || !equipmentBtn || !equipmentTimelineBtn || !personalBestsBtn || !heatmapBtn || !distributionsBtn ||
-      !totalDistancePanel || !heartratePacePanel || !equipmentPanel || !equipmentTimelinePanel || !personalBestsPanel || !heatmapPanel || !distributionsPanel) {
+    if (!totalDistanceBtn || !heartratePaceBtn || !equipmentBtn || !equipmentTimelineBtn || !personalBestsBtn || !heatmapBtn || !distributionsBtn || !workoutTimeBtn ||
+      !totalDistancePanel || !heartratePacePanel || !equipmentPanel || !equipmentTimelinePanel || !personalBestsPanel || !heatmapPanel || !distributionsPanel || !workoutTimePanel) {
     return tabName;
   }
 
@@ -63,6 +67,7 @@ function setVisualizationTab(tabName, options = {}) {
   const isPersonalBests = tabName === 'personalBests';
   const isHeatmap = tabName === 'heatmap';
   const isDistributions = tabName === 'distributions';
+  const isWorkoutTime = tabName === 'workoutTime';
 
   totalDistanceBtn.setAttribute('aria-selected', isTotalDistance ? 'true' : 'false');
   totalDistanceBtn.setAttribute('tabindex', isTotalDistance ? '0' : '-1');
@@ -92,6 +97,10 @@ function setVisualizationTab(tabName, options = {}) {
   distributionsBtn.setAttribute('tabindex', isDistributions ? '0' : '-1');
   distributionsBtn.className = isDistributions ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
 
+  workoutTimeBtn.setAttribute('aria-selected', isWorkoutTime ? 'true' : 'false');
+  workoutTimeBtn.setAttribute('tabindex', isWorkoutTime ? '0' : '-1');
+  workoutTimeBtn.className = isWorkoutTime ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
+
   totalDistancePanel.classList.toggle('hidden', !isTotalDistance);
   heartratePacePanel.classList.toggle('hidden', !isHeartratePace);
   equipmentPanel.classList.toggle('hidden', !isEquipment);
@@ -99,6 +108,7 @@ function setVisualizationTab(tabName, options = {}) {
   personalBestsPanel.classList.toggle('hidden', !isPersonalBests);
   heatmapPanel.classList.toggle('hidden', !isHeatmap);
   distributionsPanel.classList.toggle('hidden', !isDistributions);
+  workoutTimePanel.classList.toggle('hidden', !isWorkoutTime);
 
   if (options.focusTab) {
     (isTotalDistance ? totalDistanceBtn :
@@ -106,8 +116,9 @@ function setVisualizationTab(tabName, options = {}) {
      isEquipment ? equipmentBtn :
      isEquipmentTimeline ? equipmentTimelineBtn :
      isPersonalBests ? personalBestsBtn :
-     isHeatmap ? heatmapBtn :
-     distributionsBtn).focus();
+    isHeatmap ? heatmapBtn :
+    isDistributions ? distributionsBtn :
+    workoutTimeBtn).focus();
   }
 
   return tabName;

@@ -9,7 +9,7 @@
     let importedDataset = null;
     let selectedSportFilter = 'All'; // 'All', 'Run', 'Bike', 'Swim'
     let selectedAggregationLevel = 'weekly'; // 'daily', 'weekly', 'monthly', 'yearly'
-    let selectedVisualizationTab = 'totalDistance'; // 'totalDistance', 'heartratePace'
+    let selectedVisualizationTab = 'totalDistance'; // 'totalDistance', 'heartratePace', 'workoutTime'
     let selectedTimeframeByAggregation = {
       daily: '3m',
       weekly: '1y',

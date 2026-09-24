@@ -163,6 +163,7 @@ describe('export-utils', () => {
       expect(getTabDisplayTitle('equipmentTimeline')).toBe('Equipment Timeline');
       expect(getTabDisplayTitle('personalBests')).toBe('Personal Bests');
       expect(getTabDisplayTitle('heatmap')).toBe('GPS Heatmap');
+      expect(getTabDisplayTitle('workoutTime')).toBe('Workout Time');
     });
 
     it('returns null for an unknown tab', () => {
@@ -176,6 +177,7 @@ describe('export-utils', () => {
       expect(generateExportFilename('heartratePace', date)).toBe('trianalytica-heart-rate-pace-20260917-090503.png');
       expect(generateExportFilename('totalDistance', date)).toBe('trianalytica-total-distance-20260917-090503.png');
       expect(generateExportFilename('equipmentTimeline', date)).toBe('trianalytica-equipment-timeline-20260917-090503.png');
+      expect(generateExportFilename('workoutTime', date)).toBe('trianalytica-workout-time-20260917-090503.png');
     });
 
     it('returns null for an unknown tab or invalid date', () => {

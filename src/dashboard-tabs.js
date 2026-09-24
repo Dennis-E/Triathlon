@@ -19,6 +19,8 @@
           renderHeatmap();
         } else if (nextTab === 'distributions') {
           renderDistributionsChart();
+        } else if (nextTab === 'workoutTime') {
+          renderWorkoutTimeChart();
         }
       }
     }

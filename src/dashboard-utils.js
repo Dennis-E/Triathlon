@@ -45,18 +45,22 @@ function findHeaderIndex(headers, matcher) {
 function parseGermanDate(dateStr) {
   if (!dateStr) return null;
   const normalized = String(dateStr).trim();
-  const germanMatch = normalized.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:,\s*\d{1,2}:\d{2}(?::\d{2})?)?$/);
+  const germanMatch = normalized.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:,\s*(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
 
   if (germanMatch) {
     const day = parseInt(germanMatch[1], 10);
     const month = parseInt(germanMatch[2], 10) - 1;
     const year = parseInt(germanMatch[3], 10);
-    const parsedDate = new Date(year, month, day);
+    const hours = germanMatch[4] === undefined ? 0 : parseInt(germanMatch[4], 10);
+    const minutes = germanMatch[5] === undefined ? 0 : parseInt(germanMatch[5], 10);
+    const seconds = germanMatch[6] === undefined ? 0 : parseInt(germanMatch[6], 10);
+    const parsedDate = new Date(year, month, day, hours, minutes, seconds);
 
     if (
       parsedDate.getFullYear() !== year ||
       parsedDate.getMonth() !== month ||
-      parsedDate.getDate() !== day
+      parsedDate.getDate() !== day ||
+      hours > 23 || minutes > 59 || seconds > 59
     ) {
       return null;
     }
@@ -232,8 +236,10 @@ function processData(rawCsvData) {
     if (row.length <= Math.max(dateIdx, sportIdx)) continue;
 
     const rawDate = row[dateIdx];
-    const date = parseGermanDate(rawDate);
-    if (!date) continue;
+    const startTime = parseGermanDate(rawDate);
+    if (!startTime) continue;
+    const date = new Date(startTime);
+    date.setHours(0, 0, 0, 0);
 
     const rawSport = row[sportIdx] || '';
     const sportCategory = categorizeSport(rawSport);
@@ -277,6 +283,7 @@ function processData(rawCsvData) {
     processedActivities.push({
       id: row[0],
       date: date,
+      startTime: startTime,
       monday: getMonday(date),
       sportRaw: rawSport,
       sport: sportCategory,

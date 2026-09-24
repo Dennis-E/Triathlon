@@ -26,6 +26,7 @@ const DASHBOARD_MODULE_FILES = [
   'dashboard-equipment.js',
   'dashboard-power-pb.js',
   'dashboard-distributions.js',
+  'dashboard-workout-time.js',
   'dashboard-scatter.js',
   'dashboard-heatmap.js',
   'dashboard-export.js',
@@ -69,6 +70,22 @@ describe('index.html inline script syntax', () => {
 
   it('loads the browser power utility before the dashboard script', () => {
     expect(html).toMatch(/<script src="\.\/src\/power-pb-utils\.js"><\/script>[\s\S]*<script>/);
+  });
+
+  it('wires the Workout Time tab and its dashboard renderer', () => {
+    expect(html).toContain('id="vizTabWorkoutTime"');
+    expect(html).toContain('id="vizPanelWorkoutTime"');
+    expect(html).toContain("onclick=\"setVisualizationTab('workoutTime')\"");
+    expect(html).toContain('<script src="./src/workout-time-utils.js"></script>');
+    expect(inlineCode).toContain("nextTab === 'workoutTime'");
+    expect(inlineCode).toContain('renderWorkoutTimeChart();');
+    expect(html).toContain('id="workoutTimeGranularityBtnDay"');
+    expect(html).toContain('id="workoutTimeGranularityBtnWeek"');
+    expect(html).toContain('id="workoutTimeGranularityBtnMonth"');
+    expect(html).toContain('id="workoutTimeGranularityBtnYear"');
+    expect(inlineCode).toContain('selectedWorkoutTimeGranularity');
+    expect(inlineCode).toContain('selectedWorkoutTimeSport');
+    expect(inlineCode).toContain('getWorkoutTimeDateBounds');
   });
 
   it('provides rotating prepared import previews and humorous messages', () => {

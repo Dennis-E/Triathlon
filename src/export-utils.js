@@ -7,7 +7,8 @@ const TAB_DISPLAY_TITLES = {
   equipment: 'Equipment mileage',
   equipmentTimeline: 'Equipment Timeline',
   personalBests: 'Personal Bests',
-  heatmap: 'GPS Heatmap'
+  heatmap: 'GPS Heatmap',
+  workoutTime: 'Workout Time'
 };
 
 const TAB_FILENAME_SLUGS = {
@@ -16,7 +17,8 @@ const TAB_FILENAME_SLUGS = {
   equipment: 'equipment',
   equipmentTimeline: 'equipment-timeline',
   personalBests: 'personal-bests',
-  heatmap: 'heatmap'
+  heatmap: 'heatmap',
+  workoutTime: 'workout-time'
 };
 
 const EXPORT_ASSET_PATHS = {

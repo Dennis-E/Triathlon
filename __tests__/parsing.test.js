@@ -20,6 +20,9 @@ describe('parseGermanDate', () => {
     expect(result.getFullYear()).toBe(2026);
     expect(result.getMonth()).toBe(6); // 0-indexed
     expect(result.getDate()).toBe(19);
+    expect(result.getHours()).toBe(14);
+    expect(result.getMinutes()).toBe(52);
+    expect(result.getSeconds()).toBe(2);
   });
 
   it('should correctly parse German date format without time', () => {
@@ -53,6 +56,9 @@ describe('parseGermanDate', () => {
     expect(result.getFullYear()).toBe(2026);
     expect(result.getMonth()).toBe(6);
     expect(result.getDate()).toBe(27);
+    expect(result.getHours()).toBe(9);
+    expect(result.getMinutes()).toBe(0);
+    expect(result.getSeconds()).toBe(37);
   });
 
   it('should return null for empty string', () => {

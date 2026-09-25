@@ -5,10 +5,11 @@
 
 const {
   buildYearlyRegressionDatasets,
-  getHeartratePacePoints
+  getHeartratePacePoints,
+  getPaceMetricPoints
 } = require('../src/scatter-utils');
 
-describe('Heartrate vs Pace Visualization - Year Data and Trend Lines', () => {
+describe('Pace vs Metrics Visualization - Year Data and Trend Lines', () => {
   
   const testActivities = [
     {
@@ -46,6 +47,14 @@ describe('Heartrate vs Pace Visualization - Year Data and Trend Lines', () => {
   ];
 
   describe('Year-based Data Grouping', () => {
+    it('groups generic pace metric points by their selected sport and metric', () => {
+      const points = getPaceMetricPoints(testActivities, { sport: 'Run', metric: 'heartRate' });
+
+      expect(points).toHaveLength(3);
+      expect(points.map(point => point.metric)).toEqual(['heartRate', 'heartRate', 'heartRate']);
+      expect(points.map(point => point.sport)).toEqual(['Run', 'Run', 'Run']);
+      expect(points.map(point => point.year).sort()).toEqual([2024, 2024, 2025]);
+    });
     it('should filter and group points by year', () => {
       const points = getHeartratePacePoints(testActivities, { sport: 'All' });
       
@@ -85,6 +94,13 @@ describe('Heartrate vs Pace Visualization - Year Data and Trend Lines', () => {
   });
 
   describe('Regression Dataset Color Mapping', () => {
+    it('keeps a one-point year visible without creating a trend line', () => {
+      const points = getPaceMetricPoints(testActivities, { sport: 'Run', metric: 'heartRate' });
+      const datasets = buildYearlyRegressionDatasets(points, ['#F59E0B', '#A78BFA']);
+
+      expect(points.filter(point => point.year === 2025)).toHaveLength(1);
+      expect(datasets.map(dataset => dataset.year)).toEqual([2024]);
+    });
     it('should create one regression dataset per year', () => {
       const points = getHeartratePacePoints(testActivities, { sport: 'All' });
       const datasets = buildYearlyRegressionDatasets(points, ['#F59E0B', '#A78BFA', '#F97316', '#22D3EE', '#84CC16']);

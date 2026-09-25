@@ -38,7 +38,7 @@ function createMockElement() {
 function createMockDocument() {
   const elements = {
     vizTabTotalDistance: createMockElement(),
-    vizTabHeartratePace: createMockElement(),
+    vizTabPaceMetrics: createMockElement(),
     vizTabEquipment: createMockElement(),
     vizTabEquipmentTimeline: createMockElement(),
     vizTabPersonalBests: createMockElement(),
@@ -47,7 +47,7 @@ function createMockDocument() {
     vizTabWorkoutTime: createMockElement(),
     vizTabTrainingCalendar: createMockElement(),
     vizPanelTotalDistance: createMockElement(),
-    vizPanelHeartratePace: createMockElement(),
+    vizPanelPaceMetrics: createMockElement(),
     vizPanelEquipment: createMockElement(),
     vizPanelEquipmentTimeline: createMockElement(),
     vizPanelPersonalBests: createMockElement(),
@@ -67,8 +67,8 @@ function createMockDocument() {
 
 describe('tab navigation helpers', () => {
   it('cycles to next and previous tabs', () => {
-    expect(getNextVisualizationTab('totalDistance', 1)).toBe('heartratePace');
-    expect(getNextVisualizationTab('heartratePace', 1)).toBe('equipment');
+    expect(getNextVisualizationTab('totalDistance', 1)).toBe('paceMetrics');
+    expect(getNextVisualizationTab('paceMetrics', 1)).toBe('equipment');
     expect(getNextVisualizationTab('equipment', 1)).toBe('equipmentTimeline');
     expect(getNextVisualizationTab('equipmentTimeline', 1)).toBe('personalBests');
     expect(getNextVisualizationTab('personalBests', 1)).toBe('heatmap');
@@ -83,16 +83,16 @@ describe('tab navigation helpers', () => {
 
   it('sets active tab classes, aria state, and panel visibility', () => {
     const mockDocument = createMockDocument();
-    const selected = setVisualizationTab('heartratePace', { document: mockDocument, focusTab: true });
+    const selected = setVisualizationTab('paceMetrics', { document: mockDocument, focusTab: true });
 
-    expect(selected).toBe('heartratePace');
+    expect(selected).toBe('paceMetrics');
     expect(mockDocument.elements.vizTabTotalDistance.getAttribute('aria-selected')).toBe('false');
-    expect(mockDocument.elements.vizTabHeartratePace.getAttribute('aria-selected')).toBe('true');
+    expect(mockDocument.elements.vizTabPaceMetrics.getAttribute('aria-selected')).toBe('true');
     expect(mockDocument.elements.vizTabTotalDistance.getAttribute('tabindex')).toBe('-1');
-    expect(mockDocument.elements.vizTabHeartratePace.getAttribute('tabindex')).toBe('0');
+    expect(mockDocument.elements.vizTabPaceMetrics.getAttribute('tabindex')).toBe('0');
     expect(mockDocument.elements.vizPanelTotalDistance.classList.contains('hidden')).toBe(true);
-    expect(mockDocument.elements.vizPanelHeartratePace.classList.contains('hidden')).toBe(false);
-    expect(mockDocument.elements.vizTabHeartratePace.focused).toBe(true);
+    expect(mockDocument.elements.vizPanelPaceMetrics.classList.contains('hidden')).toBe(false);
+    expect(mockDocument.elements.vizTabPaceMetrics.focused).toBe(true);
   });
 
   it('handles ArrowRight and requests next tab', () => {
@@ -105,9 +105,9 @@ describe('tab navigation helpers', () => {
 
     const nextTab = handleVisualizationTabKeydown(event, 'totalDistance', { onTabChange });
 
-    expect(nextTab).toBe('heartratePace');
+    expect(nextTab).toBe('paceMetrics');
     expect(event.preventDefault).toHaveBeenCalledTimes(1);
-    expect(onTabChange).toHaveBeenCalledWith('heartratePace', { focusTab: true });
+    expect(onTabChange).toHaveBeenCalledWith('paceMetrics', { focusTab: true });
   });
 
   it('handles Shift+Tab and requests previous tab', () => {

@@ -7,7 +7,7 @@
 
     const EXPORT_CAPTURE_TARGET_IDS = {
       totalDistance: 'totalDistanceChartWrapper',
-      heartratePace: 'heartratePaceChartWrapper',
+      paceMetrics: 'paceMetricsChartWrapper',
       equipment: 'equipmentChartWrapper',
       equipmentTimeline: 'equipmentTimelineWrapper',
       personalBests: 'pbColumnsContainer',
@@ -36,7 +36,7 @@
     function getExportableFlags() {
       return {
         totalDistance: !!chartInstance,
-        heartratePace: isEmptyStateHidden('heartratePaceEmptyState'),
+        paceMetrics: isEmptyStateHidden('paceMetricsEmptyState'),
         equipment: isEmptyStateHidden('equipmentEmptyState'),
         equipmentTimeline: isEmptyStateHidden('equipmentTimelineEmptyState'),
         personalBests: isEmptyStateHidden('pbEmptyState'),
@@ -69,7 +69,7 @@
     function getAvailableControlContext(tabName) {
       const viewIds = [
         'vizTabTotalDistance',
-        'vizTabHeartratePace',
+        'vizTabPaceMetrics',
         'vizTabEquipment',
         'vizTabEquipmentTimeline',
         'vizTabPersonalBests',
@@ -85,8 +85,9 @@
           getControlGroup('Sport', ['sportBtnAll', 'sportBtnRun', 'sportBtnBike', 'sportBtnSwim']),
           getControlGroup('Timeframe', Array.from(document.querySelectorAll('#timeframeSelector button')).map(button => button.id))
         ],
-        heartratePace: [
-          getControlGroup('Sport', ['scatterSportBtnAll', 'scatterSportBtnRun', 'scatterSportBtnBike', 'scatterSportBtnSwim'])
+        paceMetrics: [
+          getControlGroup('Sport', ['paceMetricsSportBtnRun', 'paceMetricsSportBtnBike', 'paceMetricsSportBtnSwim']),
+          getControlGroup('Metric', ['paceMetricsMetricBtnheartRate', 'paceMetricsMetricBtncadence', 'paceMetricsMetricBtnelevationGain', 'paceMetricsMetricBtndistance'])
         ],
         equipment: [
           getControlGroup('Metric', ['equipmentMetricDistance', 'equipmentMetricPace', 'equipmentMetricCount', 'equipmentMetricAvgLength']),
@@ -118,8 +119,9 @@
           { label: 'Sport', value: getActiveButtonText(['sportBtnAll', 'sportBtnRun', 'sportBtnBike', 'sportBtnSwim']) },
           { label: 'Timeframe', value: getActiveButtonText(Array.from(document.querySelectorAll('#timeframeSelector button')).map(button => button.id)) }
         ],
-        heartratePace: [
-          { label: 'Sport', value: getActiveButtonText(['scatterSportBtnAll', 'scatterSportBtnRun', 'scatterSportBtnBike', 'scatterSportBtnSwim']) },
+        paceMetrics: [
+          { label: 'Sport', value: getActiveButtonText(['paceMetricsSportBtnRun', 'paceMetricsSportBtnBike', 'paceMetricsSportBtnSwim']) },
+          { label: 'Metric', value: getActiveButtonText(['paceMetricsMetricBtnheartRate', 'paceMetricsMetricBtncadence', 'paceMetricsMetricBtnelevationGain', 'paceMetricsMetricBtndistance']) },
           { label: 'Date range', value: document.getElementById('scatterRangeLabel')?.textContent.trim() }
         ],
         equipment: [

@@ -1,8 +1,8 @@
-const TAB_ORDER = ['totalDistance', 'heartratePace', 'equipment', 'equipmentTimeline', 'personalBests', 'heatmap', 'distributions', 'workoutTime', 'trainingCalendar'];
+const TAB_ORDER = ['totalDistance', 'paceMetrics', 'equipment', 'equipmentTimeline', 'personalBests', 'heatmap', 'distributions', 'workoutTime', 'trainingCalendar'];
 
 const TAB_BUTTON_IDS = {
   totalDistance: 'vizTabTotalDistance',
-  heartratePace: 'vizTabHeartratePace',
+  paceMetrics: 'vizTabPaceMetrics',
   equipment: 'vizTabEquipment',
   equipmentTimeline: 'vizTabEquipmentTimeline',
   personalBests: 'vizTabPersonalBests',
@@ -14,7 +14,7 @@ const TAB_BUTTON_IDS = {
 
 const TAB_PANEL_IDS = {
   totalDistance: 'vizPanelTotalDistance',
-  heartratePace: 'vizPanelHeartratePace',
+  paceMetrics: 'vizPanelPaceMetrics',
   equipment: 'vizPanelEquipment',
   equipmentTimeline: 'vizPanelEquipmentTimeline',
   personalBests: 'vizPanelPersonalBests',
@@ -41,7 +41,7 @@ function setVisualizationTab(tabName, options = {}) {
   if (!doc) return tabName;
 
   const totalDistanceBtn = doc.getElementById(TAB_BUTTON_IDS.totalDistance);
-  const heartratePaceBtn = doc.getElementById(TAB_BUTTON_IDS.heartratePace);
+  const paceMetricsBtn = doc.getElementById(TAB_BUTTON_IDS.paceMetrics);
   const equipmentBtn = doc.getElementById(TAB_BUTTON_IDS.equipment);
   const equipmentTimelineBtn = doc.getElementById(TAB_BUTTON_IDS.equipmentTimeline);
   const personalBestsBtn = doc.getElementById(TAB_BUTTON_IDS.personalBests);
@@ -50,7 +50,7 @@ function setVisualizationTab(tabName, options = {}) {
   const workoutTimeBtn = doc.getElementById(TAB_BUTTON_IDS.workoutTime);
   const trainingCalendarBtn = doc.getElementById(TAB_BUTTON_IDS.trainingCalendar);
   const totalDistancePanel = doc.getElementById(TAB_PANEL_IDS.totalDistance);
-  const heartratePacePanel = doc.getElementById(TAB_PANEL_IDS.heartratePace);
+  const paceMetricsPanel = doc.getElementById(TAB_PANEL_IDS.paceMetrics);
   const equipmentPanel = doc.getElementById(TAB_PANEL_IDS.equipment);
   const equipmentTimelinePanel = doc.getElementById(TAB_PANEL_IDS.equipmentTimeline);
   const personalBestsPanel = doc.getElementById(TAB_PANEL_IDS.personalBests);
@@ -59,13 +59,13 @@ function setVisualizationTab(tabName, options = {}) {
     const workoutTimePanel = doc.getElementById(TAB_PANEL_IDS.workoutTime);
   const trainingCalendarPanel = doc.getElementById(TAB_PANEL_IDS.trainingCalendar);
 
-    if (!totalDistanceBtn || !heartratePaceBtn || !equipmentBtn || !equipmentTimelineBtn || !personalBestsBtn || !heatmapBtn || !distributionsBtn || !workoutTimeBtn ||
-      !trainingCalendarBtn || !totalDistancePanel || !heartratePacePanel || !equipmentPanel || !equipmentTimelinePanel || !personalBestsPanel || !heatmapPanel || !distributionsPanel || !workoutTimePanel || !trainingCalendarPanel) {
+    if (!totalDistanceBtn || !paceMetricsBtn || !equipmentBtn || !equipmentTimelineBtn || !personalBestsBtn || !heatmapBtn || !distributionsBtn || !workoutTimeBtn ||
+      !trainingCalendarBtn || !totalDistancePanel || !paceMetricsPanel || !equipmentPanel || !equipmentTimelinePanel || !personalBestsPanel || !heatmapPanel || !distributionsPanel || !workoutTimePanel || !trainingCalendarPanel) {
     return tabName;
   }
 
   const isTotalDistance = tabName === 'totalDistance';
-  const isHeartratePace = tabName === 'heartratePace';
+  const isPaceMetrics = tabName === 'paceMetrics';
   const isEquipment = tabName === 'equipment';
   const isEquipmentTimeline = tabName === 'equipmentTimeline';
   const isPersonalBests = tabName === 'personalBests';
@@ -78,9 +78,9 @@ function setVisualizationTab(tabName, options = {}) {
   totalDistanceBtn.setAttribute('tabindex', isTotalDistance ? '0' : '-1');
   totalDistanceBtn.className = isTotalDistance ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
 
-  heartratePaceBtn.setAttribute('aria-selected', isHeartratePace ? 'true' : 'false');
-  heartratePaceBtn.setAttribute('tabindex', isHeartratePace ? '0' : '-1');
-  heartratePaceBtn.className = isHeartratePace ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
+  paceMetricsBtn.setAttribute('aria-selected', isPaceMetrics ? 'true' : 'false');
+  paceMetricsBtn.setAttribute('tabindex', isPaceMetrics ? '0' : '-1');
+  paceMetricsBtn.className = isPaceMetrics ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
 
   equipmentBtn.setAttribute('aria-selected', isEquipment ? 'true' : 'false');
   equipmentBtn.setAttribute('tabindex', isEquipment ? '0' : '-1');
@@ -111,7 +111,7 @@ function setVisualizationTab(tabName, options = {}) {
   trainingCalendarBtn.className = isTrainingCalendar ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
 
   totalDistancePanel.classList.toggle('hidden', !isTotalDistance);
-  heartratePacePanel.classList.toggle('hidden', !isHeartratePace);
+  paceMetricsPanel.classList.toggle('hidden', !isPaceMetrics);
   equipmentPanel.classList.toggle('hidden', !isEquipment);
   equipmentTimelinePanel.classList.toggle('hidden', !isEquipmentTimeline);
   personalBestsPanel.classList.toggle('hidden', !isPersonalBests);
@@ -122,7 +122,7 @@ function setVisualizationTab(tabName, options = {}) {
 
   if (options.focusTab) {
     (isTotalDistance ? totalDistanceBtn :
-     isHeartratePace ? heartratePaceBtn :
+    isPaceMetrics ? paceMetricsBtn :
      isEquipment ? equipmentBtn :
      isEquipmentTimeline ? equipmentTimelineBtn :
      isPersonalBests ? personalBestsBtn :

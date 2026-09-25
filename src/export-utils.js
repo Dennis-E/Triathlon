@@ -3,7 +3,7 @@
 
 const TAB_DISPLAY_TITLES = {
   totalDistance: 'Total distance',
-  heartratePace: 'Heartrate vs Pace',
+  paceMetrics: 'Pace vs ...',
   equipment: 'Equipment mileage',
   equipmentTimeline: 'Equipment Timeline',
   personalBests: 'Personal Bests',
@@ -14,7 +14,7 @@ const TAB_DISPLAY_TITLES = {
 
 const TAB_FILENAME_SLUGS = {
   totalDistance: 'total-distance',
-  heartratePace: 'heart-rate-pace',
+  paceMetrics: 'pace-metrics',
   equipment: 'equipment',
   equipmentTimeline: 'equipment-timeline',
   personalBests: 'personal-bests',
@@ -31,11 +31,11 @@ const EXPORT_ASSET_PATHS = {
 };
 
 const EXPORT_LEGENDS = {
-  heartratePace: {
+  paceMetrics: {
     title: 'Measures',
     items: [
-      { label: 'Heart rate', color: '#EF4444' },
-      { label: 'Pace', color: '#06B6D4' }
+      { label: 'Selected metric', color: '#EF4444' },
+      { label: 'Pace or speed', color: '#06B6D4' }
     ]
   }
 };

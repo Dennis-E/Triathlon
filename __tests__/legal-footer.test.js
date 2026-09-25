@@ -9,7 +9,7 @@ const path = require('path');
 
 const TAB_PANEL_IDS = [
   'vizPanelTotalDistance',
-  'vizPanelHeartratePace',
+  'vizPanelPaceMetrics',
   'vizPanelEquipment',
   'vizPanelEquipmentTimeline',
   'vizPanelPersonalBests',

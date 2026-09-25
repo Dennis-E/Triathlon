@@ -5,7 +5,7 @@ const ROOT = path.join(__dirname, '..');
 const PREVIEW_DIR = path.join(ROOT, 'assets', 'previews');
 const PREVIEWS = [
   ['totalDistance', 'total-distance.png'],
-  ['heartratePace', 'heartrate-pace.png'],
+  ['paceMetrics', 'heartrate-pace.png'],
   ['equipment', 'equipment.png'],
   ['equipmentTimeline', 'equipment-timeline.png'],
   ['personalBests', 'personal-bests.png'],

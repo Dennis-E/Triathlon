@@ -382,15 +382,15 @@
         </div>
       </button>
 
-      <!-- Card: Heartrate vs Pace -->
+      <!-- Card: Pace vs Metrics -->
       <button
         type="button"
-        onclick="openDashboardTab('heartratePace')"
-        id="previewCard-heartratePace"
+        onclick="openDashboardTab('paceMetrics')"
+        id="previewCard-paceMetrics"
         class="group overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 text-left transition-all duration-200 hover:border-indigo-500/60 hover:shadow-xl hover:shadow-indigo-500/10 focus:outline-none focus:ring-2 focus:ring-indigo-500"
       >
         <div class="relative h-44 overflow-hidden border-b border-slate-800 bg-slate-950 p-4">
-          <img src="assets/previews/heartrate-pace.png" alt="Heartrate vs Pace visualization preview" class="preview-card-image absolute inset-0 z-20 h-full w-full object-cover">
+          <img src="assets/previews/heartrate-pace.png" alt="Pace vs metrics visualization preview" class="preview-card-image absolute inset-0 z-20 h-full w-full object-cover">
           <div class="absolute left-3 top-3 z-10 rounded-full border border-indigo-400/30 bg-slate-950/85 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-200">Preview</div>
           <div class="absolute inset-0 bg-gradient-to-b from-white/5 via-transparent to-transparent"></div>
           <div class="relative z-10 flex h-full flex-col">
@@ -418,8 +418,8 @@
           </div>
         </div>
         <div class="p-4 space-y-0.5">
-          <h3 class="font-semibold text-sm transition-colors group-hover:text-indigo-300">Heartrate vs Pace</h3>
-          <p class="text-xs text-slate-500">Bubble chart: pace, heart rate, and trend lines</p>
+          <h3 class="font-semibold text-sm transition-colors group-hover:text-indigo-300">Pace vs ...</h3>
+          <p class="text-xs text-slate-500">Pace, metrics, years, and trend lines</p>
         </div>
       </button>
 
@@ -713,17 +713,17 @@
             Total distance
           </button>
           <button
-            id="vizTabHeartratePace"
+            id="vizTabPaceMetrics"
             type="button"
             role="tab"
             aria-selected="false"
-            aria-controls="vizPanelHeartratePace"
+            aria-controls="vizPanelPaceMetrics"
             tabindex="-1"
-            onclick="setVisualizationTab('heartratePace')"
-            onkeydown="handleVisualizationTabKeydown(event, 'heartratePace')"
+            onclick="setVisualizationTab('paceMetrics')"
+            onkeydown="handleVisualizationTabKeydown(event, 'paceMetrics')"
             class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
           >
-            Heartrate vs Pace
+            Pace vs ...
           </button>
           <button
             id="vizTabEquipment"
@@ -946,22 +946,18 @@
         </div>
       </div>
 
-      <div id="vizPanelHeartratePace" role="tabpanel" aria-labelledby="vizTabHeartratePace" class="hidden">
+      <div id="vizPanelPaceMetrics" role="tabpanel" aria-labelledby="vizTabPaceMetrics" class="hidden">
         <div class="space-y-5">
           <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
             <div class="space-y-1">
-              <h2 class="text-2xl font-bold tracking-tight">Heartrate vs Pace</h2>
-              <p id="scatterPointCount" class="text-xs text-slate-400">0 sessions</p>
+              <h2 class="text-2xl font-bold tracking-tight">Pace vs ...</h2>
+              <p id="paceMetricsPointCount" class="text-xs text-slate-400">0 sessions</p>
             </div>
-
-            <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
-              <button onclick="setScatterSportFilter('All')" id="scatterSportBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">All Sports</button>
-              <button onclick="setScatterSportFilter('Run')" id="scatterSportBtnRun" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">Run</button>
-              <button onclick="setScatterSportFilter('Bike')" id="scatterSportBtnBike" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Bike</button>
-              <button onclick="setScatterSportFilter('Swim')" id="scatterSportBtnSwim" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Swim</button>
+            <div class="flex flex-wrap gap-3">
+              <div id="paceMetricsSportFilters" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner" aria-label="Pace metrics sport filter"></div>
+              <div id="paceMetricsMetricFilters" class="flex flex-wrap bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner" aria-label="Pace metrics filter"></div>
             </div>
-
-            <button type="button" onclick="exportVisualizationTab('heartratePace')" aria-label="Export for Insta / Strava: Heartrate vs Pace" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
+            <button type="button" onclick="exportVisualizationTab('paceMetrics')" aria-label="Export for Insta / Strava: Pace vs metrics" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
               <img src="assets/Strava_Logo.svg" alt="Strava" class="h-5 w-8 object-contain">
               Export for Insta / Strava
               <img src="assets/Instagram_logo_2016.svg" alt="Instagram" class="h-5 w-5 object-contain">
@@ -981,15 +977,15 @@
             </div>
           </div>
 
-          <div class="flex items-start gap-4">
-            <div id="heartratePaceChartWrapper" class="relative min-w-0 flex-1 h-[420px] md:h-[500px]">
-              <canvas id="heartratePaceChart"></canvas>
-              <div id="heartratePaceEmptyState" class="hidden absolute inset-0 flex items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/80 px-6 text-center text-sm text-slate-400">
-                No heart-rate sessions available in the current dataset.
+          <div class="flex flex-col lg:flex-row items-start gap-4">
+            <div id="paceMetricsChartWrapper" class="relative w-full min-w-0 flex-1 h-[420px] md:h-[500px]">
+              <canvas id="paceMetricsChart"></canvas>
+              <div id="paceMetricsEmptyState" class="hidden absolute inset-0 flex items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/80 px-6 text-center text-sm text-slate-400">
+                No sessions with a valid pace or speed and the selected measurement are available in this export.
               </div>
             </div>
-            <fieldset id="scatterTrendControls" class="hidden shrink-0 w-28 space-y-2 pt-2 text-xs text-white">
-              <legend class="mb-2 font-medium text-white">Year trends</legend>
+            <fieldset id="paceMetricsTrendControls" class="hidden w-full lg:w-32 shrink-0 space-y-2 pt-2 text-xs text-white">
+              <legend class="mb-2 font-medium text-white">Years</legend>
             </fieldset>
           </div>
         </div>

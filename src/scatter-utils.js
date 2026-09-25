@@ -85,6 +85,64 @@ function linearRegression(points) {
   return { slope, intercept };
 }
 
+const PACE_METRIC_DEFINITIONS = {
+  heartRate: {
+    getValue: activity => activity.avgHeartRate
+  },
+  cadence: {
+    getValue: activity => activity.avgCadence
+  },
+  elevationGain: {
+    getValue: activity => activity.elevationGain
+  },
+  distance: {
+    getValue: activity => activity.distance
+  }
+};
+
+function getPaceMetricPoints(activities, filters = {}) {
+  const sport = filters.sport;
+  const metricKey = filters.metric;
+  const minDate = filters.minDate || null;
+  const maxDate = filters.maxDate || null;
+  const metricDefinition = PACE_METRIC_DEFINITIONS[metricKey];
+
+  if (!Array.isArray(activities) || !['Run', 'Bike', 'Swim'].includes(sport) || !metricDefinition) {
+    return [];
+  }
+
+  return activities
+    .filter(activity => {
+      if (!activity || !activity.date || activity.sport !== sport) return false;
+      if (minDate && activity.date < minDate) return false;
+      if (maxDate && activity.date > maxDate) return false;
+
+      const metricValue = metricDefinition.getValue(activity);
+      if (!Number.isFinite(metricValue) || metricValue <= 0) return false;
+
+      return getSportPerformanceMetric(activity) !== null;
+    })
+    .map(activity => {
+      const performanceMetric = getSportPerformanceMetric(activity);
+      return {
+        x: performanceMetric.value,
+        y: metricDefinition.getValue(activity),
+        metric: metricKey,
+        sport: activity.sport,
+        metricType: performanceMetric.type,
+        duration: activity.duration,
+        name: activity.name,
+        date: activity.date,
+        distance: activity.distance,
+        elevationGain: activity.elevationGain,
+        totalSteps: metricKey === 'cadence' && activity.sport === 'Run' && Number.isFinite(activity.totalSteps) && activity.totalSteps > 0
+          ? activity.totalSteps
+          : null,
+        year: activity.date.getFullYear()
+      };
+    });
+}
+
 function getHeartratePacePoints(activities, filters = {}) {
   const sportFilter = filters.sport || 'All';
   const minDate = filters.minDate || null;
@@ -119,6 +177,46 @@ function getHeartratePacePoints(activities, filters = {}) {
         year: activity.date.getFullYear()
       };
     });
+}
+
+function getCadencePacePoints(activities, filters = {}) {
+  const sportFilter = filters.sport || 'All';
+  const minDate = filters.minDate || null;
+  const maxDate = filters.maxDate || null;
+
+  return activities
+    .filter(activity => {
+      if (!activity || !activity.date) return false;
+      if (!['Run', 'Bike', 'Swim'].includes(activity.sport)) return false;
+      if (sportFilter !== 'All' && activity.sport !== sportFilter) return false;
+      if (minDate && activity.date < minDate) return false;
+      if (maxDate && activity.date > maxDate) return false;
+      if (!Number.isFinite(activity.avgCadence) || activity.avgCadence <= 0) return false;
+
+      return getSportPerformanceMetric(activity) !== null;
+    })
+    .map(activity => {
+      const metric = getSportPerformanceMetric(activity);
+      return {
+        x: metric.value,
+        y: activity.avgCadence,
+        sport: activity.sport,
+        metricType: metric.type,
+        duration: activity.duration,
+        name: activity.name,
+        date: activity.date,
+        distance: activity.distance,
+        totalSteps: activity.sport === 'Run' && Number.isFinite(activity.totalSteps) && activity.totalSteps > 0
+          ? activity.totalSteps
+          : null,
+        year: activity.date.getFullYear()
+      };
+    });
+}
+
+function getAvailableCadenceSports(activities) {
+  const availableSports = new Set(getCadencePacePoints(activities).map(point => point.sport));
+  return ['Run', 'Bike', 'Swim'].filter(sport => availableSports.has(sport));
 }
 
 function buildYearlyRegressionDatasets(points, palette) {
@@ -171,7 +269,11 @@ if (typeof module !== 'undefined' && module.exports) {
     getSportPerformanceMetric,
     calculateBubbleRadius,
     linearRegression,
+    PACE_METRIC_DEFINITIONS,
+    getPaceMetricPoints,
     getHeartratePacePoints,
+    getCadencePacePoints,
+    getAvailableCadenceSports,
     buildYearlyRegressionDatasets
   };
 }
@@ -185,7 +287,11 @@ if (typeof window !== 'undefined') {
     getSportPerformanceMetric,
     calculateBubbleRadius,
     linearRegression,
+    PACE_METRIC_DEFINITIONS,
+    getPaceMetricPoints,
     getHeartratePacePoints,
+    getCadencePacePoints,
+    getAvailableCadenceSports,
     buildYearlyRegressionDatasets
   };
 }

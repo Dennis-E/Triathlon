@@ -69,7 +69,7 @@
       closePreviewGateModal();
 
       setBtnActive('sportBtnAll');
-      setScatterSportBtnActive('scatterSportBtnRun');
+      initPaceMetricsControls({ reset: true });
       if (typeof selectedTrainingCalendarPalette !== 'undefined') selectedTrainingCalendarPalette = 'green';
       renderTimeframeButtons();
       initScatterDateSlider();
@@ -77,7 +77,7 @@
       initTrainingCalendarControls();
 
       renderDashboard();
-      renderHeartratePaceChart();
+      renderPaceMetricsChart();
       renderEquipmentChart();
       renderPbChart();
       renderTrainingCalendar();
@@ -246,6 +246,16 @@
         return (normalized.includes('watt') || normalized.includes('power')) &&
           (normalized.includes('durch') || normalized.includes('avg') || normalized.includes('durchschnitt') || normalized.includes('average'));
       });
+      const avgCadenceIdx = headers.findIndex(h => {
+        if (!h) return false;
+        const normalized = String(h).toLowerCase();
+        return (normalized.includes('trittfrequenz') || normalized.includes('cadence')) &&
+          (normalized.includes('durch') || normalized.includes('avg') || normalized.includes('durchschnitt') || normalized.includes('average'));
+      });
+      const totalStepsIdx = headers.findIndex(h => {
+        const normalized = String(h || '').toLowerCase();
+        return normalized.includes('schritte insgesamt') || normalized.includes('total steps');
+      });
       const elevationIdx = headers.findIndex(h => isElevationHeader(h));
 
       // Find 'Distanz' columns (index 17 is usually the dot-formatted meters)
@@ -315,6 +325,12 @@
         const avgWatts = avgWattsIdx !== -1
           ? window.scatterUtils.parseLocalizedNumber(row[avgWattsIdx])
           : null;
+        const parsedCadence = avgCadenceIdx !== -1
+          ? window.scatterUtils.parseLocalizedNumber(row[avgCadenceIdx])
+          : null;
+        const parsedTotalSteps = totalStepsIdx !== -1
+          ? window.scatterUtils.parseLocalizedNumber(row[totalStepsIdx])
+          : null;
         const elevationGain = elevationIdx !== -1
           ? parseMetricNumber(row[elevationIdx])
           : null;
@@ -332,6 +348,8 @@
           duration: durationSeconds,
           avgHeartRate: avgHeartRate,
           avgWatts: sportCategory === 'Bike' ? avgWatts : null,
+          avgCadence: Number.isFinite(parsedCadence) && parsedCadence > 0 ? parsedCadence : null,
+          totalSteps: sportCategory === 'Run' && Number.isFinite(parsedTotalSteps) && parsedTotalSteps > 0 ? parsedTotalSteps : null,
           elevationGain: elevationGain,
           name: name
         });

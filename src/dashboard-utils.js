@@ -216,6 +216,18 @@ function processData(rawCsvData) {
       (normalized.includes('durch') || normalized.includes('durchschnitt') || normalized.includes('avg') || normalized.includes('average'))
     );
   });
+  const avgCadenceIdx = headers.findIndex(header => {
+    if (!header) return false;
+    const normalized = String(header).toLowerCase();
+    return (
+      (normalized.includes('trittfrequenz') || normalized.includes('cadence')) &&
+      (normalized.includes('durch') || normalized.includes('durchschnitt') || normalized.includes('avg') || normalized.includes('average'))
+    );
+  });
+  const totalStepsIdx = headers.findIndex(header => {
+    const normalized = String(header || '').toLowerCase();
+    return normalized.includes('schritte insgesamt') || normalized.includes('total steps');
+  });
   const elevationIdx = headers.findIndex(isElevationHeader);
 
   // Find 'Distanz' columns
@@ -278,6 +290,8 @@ function processData(rawCsvData) {
     const equipment = equipmentIdx !== -1 ? (row[equipmentIdx] || '').trim() : '';
     const avgHeartRate = avgHeartRateIdx !== -1 ? parseLocalizedNumber(row[avgHeartRateIdx]) : null;
     const avgWatts = avgWattsIdx !== -1 ? parseLocalizedNumber(row[avgWattsIdx]) : null;
+    const parsedCadence = avgCadenceIdx !== -1 ? parseLocalizedNumber(row[avgCadenceIdx]) : null;
+    const parsedTotalSteps = totalStepsIdx !== -1 ? parseLocalizedNumber(row[totalStepsIdx]) : null;
     const elevationGain = elevationIdx !== -1 ? parseElevationNumber(row[elevationIdx]) : null;
 
     processedActivities.push({
@@ -292,6 +306,8 @@ function processData(rawCsvData) {
       duration: durationSeconds,
       avgHeartRate,
       avgWatts: sportCategory === 'Bike' ? avgWatts : null,
+      avgCadence: Number.isFinite(parsedCadence) && parsedCadence > 0 ? parsedCadence : null,
+      totalSteps: sportCategory === 'Run' && Number.isFinite(parsedTotalSteps) && parsedTotalSteps > 0 ? parsedTotalSteps : null,
       elevationGain,
       name: name
     });

@@ -171,7 +171,7 @@ describe('export-utils', () => {
   describe('getTabDisplayTitle', () => {
     it('returns the expected label for every supported tab', () => {
       expect(getTabDisplayTitle('totalDistance')).toBe('Total distance');
-      expect(getTabDisplayTitle('heartratePace')).toBe('Heartrate vs Pace');
+      expect(getTabDisplayTitle('paceMetrics')).toBe('Pace vs ...');
       expect(getTabDisplayTitle('equipment')).toBe('Equipment mileage');
       expect(getTabDisplayTitle('equipmentTimeline')).toBe('Equipment Timeline');
       expect(getTabDisplayTitle('personalBests')).toBe('Personal Bests');
@@ -187,7 +187,7 @@ describe('export-utils', () => {
   describe('generateExportFilename', () => {
     it('matches the trianalytica-<tab-slug>-<yyyyMMdd-HHmmss>.png pattern', () => {
       const date = new Date(2026, 8, 17, 9, 5, 3); // 2026-09-17 09:05:03 local
-      expect(generateExportFilename('heartratePace', date)).toBe('trianalytica-heart-rate-pace-20260917-090503.png');
+      expect(generateExportFilename('paceMetrics', date)).toBe('trianalytica-pace-metrics-20260917-090503.png');
       expect(generateExportFilename('totalDistance', date)).toBe('trianalytica-total-distance-20260917-090503.png');
       expect(generateExportFilename('equipmentTimeline', date)).toBe('trianalytica-equipment-timeline-20260917-090503.png');
       expect(generateExportFilename('workoutTime', date)).toBe('trianalytica-workout-time-20260917-090503.png');
@@ -216,30 +216,30 @@ describe('export-utils', () => {
     it('validates a visualization target and preserves its context', () => {
       const target = createExportTarget({
         kind: 'tab',
-        key: 'heartratePace',
-        title: 'Heartrate vs Pace',
-        targetElementId: 'heartratePaceChartWrapper',
+        key: 'paceMetrics',
+        title: 'Pace vs ...',
+        targetElementId: 'paceMetricsChartWrapper',
         hasData: true,
         filters: [{ label: 'Sport', value: 'Run' }],
         availableControls: [{
           label: 'Views',
-          controls: [{ label: 'Heartrate vs Pace', selected: true }]
+          controls: [{ label: 'Pace vs ...', selected: true }]
         }],
-        legend: getExportLegend('heartratePace')
+        legend: getExportLegend('paceMetrics')
       });
 
       expect(target).toMatchObject({
         kind: 'tab',
-        key: 'heartratePace',
+        key: 'paceMetrics',
         hasData: true,
-        targetElementId: 'heartratePaceChartWrapper'
+        targetElementId: 'paceMetricsChartWrapper'
       });
       expect(target.filters).toEqual([{ label: 'Sport', value: 'Run' }]);
       expect(target.availableControls).toEqual([{
         label: 'Views',
-        controls: [{ label: 'Heartrate vs Pace', selected: true }]
+        controls: [{ label: 'Pace vs ...', selected: true }]
       }]);
-      expect(target.legend.items.map(item => item.label)).toEqual(['Heart rate', 'Pace']);
+      expect(target.legend.items.map(item => item.label)).toEqual(['Selected metric', 'Pace or speed']);
     });
 
     it('rejects incomplete or unsupported targets', () => {
@@ -264,7 +264,7 @@ describe('export-utils', () => {
     });
 
     it('provides only applicable legends', () => {
-      expect(getExportLegend('heartratePace').items).toHaveLength(2);
+      expect(getExportLegend('paceMetrics').items).toHaveLength(2);
       expect(getExportLegend('totalDistance')).toBeNull();
       expect(getExportLegend('personalBests')).toBeNull();
     });
@@ -302,7 +302,7 @@ describe('export-utils', () => {
         qrCode: 'assets/QR Code webpage.png'
       });
       expect(getExportTargetSlug({ kind: 'pb-tile', key: 'run-5k' })).toBe('pb-run-5k');
-      expect(getExportTargetSlug({ kind: 'tab', key: 'heartratePace' })).toBe('heart-rate-pace');
+      expect(getExportTargetSlug({ kind: 'tab', key: 'paceMetrics' })).toBe('pace-metrics');
     });
 
     it('exposes header-only layout and PB content-fit settings', () => {

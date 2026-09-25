@@ -7,6 +7,9 @@ const {
   calculateBubbleRadius,
   linearRegression,
   getHeartratePacePoints,
+  getCadencePacePoints,
+  getAvailableCadenceSports,
+  getPaceMetricPoints,
   buildYearlyRegressionDatasets
 } = require('../src/scatter-utils');
 
@@ -182,6 +185,161 @@ describe('scatter utils', () => {
 
     const bikePoint = points.find(p => p.sport === 'Bike');
     expect(bikePoint.avgWatts).toBe(220);
+  });
+
+  it('returns qualifying Run cadence points with optional total steps', () => {
+    const activities = [
+      {
+        date: new Date(2025, 0, 10),
+        sport: 'Run',
+        distance: 10,
+        duration: 3600,
+        avgCadence: 178,
+        totalSteps: 10680,
+        name: 'Cadence run'
+      },
+      {
+        date: new Date(2025, 0, 11),
+        sport: 'Run',
+        distance: 5,
+        duration: 1800,
+        avgCadence: 0,
+        totalSteps: 5400,
+        name: 'Zero cadence'
+      },
+      {
+        date: new Date(2025, 0, 12),
+        sport: 'Run',
+        distance: 0,
+        duration: 1800,
+        avgCadence: 175,
+        name: 'Invalid pace'
+      }
+    ];
+
+    const points = getCadencePacePoints(activities, {
+      sport: 'Run',
+      minDate: new Date(2025, 0, 1),
+      maxDate: new Date(2025, 0, 31)
+    });
+
+    expect(points).toHaveLength(1);
+    expect(points[0]).toMatchObject({
+      x: 6,
+      y: 178,
+      sport: 'Run',
+      metricType: 'pace_run',
+      totalSteps: 10680
+    });
+  });
+
+  it('returns Bike and Swim cadence points without total steps', () => {
+    const activities = [
+      {
+        date: new Date(2025, 0, 10),
+        sport: 'Bike',
+        distance: 40,
+        duration: 3600,
+        avgCadence: 92,
+        totalSteps: 9999,
+        name: 'Cadence ride'
+      },
+      {
+        date: new Date(2025, 0, 11),
+        sport: 'Swim',
+        distance: 1,
+        duration: 1200,
+        avgCadence: 32,
+        totalSteps: 9999,
+        name: 'Cadence swim'
+      }
+    ];
+
+    const points = getCadencePacePoints(activities);
+    const bikePoint = points.find(point => point.sport === 'Bike');
+    const swimPoint = points.find(point => point.sport === 'Swim');
+
+    expect(bikePoint).toMatchObject({ x: 40, y: 92, metricType: 'speed_bike', totalSteps: null });
+    expect(swimPoint).toMatchObject({ x: 2, y: 32, metricType: 'pace_swim', totalSteps: null });
+  });
+
+  it('lists only sports with qualifying cadence points in stable order', () => {
+    const activities = [
+      { date: new Date(2025, 0, 10), sport: 'Swim', distance: 1, duration: 1200, avgCadence: 30 },
+      { date: new Date(2025, 0, 11), sport: 'Bike', distance: 40, duration: 3600, avgCadence: 90 },
+      { date: new Date(2025, 0, 12), sport: 'Run', distance: 10, duration: 3600, avgCadence: 175 },
+      { date: new Date(2025, 0, 13), sport: 'Run', distance: 10, duration: 3600, avgCadence: null }
+    ];
+
+    expect(getAvailableCadenceSports(activities)).toEqual(['Run', 'Bike', 'Swim']);
+  });
+
+  it('builds cadence points for 3,000 activities within one second', () => {
+    const activities = Array.from({ length: 3000 }, (_, index) => ({
+      date: new Date(2025, 0, (index % 28) + 1),
+      sport: ['Run', 'Bike', 'Swim'][index % 3],
+      distance: index % 3 === 0 ? 10 : (index % 3 === 1 ? 40 : 1),
+      duration: index % 3 === 0 ? 3600 : (index % 3 === 1 ? 3600 : 1200),
+      avgCadence: 80 + (index % 100),
+      name: `Activity ${index}`
+    }));
+    const startedAt = Date.now();
+    const points = getCadencePacePoints(activities);
+
+    expect(points).toHaveLength(3000);
+    expect(Date.now() - startedAt).toBeLessThan(1000);
+  });
+
+  it('builds one selected-sport pace metric point for each supported metric', () => {
+    const activity = {
+      date: new Date(2025, 0, 10),
+      sport: 'Run',
+      distance: 10,
+      duration: 3600,
+      avgHeartRate: 150,
+      avgCadence: 178,
+      elevationGain: 210,
+      totalSteps: 10680,
+      name: 'Metric run'
+    };
+
+    const heartRate = getPaceMetricPoints([activity], { sport: 'Run', metric: 'heartRate' });
+    const cadence = getPaceMetricPoints([activity], { sport: 'Run', metric: 'cadence' });
+    const elevation = getPaceMetricPoints([activity], { sport: 'Run', metric: 'elevationGain' });
+    const distance = getPaceMetricPoints([activity], { sport: 'Run', metric: 'distance' });
+
+    expect(heartRate[0]).toMatchObject({ x: 6, y: 150, metric: 'heartRate', totalSteps: null });
+    expect(cadence[0]).toMatchObject({ x: 6, y: 178, metric: 'cadence', totalSteps: 10680 });
+    expect(elevation[0]).toMatchObject({ x: 6, y: 210, metric: 'elevationGain', totalSteps: null });
+    expect(distance[0]).toMatchObject({ x: 6, y: 10, metric: 'distance', totalSteps: null });
+  });
+
+  it('requires a single supported sport and finite positive metric and performance values', () => {
+    const activities = [
+      { date: new Date(2025, 0, 10), sport: 'Run', distance: 10, duration: 3600, avgHeartRate: 150, avgCadence: 178, elevationGain: 100 },
+      { date: new Date(2025, 0, 11), sport: 'Bike', distance: 40, duration: 3600, avgHeartRate: 140, avgCadence: 92, elevationGain: 0 },
+      { date: new Date(2025, 0, 12), sport: 'Swim', distance: 1, duration: 1200, avgHeartRate: 0, avgCadence: 32, elevationGain: 5 }
+    ];
+
+    expect(getPaceMetricPoints(activities, { sport: 'All', metric: 'heartRate' })).toEqual([]);
+    expect(getPaceMetricPoints(activities, { sport: 'Yoga', metric: 'heartRate' })).toEqual([]);
+    expect(getPaceMetricPoints(activities, { sport: 'Bike', metric: 'elevationGain' })).toEqual([]);
+    expect(getPaceMetricPoints(activities, { sport: 'Swim', metric: 'heartRate' })).toEqual([]);
+    expect(getPaceMetricPoints(activities, { sport: 'Bike', metric: 'cadence' })[0]).toMatchObject({
+      metricType: 'speed_bike',
+      totalSteps: null
+    });
+  });
+
+  it('returns an empty set for an unavailable metric while other valid metrics remain available', () => {
+    const activities = [
+      { date: new Date(2025, 0, 10), sport: 'Run', distance: 10, duration: 3600, avgHeartRate: 150, avgCadence: null, elevationGain: 120 }
+    ];
+
+    expect(getPaceMetricPoints(activities, { sport: 'Run', metric: 'cadence' })).toEqual([]);
+    expect(getPaceMetricPoints(activities, { sport: 'Run', metric: 'heartRate' })).toHaveLength(1);
+    expect(getPaceMetricPoints(activities, { sport: 'Run', metric: 'elevationGain' })).toHaveLength(1);
+    expect(getPaceMetricPoints(activities, { sport: 'Run', metric: 'distance' })).toHaveLength(1);
   });
 
   it('builds yearly regression datasets', () => {

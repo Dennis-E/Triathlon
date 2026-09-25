@@ -89,6 +89,22 @@ describe('index.html inline script syntax', () => {
     expect(inlineCode).toContain('renderTrainingCalendar();');
   });
 
+  it('wires the Pace vs Metrics tab and renderer', () => {
+    expect(html).toContain('id="vizTabPaceMetrics"');
+    expect(html).toContain('id="vizPanelPaceMetrics"');
+    expect(html).toContain("onclick=\"setVisualizationTab('paceMetrics')\"");
+    expect(html).toContain('id="paceMetricsChart"');
+    expect(html).toContain('id="paceMetricsEmptyState"');
+    expect(html).toContain('id="paceMetricsMetricFilters"');
+    expect(html).toContain('id="paceMetricsEmptyState"');
+    expect(html).toContain('No sessions with a valid pace or speed and the selected measurement');
+    expect(html).not.toContain('id="vizTabHeartratePace"');
+    expect(html).not.toContain('id="vizTabCadencePace"');
+    expect(inlineCode).toContain("nextTab === 'paceMetrics'");
+    expect(inlineCode).toContain('renderPaceMetricsChart();');
+    expect(html).not.toContain('dashboard-cadence-scatter.js');
+  });
+
   it('provides Training Calendar details, filters, and import reset controls', () => {
     expect(html).toContain('id="trainingCalendarYears"');
     expect(html).toContain('id="trainingCalendarPaletteFilters"');
@@ -276,7 +292,7 @@ describe('index.html inline script syntax', () => {
   it('provides branded export controls for every visualization', () => {
     const exportButtons = [
       'totalDistance',
-      'heartratePace',
+      'paceMetrics',
       'equipment',
       'equipmentTimeline',
       'heatmap'

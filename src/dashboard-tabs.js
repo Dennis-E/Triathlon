@@ -7,8 +7,8 @@
       const nextTab = window.dashboardTabNavigation.setVisualizationTab(tabName, options);
       if (nextTab) {
         selectedVisualizationTab = nextTab;
-        if (nextTab === 'heartratePace') {
-          renderHeartratePaceChart();
+        if (nextTab === 'paceMetrics') {
+          renderPaceMetricsChart();
         } else if (nextTab === 'equipment') {
           renderEquipmentChart();
         } else if (nextTab === 'equipmentTimeline') {
@@ -61,7 +61,7 @@
       setVisualizationTab(tabName);
       const tabButton = document.getElementById(
         tabName === 'totalDistance' ? 'vizTabTotalDistance' :
-        tabName === 'heartratePace' ? 'vizTabHeartratePace' :
+        tabName === 'paceMetrics' ? 'vizTabPaceMetrics' :
         tabName === 'equipment' ? 'vizTabEquipment' :
         tabName === 'equipmentTimeline' ? 'vizTabEquipmentTimeline' :
         tabName === 'heatmap' ? 'vizTabHeatmap' :

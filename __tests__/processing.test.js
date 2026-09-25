@@ -240,6 +240,43 @@ describe('processData', () => {
     expect(result[0].duration).toBe(0);
   });
 
+  it('should retain German and English cadence and total-step values for running activities', () => {
+    const germanData = [
+      ['Aktivitätsdatum', 'Aktivitätsart', 'Name der Aktivität', 'Bewegungszeit', 'Distanz', 'Durchschnittliche Trittfrequenz', 'Schritte insgesamt'],
+      ['19.07.2026, 14:52:02', 'Lauf', 'German run', '3600', '10000', '172,5', '12345']
+    ];
+    const englishData = [
+      ['Activity Date', 'Activity Type', 'Activity Name', 'Moving Time', 'Distance', 'Average Cadence', 'Total Steps'],
+      ['20.07.2026, 14:52:02', 'Run', 'English run', '1800', '5000', '180.2', '6000']
+    ];
+
+    const germanResult = processData(germanData);
+    const englishResult = processData(englishData);
+
+    expect(germanResult[0].avgCadence).toBe(172.5);
+    expect(germanResult[0].totalSteps).toBe(12345);
+    expect(englishResult[0].avgCadence).toBe(180.2);
+    expect(englishResult[0].totalSteps).toBe(6000);
+  });
+
+  it('should normalize missing, zero, and non-running total-step values to null', () => {
+    const data = [
+      ['Aktivitätsdatum', 'Aktivitätsart', 'Name der Aktivität', 'Bewegungszeit', 'Distanz', 'Average Cadence', 'Total Steps'],
+      ['19.07.2026, 14:52:02', 'Run', 'No cadence', '3600', '10000', '', '5000'],
+      ['20.07.2026, 14:52:02', 'Run', 'Zero values', '3600', '10000', '0', '0'],
+      ['21.07.2026, 14:52:02', 'Bike', 'Bike ride', '3600', '40000', '90', '9000']
+    ];
+
+    const result = processData(data);
+
+    expect(result[0].avgCadence).toBeNull();
+    expect(result[0].totalSteps).toBe(5000);
+    expect(result[1].avgCadence).toBeNull();
+    expect(result[1].totalSteps).toBeNull();
+    expect(result[2].avgCadence).toBe(90);
+    expect(result[2].totalSteps).toBeNull();
+  });
+
   it('should sort activities by date chronologically', () => {
     const data = [
       ['Aktivitätsdatum', 'Aktivitätsart', 'Name der Aktivität', 'Bewegungszeit', 'Distanz'],

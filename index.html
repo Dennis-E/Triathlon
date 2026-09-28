@@ -1021,11 +1021,15 @@
             </div>
           </div>
 
-          <div id="equipmentChartWrapper" class="relative w-full h-[540px]">
-            <canvas id="equipmentChart"></canvas>
-            <div id="equipmentEmptyState" class="hidden absolute inset-0 flex items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/80 px-6 text-center text-sm text-slate-400">
-              No equipment assignments available in the current dataset.
+          <div id="equipmentChartWrapper" class="relative w-full min-w-0">
+            <div id="equipmentCanvasArea" class="relative w-full h-[540px]">
+              <canvas id="equipmentChart"></canvas>
+              <div id="equipmentEmptyState" class="hidden absolute inset-0 flex items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/80 px-6 text-center text-sm text-slate-400">
+                No equipment assignments available in the current dataset.
+              </div>
             </div>
+            <p id="equipmentPaceExplanation" class="hidden mt-2 text-xs text-slate-400"></p>
+            <div id="equipmentValueFallback" class="hidden mt-3 grid min-w-0 gap-1 text-xs text-slate-200" style="overflow-wrap:anywhere" aria-label="Full equipment values"></div>
           </div>
         </div>
       </div>

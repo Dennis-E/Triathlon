@@ -54,6 +54,27 @@ function aggregateEquipmentPace(activities, filter = 'All') {
     .sort((a, b) => a[1] - b[1]);
 }
 
+// Presentation only: 100% is the fastest item of the same equipment type.
+// Keep aggregateEquipmentPace's unrounded [name, minPerKm] result untouched.
+function buildEquipmentPaceDisplay(entries) {
+  const rows = entries
+    .filter(([, pace]) => Number.isFinite(pace) && pace > 0)
+    .map(([name, paceMinPerKm]) => ({
+      name,
+      type: getEquipmentType(name),
+      paceMinPerKm,
+      speedKmh: 60 / paceMinPerKm
+    }))
+    .filter(row => (row.type === 'Shoes' || row.type === 'Bikes') && Number.isFinite(row.speedKmh) && row.speedKmh > 0);
+  const maxima = { Shoes: 0, Bikes: 0 };
+  rows.forEach(row => { maxima[row.type] = Math.max(maxima[row.type], row.speedKmh); });
+  return rows.map(row => ({
+    ...row,
+    maxSpeedOfType: maxima[row.type],
+    barValue: row.speedKmh / maxima[row.type]
+  }));
+}
+
 function aggregateEquipmentActivityCount(activities, filter = 'All') {
   const counts = activities
     .filter(activity => {
@@ -199,6 +220,7 @@ if (typeof module !== 'undefined' && module.exports) {
     getEquipmentType,
     aggregateEquipmentDistance,
     aggregateEquipmentPace,
+    buildEquipmentPaceDisplay,
     aggregateEquipmentActivityCount,
     aggregateEquipmentAvgLength,
     aggregateEquipmentTimeline,
@@ -212,6 +234,7 @@ if (typeof window !== 'undefined') {
     getEquipmentType,
     aggregateEquipmentDistance,
     aggregateEquipmentPace,
+    buildEquipmentPaceDisplay,
     aggregateEquipmentActivityCount,
     aggregateEquipmentAvgLength,
     aggregateEquipmentTimeline,

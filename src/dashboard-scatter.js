@@ -3,7 +3,10 @@ let selectedPaceMetric = 'heartRate';
 let paceMetricsChartInstance = null;
 let scatterDateRange = { start: 0, end: 0 };
 let scatterDateCandidates = [];
-let enabledPaceMetricsYears = null;
+const disabledPaceMetricsYears = new Set();
+let visiblePaceMetricsYears = [];
+let paceMetricsYearCheckboxes = new Map();
+let paceMetricsYearAnchor = null;
 let paceMetricsShowTrendLines = true;
 
 const PACE_METRIC_PRESENTATION = {
@@ -48,7 +51,10 @@ function initPaceMetricsControls(options = {}) {
   if (options.reset) {
     selectedPaceMetricsSport = 'Run';
     selectedPaceMetric = 'heartRate';
-    enabledPaceMetricsYears = null;
+    disabledPaceMetricsYears.clear();
+    visiblePaceMetricsYears = [];
+    paceMetricsYearCheckboxes = new Map();
+    paceMetricsYearAnchor = null;
     paceMetricsShowTrendLines = true;
   }
   renderPaceMetricsControlButtons();
@@ -148,18 +154,29 @@ function setPaceMetric(metric) {
 }
 
 function synchronizePaceMetricsYears(points) {
-  const currentYears = new Set(points.map(point => point.year));
-  if (enabledPaceMetricsYears === null) {
-    enabledPaceMetricsYears = new Set(currentYears);
-  } else {
-    enabledPaceMetricsYears = new Set([...enabledPaceMetricsYears].filter(year => currentYears.has(year)));
-    currentYears.forEach(year => enabledPaceMetricsYears.add(year));
-  }
+  visiblePaceMetricsYears = Array.from(new Set(points.map(point => point.year))).sort((a, b) => a - b);
+  if (!visiblePaceMetricsYears.includes(paceMetricsYearAnchor)) paceMetricsYearAnchor = null;
 }
 
 function setPaceMetricsYearEnabled(year, enabled) {
-  if (enabled) enabledPaceMetricsYears.add(year);
-  else enabledPaceMetricsYears.delete(year);
+  if (enabled) disabledPaceMetricsYears.delete(year);
+  else disabledPaceMetricsYears.add(year);
+  const checkbox = paceMetricsYearCheckboxes.get(year);
+  if (checkbox) checkbox.checked = enabled;
+  updatePaceMetricsChartVisibility();
+}
+
+function handlePaceMetricsYearClick(year, checked, shiftKey) {
+  const hasVisibleAnchor = shiftKey && visiblePaceMetricsYears.includes(paceMetricsYearAnchor);
+  const years = hasVisibleAnchor
+    ? visiblePaceMetricsYears.filter(value => value >= Math.min(year, paceMetricsYearAnchor) && value <= Math.max(year, paceMetricsYearAnchor))
+    : [year];
+  years.forEach(value => {
+    if (checked) disabledPaceMetricsYears.delete(value);
+    else disabledPaceMetricsYears.add(value);
+    paceMetricsYearCheckboxes.get(value).checked = checked;
+  });
+  if (!shiftKey || !hasVisibleAnchor) paceMetricsYearAnchor = year;
   updatePaceMetricsChartVisibility();
 }
 
@@ -172,8 +189,8 @@ function updatePaceMetricsChartVisibility() {
   if (!paceMetricsChartInstance) return;
   paceMetricsChartInstance.data.datasets.forEach((dataset, index) => {
     const visible = dataset.type === 'bubble'
-      ? enabledPaceMetricsYears.has(dataset.year)
-      : paceMetricsShowTrendLines && enabledPaceMetricsYears.has(dataset.year);
+      ? !disabledPaceMetricsYears.has(dataset.year)
+      : paceMetricsShowTrendLines && !disabledPaceMetricsYears.has(dataset.year);
     paceMetricsChartInstance.setDatasetVisibility(index, visible);
   });
   paceMetricsChartInstance.update();
@@ -183,23 +200,28 @@ function renderPaceMetricsTrendControls(points, trendDatasets) {
   const controls = document.getElementById('paceMetricsTrendControls');
   if (!controls) return;
   controls.replaceChildren();
+  paceMetricsYearCheckboxes = new Map();
   controls.classList.toggle('hidden', points.length === 0);
   if (points.length === 0) return;
 
   const colorByYear = new Map(trendDatasets.map(dataset => [dataset.year, dataset.borderColor]));
-  const years = Array.from(new Set(points.map(point => point.year))).sort((a, b) => a - b);
   const yearLegend = document.createElement('legend');
   yearLegend.className = 'mb-2 font-medium text-white';
   yearLegend.textContent = 'Years';
   controls.appendChild(yearLegend);
-  years.forEach(year => {
+  visiblePaceMetricsYears.forEach(year => {
     const label = document.createElement('label');
     label.className = 'flex items-center gap-2 cursor-pointer';
+    // Suppress native Shift+click text selection without cancelling the label's checkbox click.
+    label.addEventListener('mousedown', event => {
+      if (event.shiftKey) event.preventDefault();
+    });
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
-    checkbox.checked = enabledPaceMetricsYears.has(year);
+    checkbox.checked = !disabledPaceMetricsYears.has(year);
     checkbox.className = 'accent-indigo-500';
-    checkbox.addEventListener('change', () => setPaceMetricsYearEnabled(year, checkbox.checked));
+    checkbox.addEventListener('click', event => handlePaceMetricsYearClick(year, checkbox.checked, event.shiftKey));
+    paceMetricsYearCheckboxes.set(year, checkbox);
     const color = document.createElement('span');
     color.className = 'w-3 h-3 rounded-full';
     color.style.backgroundColor = colorByYear.get(year) || '#64748B';
@@ -241,6 +263,8 @@ function renderPaceMetricsChart() {
   });
   if (count) count.textContent = `${points.length} sessions`;
   if (paceMetricsChartInstance) paceMetricsChartInstance.destroy();
+  paceMetricsChartInstance = null;
+  synchronizePaceMetricsYears(points);
 
   if (points.length === 0) {
     canvas.classList.add('hidden');
@@ -251,7 +275,6 @@ function renderPaceMetricsChart() {
 
   canvas.classList.remove('hidden');
   if (emptyState) emptyState.classList.add('hidden');
-  synchronizePaceMetricsYears(points);
   const durations = points.map(point => point.duration).filter(value => Number.isFinite(value) && value > 0);
   const palette = ['#F59E0B', '#A78BFA', '#F97316', '#22D3EE', '#84CC16'];
   const trendDatasets = window.scatterUtils.buildYearlyRegressionDatasets(points, palette);

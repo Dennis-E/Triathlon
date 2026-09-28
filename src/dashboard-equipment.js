@@ -5,9 +5,41 @@
     let equipmentTimelineChartInstance = null;
      let equipmentChartInstance = null;
 
+    function wrapEquipmentValue(ctx, label, availableWidth) {
+      if (availableWidth <= 0) return null;
+      if (ctx.measureText(label).width <= availableWidth) return [label];
+      const lines = [];
+      let line = '';
+      for (const word of label.split(' ')) {
+        const joined = line ? `${line} ${word}` : word;
+        if (ctx.measureText(joined).width <= availableWidth) {
+          line = joined;
+          continue;
+        }
+        if (line) lines.push(line);
+        line = '';
+        // Split a single unbreakable token only if both lines can still hold it.
+        for (const char of word) {
+          if (ctx.measureText(line + char).width > availableWidth) {
+            if (!line) return null;
+            lines.push(line);
+            line = '';
+          }
+          line += char;
+          if (lines.length >= 2) return null;
+        }
+        if (lines.length >= 2) return null;
+      }
+      if (line) lines.push(line);
+      return lines.length <= 2 ? lines : null;
+    }
+
     function renderEquipmentChart() {
       const canvas = document.getElementById('equipmentChart');
       const emptyState = document.getElementById('equipmentEmptyState');
+      const canvasArea = document.getElementById('equipmentCanvasArea');
+      const fallback = document.getElementById('equipmentValueFallback');
+      const explanation = document.getElementById('equipmentPaceExplanation');
       if (!canvas) return;
 
       let sortedEntries;
@@ -28,6 +60,12 @@
         equipmentChartInstance = null;
       }
 
+      if (fallback) {
+        fallback.replaceChildren();
+        fallback.classList.add('hidden');
+      }
+      if (explanation) explanation.classList.add('hidden');
+
       if (sortedEntries.length === 0) {
         canvas.classList.add('hidden');
         if (emptyState) emptyState.classList.remove('hidden');
@@ -37,13 +75,45 @@
       canvas.classList.remove('hidden');
       if (emptyState) emptyState.classList.add('hidden');
 
+      const isPace = selectedEquipmentMetric === 'pace';
+      const metric = selectedEquipmentMetric;
+      const paceRows = isPace
+        ? window.equipmentUtils.buildEquipmentPaceDisplay(sortedEntries)
+        : [];
+      // Group only the mixed pace view; other metrics retain their original order.
+      const rows = isPace && selectedEquipmentFilter === 'All'
+        ? paceRows.filter(row => row.type === 'Shoes').concat(paceRows.filter(row => row.type === 'Bikes'))
+        : paceRows;
+      const labels = isPace ? rows.map(row => row.name) : sortedEntries.map(([name]) => name);
+      const values = isPace
+        ? rows.map(row => row.barValue)
+        : sortedEntries.map(([, value]) => metric === 'count' ? value : Number(value.toFixed(2)));
+      const displayValues = isPace
+        ? rows.map(row => row.type === 'Bikes' ? formatSpeedLabel(row.speedKmh) : formatPaceLabel(row.paceMinPerKm))
+        : values.map(value => metric === 'distance' ? `${value.toFixed(1)} km`
+          : metric === 'count' ? `${value} activities` : `${value.toFixed(2)} km/act`);
+
+      if (canvasArea) canvasArea.style.height = `${Math.max(540, labels.length * 56 + 70)}px`;
+      if (explanation && isPace) {
+        explanation.textContent = selectedEquipmentFilter === 'All'
+          ? 'Shoes (purple) · Bikes (teal) — 100 % = fastest item of the same type; bars across types are not directly comparable.'
+          : '100 % = fastest item of the same type (relative speed).';
+        explanation.classList.remove('hidden');
+      }
+
+      function labelPadding(width) {
+        // Leave room for the plot and its equipment names on small screens.
+        const longest = Math.max(...displayValues.map(label => label.length * 7));
+        return Math.min(longest + 20, Math.max(72, width * 0.4));
+      }
+
       equipmentChartInstance = new Chart(canvas.getContext('2d'), {
         type: 'bar',
         plugins: [{
           id: 'equipmentValueLabels',
           afterDatasetsDraw(chart) {
             const { ctx } = chart;
-            const dataset = chart.data.datasets[0];
+            const unavailable = [];
 
             ctx.save();
             ctx.fillStyle = '#FFFFFF';
@@ -52,42 +122,40 @@
             ctx.textBaseline = 'middle';
 
             chart.getDatasetMeta(0).data.forEach((bar, index) => {
-                const value = dataset.data[index];
-                const equipmentName = chart.data.labels[index];
-                const equipmentType = window.equipmentUtils.getEquipmentType(equipmentName);
-                let label;
-                if (selectedEquipmentMetric === 'distance') {
-                  label = `${value.toFixed(1)} km`;
-                } else if (selectedEquipmentMetric === 'pace') {
-                  if (selectedEquipmentFilter === 'Bikes' || equipmentType === 'Bikes') {
-                    label = formatSpeedLabel(paceMinPerKmToSpeedKmh(value));
-                  } else {
-                    label = formatPaceLabel(value);
-                  }
-                } else if (selectedEquipmentMetric === 'count') {
-                  label = `${value} activities`;
-                } else if (selectedEquipmentMetric === 'avgLength') {
-                  label = `${value.toFixed(2)} km/act`;
-                } else {
-                  label = value;
-                }
-
-                ctx.fillText(label, bar.x + 12, bar.y);
+              // Follow the bar end when space permits; use the reserved lane for long bars.
+              const x = Math.max(chart.chartArea.left, Math.min(bar.x + 8, chart.chartArea.right + 8));
+              const lines = wrapEquipmentValue(ctx, displayValues[index], chart.width - x - 8);
+              if (!lines) {
+                unavailable.push(index);
+                return;
+              }
+              lines.forEach((line, lineIndex) => {
+                ctx.fillText(line, x, bar.y + (lineIndex - (lines.length - 1) / 2) * 15);
+              });
             });
 
             ctx.restore();
+            if (fallback) {
+              fallback.replaceChildren();
+              unavailable.forEach(index => {
+                const row = document.createElement('p');
+                row.textContent = `${labels[index]}: ${displayValues[index]}`;
+                fallback.appendChild(row);
+              });
+              fallback.classList.toggle('hidden', unavailable.length === 0);
+            }
           }
         }],
         data: {
-          labels: sortedEntries.map(([name]) => name),
-datasets: [{
-            label: selectedEquipmentMetric === 'distance' ? 'Distance' :
-                  selectedEquipmentMetric === 'pace' ? 'Pace' :
-                  selectedEquipmentMetric === 'count' ? 'Activity Count' :
-                  selectedEquipmentMetric === 'avgLength' ? 'Avg Length' : '',
-            data: sortedEntries.map(([, value]) => selectedEquipmentMetric === 'count' ? value : Number(value.toFixed(2))),
+          labels,
+          datasets: [{
+            label: metric === 'distance' ? 'Distance' :
+                  metric === 'pace' ? 'Relative speed' :
+                  metric === 'count' ? 'Activity Count' :
+                  metric === 'avgLength' ? 'Avg Length' : '',
+            data: values,
             borderRadius: 6,
-            backgroundColor: sortedEntries.map(([name]) =>
+            backgroundColor: labels.map(name =>
               window.equipmentUtils.getEquipmentType(name) === 'Shoes'
                 ? '#8B5CF6'
                 : '#14B8A6'
@@ -98,6 +166,10 @@ datasets: [{
           indexAxis: 'y',
           responsive: true,
           maintainAspectRatio: false,
+          layout: { padding: { right: labelPadding(canvasArea ? canvasArea.clientWidth : canvas.clientWidth) } },
+          onResize(chart) {
+            chart.options.layout.padding.right = labelPadding(chart.width);
+          },
           plugins: {
             legend: { display: false },
             tooltip: {
@@ -105,32 +177,21 @@ datasets: [{
               titleColor: '#F8FAFC',
               bodyColor: '#CBD5E1',
               callbacks: {
-                label: context => selectedEquipmentMetric === 'distance'
-                  ? `${context.raw.toFixed(1)} km`
-                  : selectedEquipmentMetric === 'pace'
-                    ? (() => {
-                        const equipmentName = context.label;
-                        const equipmentType = window.equipmentUtils.getEquipmentType(equipmentName);
-                        if (selectedEquipmentFilter === 'Bikes' || equipmentType === 'Bikes') {
-                          return formatSpeedLabel(paceMinPerKmToSpeedKmh(context.raw));
-                        }
-                        return formatPaceLabel(context.raw);
-                      })()
+                label: context => isPace ? displayValues[context.dataIndex]
+                  : metric === 'distance' ? displayValues[context.dataIndex]
                     : `${context.raw}`
               }
             }
           },
           scales: {
             x: {
+              ...(isPace ? { min: 0, max: 1, title: { display: true, text: 'Relative speed within equipment type (%)', color: '#94A3B8' } } : {}),
               grid: { color: '#1E293B' },
               ticks: {
                 color: '#94A3B8',
-                callback: value => selectedEquipmentMetric === 'distance'
+                callback: value => metric === 'distance'
                   ? `${value} km`
-                  : selectedEquipmentMetric === 'pace'
-                    ? (selectedEquipmentFilter === 'Bikes'
-                        ? (Number.isFinite(value) && value > 0 ? paceMinPerKmToSpeedKmh(value).toFixed(1) : '--')
-                        : formatPaceLabel(value).replace(' /km', ''))
+                  : isPace ? `${Math.round(value * 100)}%`
                     : value
               }
             },

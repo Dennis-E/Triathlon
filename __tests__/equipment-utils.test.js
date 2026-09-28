@@ -2,6 +2,7 @@ const {
   getEquipmentType,
   aggregateEquipmentDistance,
   aggregateEquipmentPace,
+  buildEquipmentPaceDisplay,
   aggregateEquipmentActivityCount,
   aggregateEquipmentAvgLength,
   aggregateEquipmentTimeline,
@@ -52,6 +53,37 @@ describe('equipment utils', () => {
 
     expect(result[0][0]).toBe('ASICS Novablast 4');
     expect(result[0][1]).toBeCloseTo(5.666, 2);
+  });
+
+  it('keeps weighted unrounded pace, sorting and equipment filters intact', () => {
+    const acts = [
+      { equipment: 'Nike A', distance: 10, duration: 2400 },
+      { equipment: 'Nike A', distance: 5, duration: 1500 },
+      { equipment: 'Asics B', distance: 10, duration: 3600 },
+      { equipment: 'Road A', distance: 40, duration: 3600 },
+      { equipment: 'Road B', distance: 40, duration: 7200 },
+      { equipment: 'Bad', distance: 0, duration: 60 }
+    ];
+    const all = aggregateEquipmentPace(acts);
+    expect(all).toEqual([
+      ['Road A', 1.5], ['Road B', 3], ['Nike A', 13 / 3], ['Asics B', 6]
+    ]);
+    expect(aggregateEquipmentPace(acts, 'Shoes')).toEqual(all.slice(2));
+    expect(aggregateEquipmentPace(acts, 'Bikes')).toEqual(all.slice(0, 2));
+  });
+
+  it('normalizes each type independently with identical speeds producing equal bars', () => {
+    const entries = [['Nike A', 4], ['Asics B', 4], ['Nike C', 6], ['Road A', 1.5], ['Road B', 3]];
+    const result = buildEquipmentPaceDisplay(entries);
+    expect(result.map(r => r.type)).toEqual(['Shoes', 'Shoes', 'Shoes', 'Bikes', 'Bikes']);
+    expect(result.map(r => r.barValue)).toEqual([1, 1, 2 / 3, 1, 0.5]);
+    expect(result[0].speedKmh).toBe(15);
+    expect(result[3].speedKmh).toBe(40);
+    expect(result[0].paceMinPerKm).toBe(4);
+    expect(buildEquipmentPaceDisplay(entries.slice(3))[0].barValue).toBe(1);
+    expect(buildEquipmentPaceDisplay([['Nike A', 4]])[0].barValue).toBe(1);
+    expect(buildEquipmentPaceDisplay([['Nike A', 0], ['Road A', Infinity]])).toEqual([]);
+    expect(buildEquipmentPaceDisplay([['Nike A', Number.MIN_VALUE]])).toEqual([]);
   });
 
   it('ignores activities with blank or empty equipment', () => {

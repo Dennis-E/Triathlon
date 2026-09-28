@@ -93,7 +93,8 @@ function createTrainingCalendarCell(day, palette) {
   const color = day.intensityLevel === 0
     ? TRAINING_CALENDAR_EMPTY_DAY_COLOR
     : window.trainingCalendarUtils.PALETTES[palette][day.intensityLevel - 1];
-  return `<button type="button" class="h-3.5 w-3.5 rounded-sm border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-400" style="background-color:${color}" aria-label="${label}" data-date-key="${day.dateKey}" onmouseenter="showTrainingCalendarDayTooltipByKey('${day.dateKey}', this)" onmouseleave="closeTrainingCalendarTooltip()" onfocus="showTrainingCalendarDayTooltipByKey('${day.dateKey}', this)" onblur="closeTrainingCalendarTooltip()"></button>`;
+  const borderClass = day.activityCount ? 'border border-slate-300' : 'border-0';
+  return `<button type="button" class="h-3.5 w-3.5 rounded-sm ${borderClass} focus:outline-none focus:ring-2 focus:ring-indigo-400" style="background-color:${color}" aria-label="${label}" data-date-key="${day.dateKey}" onmouseenter="showTrainingCalendarDayTooltipByKey('${day.dateKey}', this)" onmouseleave="closeTrainingCalendarTooltip()" onfocus="showTrainingCalendarDayTooltipByKey('${day.dateKey}', this)" onblur="closeTrainingCalendarTooltip()"></button>`;
 }
 
 function renderTrainingCalendarGrid(yearModel, grid) {

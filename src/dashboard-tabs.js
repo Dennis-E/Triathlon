@@ -3,6 +3,88 @@
     // Deferred so all `let` state declarations below (e.g. leafletLoadPromise) have run first
     setTimeout(renderHeatmapPreviewMap, 0);
 
+    function updateVisualizationTabScrollControls() {
+      const viewport = document.getElementById('visualizationTabsViewport');
+      const tablist = viewport && viewport.querySelector('[role="tablist"]');
+      const leftButton = document.getElementById('visualizationTabsScrollLeft');
+      const rightButton = document.getElementById('visualizationTabsScrollRight');
+      if (!viewport || !tablist || !leftButton || !rightButton) return;
+
+      const hasOverflow = viewport.scrollWidth > viewport.clientWidth + 1;
+      if (!hasOverflow && viewport.scrollLeft !== 0) viewport.scrollLeft = 0;
+
+      const tabs = Array.from(tablist.children);
+      const viewportBounds = viewport.getBoundingClientRect();
+      const firstTabBounds = tabs[0] && tabs[0].getBoundingClientRect();
+      const lastTabBounds = tabs[tabs.length - 1] && tabs[tabs.length - 1].getBoundingClientRect();
+      const canScrollLeft = hasOverflow && firstTabBounds && firstTabBounds.left < viewportBounds.left - 1;
+      const canScrollRight = hasOverflow && lastTabBounds && lastTabBounds.right > viewportBounds.right + 1;
+      leftButton.classList.toggle('invisible', !canScrollLeft);
+      leftButton.classList.toggle('pointer-events-none', !canScrollLeft);
+      rightButton.classList.toggle('invisible', !canScrollRight);
+      rightButton.classList.toggle('pointer-events-none', !canScrollRight);
+      leftButton.disabled = !canScrollLeft;
+      rightButton.disabled = !canScrollRight;
+    }
+
+    function scrollVisualizationTabs(direction) {
+      const viewport = document.getElementById('visualizationTabsViewport');
+      const tablist = viewport && viewport.querySelector('[role="tablist"]');
+      if (!viewport || !tablist) return;
+
+      const viewportBounds = viewport.getBoundingClientRect();
+      const tabBounds = Array.from(tablist.children, tab => {
+        const bounds = tab.getBoundingClientRect();
+        return { left: bounds.left, right: bounds.right };
+      });
+      const maxScrollOffset = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+      const nextOffset = window.dashboardTabNavigation.getNextClippedTabScrollOffset(
+        tabBounds,
+        { left: viewportBounds.left, right: viewportBounds.right },
+        viewport.scrollLeft,
+        maxScrollOffset,
+        direction
+      );
+
+      if (nextOffset !== null) viewport.scrollTo({ left: nextOffset, behavior: 'auto' });
+      updateVisualizationTabScrollControls();
+    }
+
+    function ensureVisualizationTabVisible(tabName) {
+      const viewport = document.getElementById('visualizationTabsViewport');
+      const tabId = window.dashboardTabNavigation.TAB_BUTTON_IDS[tabName];
+      const tab = tabId && document.getElementById(tabId);
+      if (!viewport || !tab) return;
+
+      const viewportBounds = viewport.getBoundingClientRect();
+      const tabBounds = tab.getBoundingClientRect();
+      if (tabBounds.left < viewportBounds.left) {
+        viewport.scrollLeft = Math.max(0, viewport.scrollLeft + tabBounds.left - viewportBounds.left);
+      } else if (tabBounds.right > viewportBounds.right) {
+        viewport.scrollLeft += tabBounds.right - viewportBounds.right;
+      }
+      updateVisualizationTabScrollControls();
+    }
+
+    function initializeVisualizationTabScroller() {
+      const viewport = document.getElementById('visualizationTabsViewport');
+      const tablist = viewport && viewport.querySelector('[role="tablist"]');
+      const leftButton = document.getElementById('visualizationTabsScrollLeft');
+      const rightButton = document.getElementById('visualizationTabsScrollRight');
+      if (!viewport || !tablist || !leftButton || !rightButton) return;
+
+      leftButton.addEventListener('click', () => scrollVisualizationTabs(-1));
+      rightButton.addEventListener('click', () => scrollVisualizationTabs(1));
+      viewport.addEventListener('scroll', updateVisualizationTabScrollControls, { passive: true });
+      window.addEventListener('resize', updateVisualizationTabScrollControls);
+      if (typeof ResizeObserver !== 'undefined') {
+        const resizeObserver = new ResizeObserver(updateVisualizationTabScrollControls);
+        resizeObserver.observe(viewport);
+        resizeObserver.observe(tablist);
+      }
+      updateVisualizationTabScrollControls();
+    }
+
     function setVisualizationTab(tabName, options = {}) {
       const nextTab = window.dashboardTabNavigation.setVisualizationTab(tabName, options);
       if (nextTab) {
@@ -24,6 +106,7 @@
         } else if (nextTab === 'trainingCalendar') {
           renderTrainingCalendar();
         }
+        ensureVisualizationTabVisible(nextTab);
       }
     }
 
@@ -138,4 +221,5 @@
       if (event.target.id === 'exportPreviewModal') closeExportPreviewModal();
     });
 
+    initializeVisualizationTabScroller();
     setVisualizationTab(selectedVisualizationTab);

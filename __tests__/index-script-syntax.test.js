@@ -89,6 +89,27 @@ describe('index.html inline script syntax', () => {
     expect(inlineCode).toContain('renderTrainingCalendar();');
   });
 
+  it('wraps visualization tabs with accessible sibling scroll controls', () => {
+    const leftButtonIndex = html.indexOf('id="visualizationTabsScrollLeft"');
+    const viewportIndex = html.indexOf('id="visualizationTabsViewport"');
+    const tablistIndex = html.indexOf('role="tablist" aria-label="Visualization tabs"');
+    const rightButtonIndex = html.indexOf('id="visualizationTabsScrollRight"');
+
+    expect(leftButtonIndex).toBeGreaterThan(-1);
+    expect(leftButtonIndex).toBeLessThan(viewportIndex);
+    expect(viewportIndex).toBeLessThan(tablistIndex);
+    expect(tablistIndex).toBeLessThan(rightButtonIndex);
+    expect(html).toContain('aria-label="Scroll visualization tabs left"');
+    expect(html).toContain('aria-label="Scroll visualization tabs right"');
+    expect(html).toContain('class="invisible pointer-events-none shrink-0');
+    expect(html).toContain('&lt;&lt;');
+    expect(html).toContain('&gt;&gt;');
+    expect(html).toContain('id="vizTabWorkoutTime"');
+    expect(html).toContain('id="vizTabTrainingCalendar"');
+    expect(html).toContain("onclick=\"setVisualizationTab('workoutTime')\"");
+    expect(html).toContain("onkeydown=\"handleVisualizationTabKeydown(event, 'trainingCalendar')\"");
+  });
+
   it('wires the Pace vs Metrics tab and renderer', () => {
     expect(html).toContain('id="vizTabPaceMetrics"');
     expect(html).toContain('id="vizPanelPaceMetrics"');

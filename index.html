@@ -69,6 +69,15 @@
       background: #64748b;
     }
 
+    #visualizationTabsViewport {
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    #visualizationTabsViewport::-webkit-scrollbar {
+      display: none;
+    }
+
     .dual-range input[type="range"] {
       -webkit-appearance: none;
       appearance: none;
@@ -698,7 +707,16 @@
 
       <!-- Visualization Tabs -->
       <div class="border-b border-slate-800 pb-4">
-        <div role="tablist" aria-label="Visualization tabs" class="inline-flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+        <div id="visualizationTabsScroller" class="flex w-full min-w-0 items-center gap-2">
+          <button
+            id="visualizationTabsScrollLeft"
+            type="button"
+            aria-label="Scroll visualization tabs left"
+            aria-controls="visualizationTabsViewport"
+            class="invisible pointer-events-none shrink-0 rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >&lt;&lt;</button>
+          <div id="visualizationTabsViewport" class="min-w-0 flex-1 overflow-x-auto overscroll-x-contain">
+          <div role="tablist" aria-label="Visualization tabs" class="inline-flex w-max whitespace-nowrap rounded-xl border border-slate-800 bg-slate-950 p-1.5 shadow-inner">
           <button
             id="vizTabTotalDistance"
             type="button"
@@ -708,7 +726,7 @@
             tabindex="0"
             onclick="setVisualizationTab('totalDistance')"
             onkeydown="handleVisualizationTabKeydown(event, 'totalDistance')"
-            class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25"
+            class="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25"
           >
             Total distance
           </button>
@@ -721,7 +739,7 @@
             tabindex="-1"
             onclick="setVisualizationTab('paceMetrics')"
             onkeydown="handleVisualizationTabKeydown(event, 'paceMetrics')"
-            class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
+            class="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
           >
             Pace vs ...
           </button>
@@ -734,7 +752,7 @@
             tabindex="-1"
             onclick="setVisualizationTab('equipment')"
             onkeydown="handleVisualizationTabKeydown(event, 'equipment')"
-            class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
+            class="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
           >
             Equipment
           </button>
@@ -747,7 +765,7 @@
             tabindex="-1"
             onclick="setVisualizationTab('equipmentTimeline')"
             onkeydown="handleVisualizationTabKeydown(event, 'equipmentTimeline')"
-            class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
+            class="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
           >
             Equipment Timeline
           </button>
@@ -760,7 +778,7 @@
             tabindex="-1"
             onclick="setVisualizationTab('personalBests')"
             onkeydown="handleVisualizationTabKeydown(event, 'personalBests')"
-            class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
+            class="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
           >
             Personal Bests
           </button>
@@ -773,7 +791,7 @@
             tabindex="-1"
             onclick="setVisualizationTab('heatmap')"
             onkeydown="handleVisualizationTabKeydown(event, 'heatmap')"
-            class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
+            class="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
           >
             Heatmap
           </button>
@@ -786,7 +804,7 @@
             tabindex="-1"
             onclick="setVisualizationTab('distributions')"
             onkeydown="handleVisualizationTabKeydown(event, 'distributions')"
-            class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
+            class="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
           >
             Distributions
           </button>
@@ -799,7 +817,7 @@
             tabindex="-1"
             onclick="setVisualizationTab('workoutTime')"
             onkeydown="handleVisualizationTabKeydown(event, 'workoutTime')"
-            class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
+            class="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
           >
             Workout Time
           </button>
@@ -812,13 +830,22 @@
             tabindex="-1"
             onclick="setVisualizationTab('trainingCalendar')"
             onkeydown="handleVisualizationTabKeydown(event, 'trainingCalendar')"
-            class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
+            class="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
           >
             Training Calendar
           </button>
+          </div>
+          </div>
+          <button
+            id="visualizationTabsScrollRight"
+            type="button"
+            aria-label="Scroll visualization tabs right"
+            aria-controls="visualizationTabsViewport"
+            class="invisible pointer-events-none shrink-0 rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >&gt;&gt;</button>
         </div>
       </div>
-      
+
       <div id="vizPanelTotalDistance" role="tabpanel" aria-labelledby="vizTabTotalDistance">
         <!-- Chart Controls Header -->
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">

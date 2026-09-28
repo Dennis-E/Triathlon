@@ -34,6 +34,45 @@ function getNextVisualizationTab(currentTab, direction) {
   return TAB_ORDER[nextIndex];
 }
 
+function getNextClippedTabScrollOffset(tabBounds, viewportBounds, currentScrollOffset, maxScrollOffset, direction) {
+  const tolerance = 0.5;
+  const numericValues = [
+    viewportBounds && viewportBounds.left,
+    viewportBounds && viewportBounds.right,
+    currentScrollOffset,
+    maxScrollOffset
+  ];
+  if (!Array.isArray(tabBounds) || !viewportBounds ||
+      !numericValues.every(Number.isFinite) || (direction !== -1 && direction !== 1)) {
+    return null;
+  }
+
+  const maxOffset = Math.max(0, maxScrollOffset);
+  const scrollOffset = Math.min(maxOffset, Math.max(0, currentScrollOffset));
+  let targetBounds = null;
+
+  if (direction > 0) {
+    targetBounds = tabBounds.find(bounds => bounds && Number.isFinite(bounds.right) && bounds.right > viewportBounds.right + tolerance);
+    if (!targetBounds) return null;
+    const movement = targetBounds.right - viewportBounds.right;
+    const nextOffset = Math.min(maxOffset, scrollOffset + movement);
+    return nextOffset > scrollOffset + tolerance ? nextOffset : null;
+  }
+
+  for (let index = tabBounds.length - 1; index >= 0; index -= 1) {
+    const bounds = tabBounds[index];
+    if (bounds && Number.isFinite(bounds.left) && bounds.left < viewportBounds.left - tolerance) {
+      targetBounds = bounds;
+      break;
+    }
+  }
+  if (!targetBounds) return null;
+
+  const movement = targetBounds.left - viewportBounds.left;
+  const nextOffset = Math.max(0, scrollOffset + movement);
+  return nextOffset < scrollOffset - tolerance ? nextOffset : null;
+}
+
 function setVisualizationTab(tabName, options = {}) {
   if (!TAB_ORDER.includes(tabName)) return null;
 
@@ -139,7 +178,6 @@ function handleVisualizationTabKeydown(event, currentTab, options = {}) {
   let direction = 0;
   if (event.key === 'ArrowRight') direction = 1;
   if (event.key === 'ArrowLeft') direction = -1;
-  if (event.key === 'Tab') direction = event.shiftKey ? -1 : 1;
 
   if (direction === 0) return null;
 
@@ -158,7 +196,9 @@ function handleVisualizationTabKeydown(event, currentTab, options = {}) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     TAB_ORDER,
+    TAB_BUTTON_IDS,
     getNextVisualizationTab,
+    getNextClippedTabScrollOffset,
     setVisualizationTab,
     handleVisualizationTabKeydown
   };
@@ -167,7 +207,9 @@ if (typeof module !== 'undefined' && module.exports) {
 if (typeof window !== 'undefined') {
   window.dashboardTabNavigation = {
     TAB_ORDER,
+    TAB_BUTTON_IDS,
     getNextVisualizationTab,
+    getNextClippedTabScrollOffset,
     setVisualizationTab,
     handleVisualizationTabKeydown
   };

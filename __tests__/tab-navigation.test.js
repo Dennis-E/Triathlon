@@ -1,5 +1,6 @@
 const {
   getNextVisualizationTab,
+  getNextClippedTabScrollOffset,
   setVisualizationTab,
   handleVisualizationTabKeydown
 } = require('../src/tab-navigation');
@@ -66,6 +67,49 @@ function createMockDocument() {
 }
 
 describe('tab navigation helpers', () => {
+  describe('getNextClippedTabScrollOffset', () => {
+    it('reveals the nearest partially clipped tab on the right without skipping', () => {
+      const nextOffset = getNextClippedTabScrollOffset(
+        [{ left: 0, right: 60 }, { left: 64, right: 160 }, { left: 164, right: 240 }],
+        { left: 0, right: 150 },
+        0,
+        90,
+        1
+      );
+
+      expect(nextOffset).toBe(10);
+    });
+
+    it('reveals the nearest clipped tab on the left using the minimum movement', () => {
+      const nextOffset = getNextClippedTabScrollOffset(
+        [{ left: -12, right: 48 }, { left: 52, right: 112 }, { left: 116, right: 176 }],
+        { left: 0, right: 150 },
+        52,
+        100,
+        -1
+      );
+
+      expect(nextOffset).toBe(40);
+    });
+
+    it('clamps movement to the available scroll boundaries', () => {
+      expect(getNextClippedTabScrollOffset(
+        [{ left: 130, right: 180 }], { left: 0, right: 150 }, 45, 50, 1
+      )).toBe(50);
+      expect(getNextClippedTabScrollOffset(
+        [{ left: -20, right: 30 }], { left: 0, right: 150 }, 10, 50, -1
+      )).toBe(0);
+    });
+
+    it('returns null when no tab is clipped in the requested direction', () => {
+      const tabs = [{ left: 0, right: 60 }, { left: 64, right: 140 }];
+      const viewport = { left: 0, right: 150 };
+
+      expect(getNextClippedTabScrollOffset(tabs, viewport, 0, 0, 1)).toBeNull();
+      expect(getNextClippedTabScrollOffset(tabs, viewport, 0, 0, -1)).toBeNull();
+    });
+  });
+
   it('cycles to next and previous tabs', () => {
     expect(getNextVisualizationTab('totalDistance', 1)).toBe('paceMetrics');
     expect(getNextVisualizationTab('paceMetrics', 1)).toBe('equipment');
@@ -110,7 +154,7 @@ describe('tab navigation helpers', () => {
     expect(onTabChange).toHaveBeenCalledWith('paceMetrics', { focusTab: true });
   });
 
-  it('handles Shift+Tab and requests previous tab', () => {
+  it('allows Shift+Tab to leave the tablist through normal focus order', () => {
     const event = {
       key: 'Tab',
       shiftKey: true,
@@ -120,9 +164,22 @@ describe('tab navigation helpers', () => {
 
     const nextTab = handleVisualizationTabKeydown(event, 'totalDistance', { onTabChange });
 
-    expect(nextTab).toBe('trainingCalendar');
-    expect(event.preventDefault).toHaveBeenCalledTimes(1);
-    expect(onTabChange).toHaveBeenCalledWith('trainingCalendar', { focusTab: true });
+    expect(nextTab).toBeNull();
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(onTabChange).not.toHaveBeenCalled();
+  });
+
+  it('allows Tab to reach the directional controls after the tablist', () => {
+    const event = {
+      key: 'Tab',
+      shiftKey: false,
+      preventDefault: jest.fn()
+    };
+    const onTabChange = jest.fn();
+
+    expect(handleVisualizationTabKeydown(event, 'totalDistance', { onTabChange })).toBeNull();
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(onTabChange).not.toHaveBeenCalled();
   });
 
   it('cycles from distributions to Workout Time', () => {

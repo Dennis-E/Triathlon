@@ -237,6 +237,60 @@ describe('index.html inline script syntax', () => {
     expect(inlineCode).toContain('limited-profile');
   });
 
+  it('renders the all-time power detail chart from duration categories, not activity dates', () => {
+    expect(inlineCode).toContain("xAxisMode: 'duration-category'");
+    expect(inlineCode).toContain('record.durationSeconds');
+    expect(inlineCode).toContain('record.durationLabel');
+    expect(inlineCode).toContain('model.xAxisMode === \'duration-category\'');
+    expect(inlineCode).toContain('new Map(records.map((record, index) => [record.durationSeconds, index]))');
+    expect(inlineCode).toContain('durationLabel');
+    expect(inlineCode).toContain("label.textContent = timeTicks.showMonth");
+    expect(inlineCode).toContain("records: profilePoints.map(point => ({ durationSeconds: point.durationSeconds, durationLabel: point.durationLabel, date: point.date, value: point.watts, title: point.title || 'Activity', record: point.record }))");
+    expect(inlineCode).toContain("measurementHit.setAttribute('class', 'profile-measurement-hit-area')");
+    expect(inlineCode).toContain("showPowerPbTooltip(e, point.record, 1, 1, color, point.durationLabel)");
+    expect(inlineCode).toContain("class: 'profile-measurement-hit-area'");
+    expect(inlineCode).toContain("'stroke-width': 24");
+    expect(inlineCode).toContain('showDurationProfileTooltip(event, record)');
+    expect(inlineCode).not.toContain("svg.setAttribute('preserveAspectRatio', 'none')");
+  });
+
+  it('renders the all-time power profile tile with the shared mini-chart style', () => {
+    expect(inlineCode).toContain("profileSvg.setAttribute('viewBox', '0 0 ' + VB_W + ' ' + SVG_H)");
+    expect(inlineCode).toContain("profileSvg.setAttribute('preserveAspectRatio', 'xMidYMid meet')");
+    expect(inlineCode).toContain("profileBlock.className = 'bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-1.5'");
+    expect(inlineCode).toContain("profilePoints.length + ' durations'");
+    expect(inlineCode).toContain("measurementLine.setAttribute('y2', X_AXIS_Y)");
+    expect(inlineCode).toContain("appendYAxisLabel(profileSvg, X_AXIS_Y - 1, '0 W', false)");
+    expect(inlineCode).not.toContain('const height = 148;');
+    expect(inlineCode).not.toContain("xLabel.textContent = 'Duration'");
+    expect(inlineCode).not.toContain("yLabel.textContent = 'Power (W)'");
+  });
+
+  it('lays out PB blocks as a strict desktop row grid', () => {
+    expect((html.match(/class="pb-row-block /g) || []).length).toBe(3);
+    expect(html).toContain('data-pb-col="1"');
+    expect(html).toContain('data-pb-col="2"');
+    expect(html).toContain('data-pb-col="3"');
+    expect(html).toContain('lg:space-y-0 lg:contents');
+    expect(html).not.toContain('lg:col-start-3 space-y-2');
+    expect(html).not.toContain('lg:col-start-1 space-y-2');
+    expect(html).toContain('grid-row: var(--pb-row, 1)');
+    expect(html).toContain('pb-grid-item text-xs italic text-slate-600">Not applicable for swimming.');
+    expect(inlineCode).toContain('function assignPbGridRows(');
+    expect(inlineCode).toContain("'--pb-row'");
+    expect(inlineCode).not.toContain('assignPbGridRows(\'pbBikePowerContainer\')');
+  });
+
+  it('keeps the mobile PB stacking order and sport labels', () => {
+    ['Run', 'Bike', 'Swim'].forEach(sport => {
+      expect(html).toMatch(new RegExp('data-pb-mobile-sport="' + sport + '" class="lg:hidden'));
+    });
+    expect(html).toContain('order-1 lg:order-none lg:contents');
+    expect(html).toContain('order-2 lg:order-none lg:contents');
+    expect(html).toContain('order-3 lg:order-none lg:contents');
+    expect(html).not.toMatch(/class="[^"]*(?<!lg:)\bcontents\b/);
+  });
+
   it('identifies duration-specific power effort details', () => {
     expect(inlineCode).toContain("Source: duration-specific effort");
     expect(inlineCode).toContain("ttPace.textContent = 'Power: ' + Math.round(pb.watts) + ' W'");
@@ -247,7 +301,8 @@ describe('index.html inline script syntax', () => {
     expect(inlineCode).toContain('window.powerPbUtils.markPowerProfileLabelVisibility(profilePoints)');
     expect(inlineCode).toContain("showPowerPbTooltip(e, point.record, 1, 1, color, point.durationLabel)");
     expect(inlineCode).toContain('hit.addEventListener(\'mousemove\', movePbTooltip)');
-    expect(inlineCode).toContain('hit.addEventListener(\'mouseleave\', hidePbTooltip)');
+    expect(inlineCode).toContain('measurementHit.addEventListener(\'mouseleave\'');
+    expect(inlineCode).toContain("hit.addEventListener('mouseleave', function(e)");
     expect(inlineCode).toContain('if (point.showLabel) {');
   });
 
@@ -293,8 +348,26 @@ describe('index.html inline script syntax', () => {
 
   it('uses one opaque sticky sport header without a grid gap below it', () => {
     const panel = html.match(/<div id="vizPanelPersonalBests"[\s\S]*?<div id="pbEmptyState"/)[0];
-    expect((panel.match(/sticky -top-6/g) || [])).toHaveLength(1);
-    expect(panel).toContain('sticky -top-6 z-20 col-span-full -mb-3 grid grid-cols-3');
+    expect((panel.match(/lg:sticky/g) || [])).toHaveLength(1);
+    expect(panel).toContain('id="pbSportHeaderDesktop" class="hidden lg:sticky');
+    expect(panel).toContain('lg:col-span-full lg:-mb-3 lg:grid lg:grid-cols-3');
+    expect(panel).toContain('data-pb-mobile-sport="Run"');
+    expect(panel).toContain('data-pb-mobile-sport="Bike"');
+    expect(panel).toContain('data-pb-mobile-sport="Swim"');
+    expect(panel).toContain('order-1 lg:order-none');
+    expect(panel).toContain('order-2 lg:order-none');
+    expect(panel).toContain('order-3 lg:order-none');
+    const mobileSportHeadingCount = (panel.match(/data-pb-mobile-sport="(?:Run|Bike|Swim)" class="(?:hidden )?lg:hidden/g) || []).length;
+    expect(mobileSportHeadingCount).toBeGreaterThanOrEqual(10);
+    expect(panel).toContain('id="pbBikePowerMobileHeading"');
+    expect(inlineCode).toContain("if (mobileHeading) mobileHeading.classList.add('hidden')");
+    expect(inlineCode).toContain("if (mobileHeading) mobileHeading.classList.remove('hidden')");
+  });
+
+  it('describes Personal Best progression beyond distance on the landing card', () => {
+    const card = html.match(/id="previewCard-personalBests"[\s\S]*?<\/button>/)[0];
+    expect(card).toMatch(/PB progression across multiple records and metrics/i);
+    expect(card).not.toContain('PB progression per distance across all three sports');
   });
 
   it('provides a per-tile full screen detail overlay', () => {

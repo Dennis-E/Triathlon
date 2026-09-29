@@ -254,6 +254,46 @@
       const svg = document.getElementById('pbDetailChart');
       if (!svg || !model) return;
       svg.innerHTML = '';
+      const tooltip = document.getElementById('pbTooltip');
+      const ttTitle = document.getElementById('pbTooltipTitle');
+      const ttDate = document.getElementById('pbTooltipDate');
+      const ttTime = document.getElementById('pbTooltipTime');
+      const ttDist = document.getElementById('pbTooltipDist');
+      const ttPace = document.getElementById('pbTooltipPace');
+      const ttWatts = document.getElementById('pbTooltipWatts');
+      const ttRank = document.getElementById('pbTooltipRank');
+
+      function moveDetailTooltip(event) {
+        const tooltipHeight = tooltip.offsetHeight || 120;
+        let left = event.clientX + 14;
+        if (left + 230 > window.innerWidth) left = event.clientX - 236;
+        const top = Math.max(8, Math.min(event.clientY, window.innerHeight - tooltipHeight - 8));
+        tooltip.style.left = left + 'px';
+        tooltip.style.top = top + 'px';
+      }
+
+      function hideDetailTooltip() {
+        tooltip.classList.add('hidden');
+      }
+
+      function showDurationProfileTooltip(event, record) {
+        const pb = record.record || record;
+        ttTitle.textContent = pb.name || record.title || 'Activity';
+        ttTitle.style.color = model.color;
+        ttDate.textContent = pb.date.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' });
+        const seconds = Number.isFinite(pb.targetSeconds) ? pb.targetSeconds : (pb.duration || record.durationSeconds);
+        ttTime.textContent = 'Duration: ' + formatDurationHms(seconds);
+        ttDist.textContent = Number.isFinite(pb.intervalStartKm) && Number.isFinite(pb.intervalEndKm)
+          ? 'Window: ' + pb.intervalStartKm.toFixed(2) + ' km to ' + pb.intervalEndKm.toFixed(2) + ' km'
+          : 'Window: n/a';
+        ttPace.textContent = 'Power: ' + Math.round(pb.watts || record.value) + ' W';
+        ttWatts.classList.remove('hidden');
+        ttWatts.textContent = 'Source: duration-specific effort';
+        ttRank.textContent = (record.durationLabel ? record.durationLabel + ' - ' : '') + 'Current PB';
+        tooltip.classList.remove('hidden');
+        moveDetailTooltip(event);
+      }
+
       const records = model.records;
       const W = 1200;
       const H = 680;
@@ -263,13 +303,23 @@
       const bottom = 82;
       const plotW = W - left - right;
       const plotH = H - top - bottom;
-      const times = records.map(record => record.date.getTime());
-      const rawStart = Math.min(...times);
-      const rawEnd = Math.max(...times);
-      const rawSpan = Math.max(rawEnd - rawStart, 86400000);
-      const start = rawStart - rawSpan * 0.035;
-      const end = rawEnd + rawSpan * 0.035;
-      const xFor = date => left + ((date.getTime() - start) / (end - start)) * plotW;
+      const durationProfile = model.xAxisMode === 'duration-category';
+      let start = 0;
+      let end = 1;
+      let xForRecord;
+      if (durationProfile) {
+        const durationIndexes = new Map(records.map((record, index) => [record.durationSeconds, index]));
+        const lastIndex = Math.max(1, records.length - 1);
+        xForRecord = record => left + (durationIndexes.get(record.durationSeconds) / lastIndex) * plotW;
+      } else {
+        const times = records.map(record => record.date.getTime());
+        const rawStart = Math.min(...times);
+        const rawEnd = Math.max(...times);
+        const rawSpan = Math.max(rawEnd - rawStart, 86400000);
+        start = rawStart - rawSpan * 0.035;
+        end = rawEnd + rawSpan * 0.035;
+        xForRecord = record => left + ((record.date.getTime() - start) / (end - start)) * plotW;
+      }
       const values = records.map(record => record.value);
       const valueMin = model.direction === 'down' ? Math.min(...values) * 0.9 : 0;
       const valueMax = Math.max(...values) * 1.08;
@@ -288,26 +338,75 @@
       yTitle.textContent = model.axisLabel;
       svg.appendChild(yTitle);
 
-      const timeTicks = getDetailTimeTicks(start, end);
-      timeTicks.ticks.forEach(date => {
-        const x = xFor(date);
-        svg.appendChild(createSvgElement('line', { x1: x, y1: top, x2: x, y2: H - bottom, stroke: '#172033', 'stroke-width': 1 }));
-        const label = createSvgElement('text', { x, y: H - bottom + 28, 'text-anchor': 'middle', 'font-size': 13, fill: '#CBD5E1' });
-        label.textContent = timeTicks.showMonth
-          ? date.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })
-          : String(date.getFullYear());
-        svg.appendChild(label);
-      });
+      if (durationProfile) {
+        records.forEach(record => {
+          const x = xForRecord(record);
+          svg.appendChild(createSvgElement('line', { x1: x, y1: top, x2: x, y2: H - bottom, stroke: '#172033', 'stroke-width': 1 }));
+          const label = createSvgElement('text', { x, y: H - bottom + 28, 'text-anchor': 'middle', 'font-size': 13, fill: '#CBD5E1' });
+          label.textContent = record.durationLabel;
+          svg.appendChild(label);
+        });
+      } else {
+        const timeTicks = getDetailTimeTicks(start, end);
+        timeTicks.ticks.forEach(date => {
+          const x = left + ((date.getTime() - start) / (end - start)) * plotW;
+          svg.appendChild(createSvgElement('line', { x1: x, y1: top, x2: x, y2: H - bottom, stroke: '#172033', 'stroke-width': 1 }));
+          const label = createSvgElement('text', { x, y: H - bottom + 28, 'text-anchor': 'middle', 'font-size': 13, fill: '#CBD5E1' });
+          label.textContent = timeTicks.showMonth
+            ? date.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })
+            : String(date.getFullYear());
+          svg.appendChild(label);
+        });
+      }
 
       svg.appendChild(createSvgElement('line', { x1: left, y1: top, x2: left, y2: H - bottom, stroke: '#475569', 'stroke-width': 1.5 }));
       svg.appendChild(createSvgElement('line', { x1: left, y1: H - bottom, x2: W - right, y2: H - bottom, stroke: '#475569', 'stroke-width': 1.5 }));
 
-      const points = records.map(record => `${xFor(record.date).toFixed(2)},${yFor(record.value).toFixed(2)}`).join(' ');
+      const points = records.map(record => `${xForRecord(record).toFixed(2)},${yFor(record.value).toFixed(2)}`).join(' ');
+      if (durationProfile) {
+        records.forEach(record => {
+          const x = xForRecord(record);
+          svg.appendChild(createSvgElement('line', {
+            x1: x,
+            y1: yFor(record.value),
+            x2: x,
+            y2: H - bottom,
+            stroke: model.color,
+            'stroke-width': 3,
+            'stroke-opacity': 0.7,
+            'pointer-events': 'none'
+          }));
+        });
+      }
+      if (durationProfile) {
+        records.forEach(record => {
+          const x = xForRecord(record);
+          const hit = createSvgElement('line', {
+            x1: x,
+            y1: top,
+            x2: x,
+            y2: H - bottom,
+            stroke: 'transparent',
+            'stroke-width': 24,
+            'pointer-events': 'stroke',
+            class: 'profile-measurement-hit-area'
+          });
+          hit.style.cursor = 'pointer';
+          hit.addEventListener('mouseenter', event => {
+            showDurationProfileTooltip(event, record);
+          });
+          hit.addEventListener('mousemove', moveDetailTooltip);
+          hit.addEventListener('mouseleave', event => {
+            if (!event.relatedTarget || !event.relatedTarget.closest || !event.relatedTarget.closest('.profile-measurement-hit-area')) hideDetailTooltip();
+          });
+          svg.appendChild(hit);
+        });
+      }
       svg.appendChild(createSvgElement('polyline', { points, fill: 'none', stroke: model.color, 'stroke-width': 3, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
 
       const occupied = [];
       const labelLayouts = records.map((record, index) => {
-        const x = xFor(record.date);
+        const x = xForRecord(record);
         const y = yFor(record.value);
         const labelText = model.formatValue(record.value);
         const titleLines = wrapPbActivityTitle(record.title);
@@ -539,6 +638,15 @@
         label.style.pointerEvents = 'none';
         label.textContent = text;
         svg.appendChild(label);
+      }
+
+      function assignPbGridRows(containerOrId) {
+        const container = typeof containerOrId === 'string' ? document.getElementById(containerOrId) : containerOrId;
+        if (!container) return;
+        Array.from(container.children).forEach(function(child, index) {
+          child.classList.add('pb-grid-item');
+          child.style.setProperty('--pb-row', String(index + 1));
+        });
       }
 
       function appendPbDetailButton(header, model, tileElement) {
@@ -1005,6 +1113,7 @@
           empty.textContent = 'No matching activities found for this sport.';
           container.appendChild(empty);
         }
+        assignPbGridRows(container);
       });
 
       renderRecordCard('pbSwimLongestContainer', 'Longest swim', 'Swim', 'Distance', a => a.distance, value => value.toFixed(2) + ' km');
@@ -1012,14 +1121,17 @@
       renderRecordCard('pbBikeElevationContainer', 'Most elevation (Bike)', 'Bike', 'Elevation', a => a.elevationGain, value => Math.round(value) + ' m');
       renderRecordCard('pbRunLongestContainer', 'Longest run', 'Run', 'Distance', a => a.distance, value => value.toFixed(2) + ' km');
       renderRecordCard('pbBikeLongestContainer', 'Longest bike', 'Bike', 'Distance', a => a.distance, value => value.toFixed(2) + ' km');
+      ['pbSwimLongestContainer', 'pbRunElevationContainer', 'pbBikeElevationContainer', 'pbRunLongestContainer', 'pbBikeLongestContainer'].forEach(assignPbGridRows);
 
       function renderBikePowerSection() {
         const container = document.getElementById('pbBikePowerContainer');
         if (!container) return;
         container.innerHTML = '';
         const heading = document.getElementById('pbBikePowerHeading');
+        const mobileHeading = document.getElementById('pbBikePowerMobileHeading');
         const divider = document.getElementById('pbBikePowerDivider');
         if (heading) heading.classList.add('hidden');
+        if (mobileHeading) mobileHeading.classList.add('hidden');
         if (divider) divider.classList.add('hidden');
         const color = PB_SPORT_COLOR.Bike;
         const durationRecords = [];
@@ -1070,7 +1182,7 @@
         })));
         if (profilePoints.length >= 2) {
           const profileBlock = document.createElement('div');
-          profileBlock.className = 'bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2';
+          profileBlock.className = 'bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-1.5';
           const profileHeader = document.createElement('div');
           profileHeader.className = 'flex items-center';
           const profileTitle = document.createElement('span');
@@ -1080,91 +1192,119 @@
           appendPbDetailButton(profileHeader, {
             title: 'Bike power all-time profile',
             exportKey: 'Bike-power-all-time-profile',
+            xAxisMode: 'duration-category',
             axisLabel: 'Power (W)',
             color,
             direction: 'up',
             formatValue: value => Math.round(value) + ' W',
-            records: profilePoints.map(point => ({ date: point.date, value: point.watts, title: point.title || 'Activity' }))
+            records: profilePoints.map(point => ({ durationSeconds: point.durationSeconds, durationLabel: point.durationLabel, date: point.date, value: point.watts, title: point.title || 'Activity', record: point.record }))
           }, profileBlock);
           profileBlock.appendChild(profileHeader);
 
-          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-          const width = 320;
-          const height = 150;
-          const left = 38;
-          const right = 10;
-          const top = 12;
-          const bottom = 30;
-          const minDuration = profilePoints[0].durationSeconds;
-          const maxDuration = profilePoints[profilePoints.length - 1].durationSeconds;
+          const profileSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
           const wattRange = window.powerPbUtils.getPowerProfileWattRange(profilePoints);
           const maxWatts = Math.max(wattRange.max || 1, 1);
           const labeledPoints = window.powerPbUtils.markPowerProfileLabelVisibility(profilePoints);
-          const xFor = seconds => left + ((seconds - minDuration) / Math.max(1, maxDuration - minDuration)) * (width - left - right);
-          const yFor = watts => top + (1 - watts / maxWatts) * (height - top - bottom);
-          svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
-          svg.setAttribute('width', '100%');
-          svg.setAttribute('height', String(height));
-          svg.setAttribute('role', 'img');
-          svg.setAttribute('aria-label', 'Power (W) by duration');
+          const durationIndexes = new Map(profilePoints.map((point, index) => [point.durationSeconds, index]));
+          const lastIndex = Math.max(1, profilePoints.length - 1);
+          // Inset keeps the first/last duration labels inside the tile.
+          const xStart = PAD_L + 12;
+          const xEnd = VB_W - PAD_R - 12;
+          const xFor = seconds => xStart + ((durationIndexes.get(seconds) || 0) / lastIndex) * (xEnd - xStart);
+          const yFor = watts => X_AXIS_Y - (watts / maxWatts) * (X_AXIS_Y - CHART_TOP - 2);
+          profileSvg.setAttribute('viewBox', '0 0 ' + VB_W + ' ' + SVG_H);
+          profileSvg.setAttribute('width', '100%');
+          profileSvg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+          profileSvg.style.display = 'block';
+          profileSvg.style.overflow = 'visible';
+          profileSvg.setAttribute('role', 'img');
+          profileSvg.setAttribute('aria-label', 'Power (W) by duration');
 
           const axis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-          axis.setAttribute('x1', left); axis.setAttribute('y1', height - bottom); axis.setAttribute('x2', width - right); axis.setAttribute('y2', height - bottom); axis.setAttribute('stroke', '#475569');
-          svg.appendChild(axis);
+          axis.setAttribute('x1', PAD_L); axis.setAttribute('y1', X_AXIS_Y); axis.setAttribute('x2', VB_W - PAD_R); axis.setAttribute('y2', X_AXIS_Y); axis.setAttribute('stroke', '#1E293B'); axis.setAttribute('stroke-width', '1');
+          profileSvg.appendChild(axis);
           const yAxis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-          yAxis.setAttribute('x1', left); yAxis.setAttribute('y1', top); yAxis.setAttribute('x2', left); yAxis.setAttribute('y2', height - bottom); yAxis.setAttribute('stroke', '#475569');
-          svg.appendChild(yAxis);
+          yAxis.setAttribute('x1', PAD_L); yAxis.setAttribute('y1', CHART_TOP); yAxis.setAttribute('x2', PAD_L); yAxis.setAttribute('y2', X_AXIS_Y); yAxis.setAttribute('stroke', '#1E293B'); yAxis.setAttribute('stroke-width', '1');
+          profileSvg.appendChild(yAxis);
 
-          function appendProfileWattLabel(watts, y) {
-            const wattLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            wattLabel.setAttribute('x', left - 4);
-            wattLabel.setAttribute('y', y);
-            wattLabel.setAttribute('text-anchor', 'end');
-            wattLabel.setAttribute('dominant-baseline', 'middle');
-            wattLabel.setAttribute('font-size', '8');
-            wattLabel.setAttribute('fill', '#CBD5E1');
-            wattLabel.textContent = Math.round(watts) + ' W';
-            svg.appendChild(wattLabel);
-          }
-          if (Number.isFinite(wattRange.max)) appendProfileWattLabel(wattRange.max, yFor(wattRange.max));
-          if (Number.isFinite(wattRange.min) && wattRange.min !== wattRange.max) appendProfileWattLabel(wattRange.min, yFor(wattRange.min));
+          appendYAxisLabel(profileSvg, CHART_TOP + 1, Math.round(maxWatts) + ' W', true);
+          appendYAxisLabel(profileSvg, X_AXIS_Y - 1, '0 W', false);
 
           const profileLine = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
           profileLine.setAttribute('points', profilePoints.map(point => xFor(point.durationSeconds).toFixed(2) + ',' + yFor(point.watts).toFixed(2)).join(' '));
-          profileLine.setAttribute('fill', 'none'); profileLine.setAttribute('stroke', color); profileLine.setAttribute('stroke-width', '2');
-          svg.appendChild(profileLine);
+          profileLine.setAttribute('fill', 'none'); profileLine.setAttribute('stroke', color); profileLine.setAttribute('stroke-width', '1.8');
+          profileLine.setAttribute('stroke-linecap', 'round'); profileLine.setAttribute('stroke-linejoin', 'round');
+          profileSvg.appendChild(profileLine);
 
           labeledPoints.forEach(function(point) {
             const px = xFor(point.durationSeconds);
             const py = yFor(point.watts);
+            const measurementLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            measurementLine.setAttribute('x1', px);
+            measurementLine.setAttribute('y1', py);
+            measurementLine.setAttribute('x2', px);
+            measurementLine.setAttribute('y2', X_AXIS_Y);
+            measurementLine.setAttribute('stroke', color);
+            measurementLine.setAttribute('stroke-width', '1.8');
+            measurementLine.setAttribute('opacity', '0.75');
+            measurementLine.style.pointerEvents = 'none';
+            profileSvg.insertBefore(measurementLine, profileLine);
             const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            circle.setAttribute('cx', px); circle.setAttribute('cy', py); circle.setAttribute('r', '4'); circle.setAttribute('fill', color);
+            circle.setAttribute('cx', px); circle.setAttribute('cy', py); circle.setAttribute('r', '2.5'); circle.setAttribute('fill', color);
             circle.setAttribute('aria-label', point.durationLabel + ': ' + Math.round(point.watts) + ' W');
-            svg.appendChild(circle);
+            circle.style.pointerEvents = 'none';
+            profileSvg.appendChild(circle);
             if (point.showLabel) {
               const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-              label.setAttribute('x', px); label.setAttribute('y', height - 12); label.setAttribute('text-anchor', 'middle'); label.setAttribute('font-size', '9'); label.setAttribute('fill', '#CBD5E1'); label.textContent = point.durationLabel;
-              svg.appendChild(label);
+              label.setAttribute('x', px); label.setAttribute('y', SVG_H - 0.5); label.setAttribute('text-anchor', 'middle'); label.setAttribute('font-size', '8.5'); label.setAttribute('fill', '#CBD5E1'); label.setAttribute('font-family', 'ui-monospace, monospace'); label.textContent = point.durationLabel;
+              profileSvg.appendChild(label);
             }
 
+            function highlight() { measurementLine.setAttribute('opacity', '1'); }
+            function unhighlight() { measurementLine.setAttribute('opacity', '0.75'); }
+
             const hit = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            hit.setAttribute('cx', px); hit.setAttribute('cy', py); hit.setAttribute('r', '8'); hit.setAttribute('fill', 'transparent');
+            hit.setAttribute('cx', px); hit.setAttribute('cy', py); hit.setAttribute('r', '6'); hit.setAttribute('fill', 'transparent');
+            hit.setAttribute('class', 'profile-measurement-hit-area');
             hit.style.cursor = 'pointer';
             hit.addEventListener('mouseenter', function(e) {
+              highlight();
               showPowerPbTooltip(e, point.record, 1, 1, color, point.durationLabel);
             });
             hit.addEventListener('mousemove', movePbTooltip);
-            hit.addEventListener('mouseleave', hidePbTooltip);
-            svg.appendChild(hit);
+            hit.addEventListener('mouseleave', function(e) {
+              unhighlight();
+              if (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest('.profile-measurement-hit-area')) hidePbTooltip();
+            });
+            profileSvg.appendChild(hit);
+
+            const measurementHit = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            measurementHit.setAttribute('x1', px);
+            measurementHit.setAttribute('y1', CHART_TOP);
+            measurementHit.setAttribute('x2', px);
+            measurementHit.setAttribute('y2', X_AXIS_Y);
+            measurementHit.setAttribute('stroke', 'transparent');
+            measurementHit.setAttribute('stroke-width', '12');
+            measurementHit.setAttribute('pointer-events', 'stroke');
+            measurementHit.setAttribute('class', 'profile-measurement-hit-area');
+            measurementHit.style.cursor = 'pointer';
+            measurementHit.addEventListener('mouseenter', function(e) {
+              highlight();
+              showPowerPbTooltip(e, point.record, 1, 1, color, point.durationLabel);
+            });
+            measurementHit.addEventListener('mousemove', movePbTooltip);
+            measurementHit.addEventListener('mouseleave', function(e) {
+              unhighlight();
+              if (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest('.profile-measurement-hit-area')) hidePbTooltip();
+            });
+            profileSvg.appendChild(measurementHit);
           });
 
-          const xLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          xLabel.setAttribute('x', width / 2); xLabel.setAttribute('y', height - 1); xLabel.setAttribute('text-anchor', 'middle'); xLabel.setAttribute('font-size', '9'); xLabel.setAttribute('fill', '#94A3B8'); xLabel.textContent = 'Duration';
-          svg.appendChild(xLabel);
-          const yLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          yLabel.setAttribute('x', '10'); yLabel.setAttribute('y', height / 2); yLabel.setAttribute('text-anchor', 'middle'); yLabel.setAttribute('font-size', '9'); yLabel.setAttribute('fill', '#94A3B8'); yLabel.setAttribute('transform', 'rotate(-90 10 ' + height / 2 + ')'); yLabel.textContent = 'Power (W)';
-          svg.appendChild(yLabel);
-          profileBlock.appendChild(svg);
+          profileBlock.appendChild(profileSvg);
+          const profileFooter = document.createElement('p');
+          profileFooter.className = 'text-[10px] text-slate-600';
+          profileFooter.textContent = profilePoints.length + ' durations';
+          profileBlock.appendChild(profileFooter);
           section.appendChild(profileBlock);
         } else if (profilePoints.length === 1) {
           const limited = document.createElement('p');
@@ -1175,6 +1315,7 @@
 
         if (durationRecords.length > 0) {
           if (heading) heading.classList.remove('hidden');
+          if (mobileHeading) mobileHeading.classList.remove('hidden');
           if (divider) divider.classList.remove('hidden');
           container.appendChild(section);
           if (window.lucide) window.lucide.createIcons();

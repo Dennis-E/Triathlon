@@ -78,6 +78,13 @@
       display: none;
     }
 
+    @media (min-width: 1024px) {
+      .pb-row-block .pb-grid-item { grid-row: var(--pb-row, 1); }
+      .pb-row-block [data-pb-col="1"] .pb-grid-item { grid-column: 1; }
+      .pb-row-block [data-pb-col="2"] .pb-grid-item { grid-column: 2; }
+      .pb-row-block [data-pb-col="3"] .pb-grid-item { grid-column: 3; }
+    }
+
     .dual-range input[type="range"] {
       -webkit-appearance: none;
       appearance: none;
@@ -618,7 +625,7 @@
         </div>
         <div class="p-4 space-y-0.5">
           <h3 class="font-semibold text-sm transition-colors group-hover:text-indigo-300">Personal Bests</h3>
-          <p class="text-xs text-slate-500">PB progression per distance across all three sports</p>
+          <p class="text-xs text-slate-500">PB progression across multiple records and metrics</p>
         </div>
       </button>
 
@@ -1118,9 +1125,9 @@
             </div>
           </div>
 
-          <!-- Shared three-column grid: Swim | Bike | Run -->
+          <!-- Desktop keeps the shared sticky column labels; mobile labels each sport's PB cell. -->
           <div id="pbColumnsContainer" class="grid grid-cols-1 lg:grid-cols-3 gap-x-6 gap-y-3">
-            <div class="sticky -top-6 z-20 col-span-full -mb-3 grid grid-cols-3 gap-x-6 border-b border-slate-700 bg-slate-900 pb-3 shadow-lg shadow-slate-950/80">
+            <div id="pbSportHeaderDesktop" class="hidden lg:sticky lg:-top-6 lg:z-20 lg:col-span-full lg:-mb-3 lg:grid lg:grid-cols-3 gap-x-6 border-b border-slate-700 bg-slate-900 pb-3 shadow-lg shadow-slate-950/80">
               <div class="flex items-center gap-2 py-3">
                 <span class="inline-block w-2.5 h-2.5 rounded-full bg-[#06B6D4]"></span>
                 <h3 class="text-sm font-semibold text-[#06B6D4] uppercase tracking-wider">Swim</h3>
@@ -1136,54 +1143,63 @@
             </div>
 
             <p class="col-span-full text-[10px] font-semibold uppercase tracking-wider text-slate-500">Distance records</p>
-
-            <div class="space-y-2">
-              <div id="pbSwimContainer" class="space-y-4"></div>
-            </div>
-            <div class="space-y-2">
-              <div id="pbBikeContainer" class="space-y-4"></div>
-            </div>
-            <div class="space-y-2">
-              <div id="pbRunContainer" class="space-y-4"></div>
+            <div class="pb-row-block col-span-full grid grid-cols-1 lg:grid-cols-3 gap-x-6 gap-y-3">
+              <div data-pb-col="3" class="order-1 lg:order-none lg:contents space-y-2">
+                <h4 data-pb-mobile-sport="Run" class="lg:hidden flex items-center gap-2 text-xs font-semibold text-[#EF4444] uppercase tracking-wider"><span class="inline-block w-2 h-2 rounded-full bg-[#EF4444]"></span>Run</h4>
+                <div id="pbRunContainer" class="space-y-4 lg:space-y-0 lg:contents"></div>
+              </div>
+              <div data-pb-col="2" class="order-2 lg:order-none lg:contents space-y-2">
+                <h4 data-pb-mobile-sport="Bike" class="lg:hidden flex items-center gap-2 text-xs font-semibold text-[#14B8A6] uppercase tracking-wider"><span class="inline-block w-2 h-2 rounded-full bg-[#14B8A6]"></span>Bike</h4>
+                <div id="pbBikeContainer" class="space-y-4 lg:space-y-0 lg:contents"></div>
+              </div>
+              <div data-pb-col="1" class="order-3 lg:order-none lg:contents space-y-2">
+                <h4 data-pb-mobile-sport="Swim" class="lg:hidden flex items-center gap-2 text-xs font-semibold text-[#06B6D4] uppercase tracking-wider"><span class="inline-block w-2 h-2 rounded-full bg-[#06B6D4]"></span>Swim</h4>
+                <div id="pbSwimContainer" class="space-y-4 lg:space-y-0 lg:contents"></div>
+              </div>
             </div>
 
             <div class="col-span-full border-t border-dashed border-slate-600"></div>
 
             <p class="col-span-full text-[10px] font-semibold uppercase tracking-wider text-slate-500">Elevation</p>
-
-            <div class="space-y-2">
-              <p class="text-xs italic text-slate-600">Not applicable for swimming.</p>
-            </div>
-            <div class="space-y-2">
-              <div id="pbBikeElevationContainer" class="space-y-4"></div>
-            </div>
-            <div class="space-y-2">
-              <div id="pbRunElevationContainer" class="space-y-4"></div>
+            <div class="pb-row-block col-span-full grid grid-cols-1 lg:grid-cols-3 gap-x-6 gap-y-3">
+              <div data-pb-col="3" class="order-1 lg:order-none lg:contents space-y-2">
+                <h4 data-pb-mobile-sport="Run" class="lg:hidden flex items-center gap-2 text-xs font-semibold text-[#EF4444] uppercase tracking-wider"><span class="inline-block w-2 h-2 rounded-full bg-[#EF4444]"></span>Run</h4>
+                <div id="pbRunElevationContainer" class="space-y-4 lg:space-y-0 lg:contents"></div>
+              </div>
+              <div data-pb-col="2" class="order-2 lg:order-none lg:contents space-y-2">
+                <h4 data-pb-mobile-sport="Bike" class="lg:hidden flex items-center gap-2 text-xs font-semibold text-[#14B8A6] uppercase tracking-wider"><span class="inline-block w-2 h-2 rounded-full bg-[#14B8A6]"></span>Bike</h4>
+                <div id="pbBikeElevationContainer" class="space-y-4 lg:space-y-0 lg:contents"></div>
+              </div>
+              <div data-pb-col="1" class="order-3 lg:order-none lg:contents space-y-2">
+                <h4 data-pb-mobile-sport="Swim" class="lg:hidden flex items-center gap-2 text-xs font-semibold text-[#06B6D4] uppercase tracking-wider"><span class="inline-block w-2 h-2 rounded-full bg-[#06B6D4]"></span>Swim</h4>
+                <p class="pb-grid-item text-xs italic text-slate-600">Not applicable for swimming.</p>
+              </div>
             </div>
 
             <div class="col-span-full border-t border-dashed border-slate-600"></div>
 
             <p class="col-span-full text-[10px] font-semibold uppercase tracking-wider text-slate-500">Longest</p>
-
-            <div class="space-y-2">
-              <div id="pbSwimLongestContainer" class="space-y-4"></div>
-            </div>
-            <div class="space-y-2">
-              <div id="pbBikeLongestContainer" class="space-y-4"></div>
-            </div>
-            <div class="space-y-2">
-              <div id="pbRunLongestContainer" class="space-y-4"></div>
+            <div class="pb-row-block col-span-full grid grid-cols-1 lg:grid-cols-3 gap-x-6 gap-y-3">
+              <div data-pb-col="3" class="order-1 lg:order-none lg:contents space-y-2">
+                <h4 data-pb-mobile-sport="Run" class="lg:hidden flex items-center gap-2 text-xs font-semibold text-[#EF4444] uppercase tracking-wider"><span class="inline-block w-2 h-2 rounded-full bg-[#EF4444]"></span>Run</h4>
+                <div id="pbRunLongestContainer" class="space-y-4 lg:space-y-0 lg:contents"></div>
+              </div>
+              <div data-pb-col="2" class="order-2 lg:order-none lg:contents space-y-2">
+                <h4 data-pb-mobile-sport="Bike" class="lg:hidden flex items-center gap-2 text-xs font-semibold text-[#14B8A6] uppercase tracking-wider"><span class="inline-block w-2 h-2 rounded-full bg-[#14B8A6]"></span>Bike</h4>
+                <div id="pbBikeLongestContainer" class="space-y-4 lg:space-y-0 lg:contents"></div>
+              </div>
+              <div data-pb-col="1" class="order-3 lg:order-none lg:contents space-y-2">
+                <h4 data-pb-mobile-sport="Swim" class="lg:hidden flex items-center gap-2 text-xs font-semibold text-[#06B6D4] uppercase tracking-wider"><span class="inline-block w-2 h-2 rounded-full bg-[#06B6D4]"></span>Swim</h4>
+                <div id="pbSwimLongestContainer" class="space-y-4 lg:space-y-0 lg:contents"></div>
+              </div>
             </div>
             <div id="pbBikePowerDivider" class="col-span-full border-t border-dashed border-slate-600"></div>
             <p id="pbBikePowerHeading" class="col-span-full text-[10px] font-semibold uppercase tracking-wider text-slate-500">Watt</p>
-            <div class="space-y-2">
-              <div class="hidden"></div>
-            </div>
-            <div class="space-y-2">
-              <div id="pbBikePowerContainer" class="space-y-4"></div>
-            </div>
-            <div class="space-y-2">
-              <div class="hidden"></div>
+            <div class="col-span-full grid grid-cols-1 lg:grid-cols-3 gap-x-6 gap-y-3">
+              <div class="order-2 lg:order-none lg:col-start-2 space-y-2">
+                <h4 id="pbBikePowerMobileHeading" data-pb-mobile-sport="Bike" class="hidden lg:hidden flex items-center gap-2 text-xs font-semibold text-[#14B8A6] uppercase tracking-wider"><span class="inline-block w-2 h-2 rounded-full bg-[#14B8A6]"></span>Bike</h4>
+                <div id="pbBikePowerContainer" class="space-y-4"></div>
+              </div>
             </div>
           </div>
 

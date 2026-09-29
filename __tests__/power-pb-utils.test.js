@@ -255,14 +255,19 @@ describe('power PB utils', () => {
 
   it('builds one highest available profile point per duration', () => {
     const records = buildAllTimePowerProfile([
-      { durationSeconds: 300, durationLabel: '5m', watts: 280, date: new Date('2026-01-01') },
-      { durationSeconds: 300, durationLabel: '5m', watts: 300, date: new Date('2026-01-02') },
-      { durationSeconds: 5, durationLabel: '5s', watts: 900, date: new Date('2026-01-03') },
-      { durationSeconds: 60, durationLabel: '1m', watts: 600, date: new Date('2026-01-04') }
+      { durationSeconds: 300, durationLabel: '5m', watts: 280, date: new Date('2026-01-01'), title: 'Lower 5m record' },
+      { durationSeconds: 300, durationLabel: '5m', watts: 300, date: new Date('2026-01-02'), title: 'Highest 5m record' },
+      { durationSeconds: 5, durationLabel: '5s', watts: 900, date: new Date('2026-01-03'), title: '5s record' },
+      { durationSeconds: 60, durationLabel: '1m', watts: 600, date: new Date('2026-01-04'), title: '1m record' }
     ]);
 
     expect(records.map(record => record.durationSeconds)).toEqual([5, 60, 300]);
     expect(records.map(record => record.watts)).toEqual([900, 600, 300]);
+    expect(records.map(({ durationSeconds, durationLabel, date, title }) => ({ durationSeconds, durationLabel, date, title }))).toEqual([
+      { durationSeconds: 5, durationLabel: '5s', date: new Date('2026-01-03'), title: '5s record' },
+      { durationSeconds: 60, durationLabel: '1m', date: new Date('2026-01-04'), title: '1m record' },
+      { durationSeconds: 300, durationLabel: '5m', date: new Date('2026-01-02'), title: 'Highest 5m record' }
+    ]);
   });
 
   it('omits missing durations without estimating profile values', () => {

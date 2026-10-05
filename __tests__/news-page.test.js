@@ -29,14 +29,16 @@ describe('News page contract', () => {
     expect(newsHtml).toMatch(/wishes/i);
   });
 
-  it('publishes the latest training calendar and pace comparison update first', () => {
+  it('publishes the latest customer-facing updates first', () => {
+    expect(newsHtml).toMatch(/<article\b[\s\S]*?<h2[^>]*>Wordcloud, clearer Personal Bests, and more control[\s\S]*?<time datetime="2026-10-05">October 5, 2026<\/time>[\s\S]*?frequency-ranked cloud[\s\S]*?Equipment and Personal Bests[\s\S]*?navigation arrows[\s\S]*?<\/article>/i);
+    expect(newsHtml.indexOf('Wordcloud, clearer Personal Bests, and more control')).toBeLessThan(newsHtml.indexOf('Your training has a calendar now'));
     expect(newsHtml).toMatch(/<article\b[\s\S]*?<h2[^>]*>Your training has a calendar now[\s\S]*?<time datetime="2026-09-28">September 28, 2026<\/time>[\s\S]*?Training Calendar[\s\S]*?Pace vs \.\.\.[\s\S]*?<\/article>/i);
     expect(newsHtml.indexOf('Your training has a calendar now')).toBeLessThan(newsHtml.indexOf('TriAnalytica is now in alpha'));
   });
 
   it('keeps the published content in one ordered collection', () => {
     expect(newsHtml).toMatch(/<main\b[\s\S]*?(?:id="newsArticles"|aria-label="Published news")[\s\S]*?<article\b[\s\S]*?<\/article>[\s\S]*?<\/main>/i);
-    expect((newsHtml.match(/<article\b/gi) || []).length).toBe(2);
+    expect((newsHtml.match(/<article\b/gi) || []).length).toBe(3);
     expect(newsHtml).not.toMatch(/coming soon|more news soon|unpublished/i);
   });
 
@@ -50,6 +52,7 @@ describe('News page contract', () => {
     expect(newsHtml).toMatch(/<header[^>]*class="[^"]*\bw-full\b[^"]*"/i);
     expect(newsHtml).toMatch(/<div[^>]*class="[^"]*\bnews-shell\b[^"]*\bflex\b[^"]*\bitems-center\b[^"]*"/i);
     expect(newsHtml).toMatch(/TriAnalytica is now in alpha/);
+    expect(newsHtml).toMatch(/Wordcloud, clearer Personal Bests, and more control/);
     expect(newsHtml).toMatch(/Your training has a calendar now/);
     expect(newsHtml).toMatch(/fellow athletes[\s\S]*?feedback, suggestions, and wishes/i);
   });

@@ -27,7 +27,7 @@ describe('landing visualization previews', () => {
     html = readIndex();
   });
 
-  it('covers every dashboard visualization with one preview card and asset', () => {
+  it('covers every image-backed landing preview with a card and asset', () => {
     PREVIEWS.forEach(([visualizationKey, assetName]) => {
       expect(html).toContain(`openDashboardTab('${visualizationKey}')`);
       expect(html).toContain(`assets/previews/${assetName}`);
@@ -35,6 +35,16 @@ describe('landing visualization previews', () => {
     expect((html.match(/id="previewCard-/g) || []).length).toBe(PREVIEWS.length);
     expect(html).toContain('Workout Time');
     expect(html).toContain('Distributions');
+  });
+
+  it('shows the non-interactive And much more tile with only the requested bullets', () => {
+    const tileMatch = html.match(/<div id="andMuchMoreTile"[\s\S]*?<\/div>/);
+    expect(tileMatch).not.toBeNull();
+    expect(tileMatch[0]).toMatch(/<h3\b[^>]*>And much more<\/h3>/);
+    expect(tileMatch[0]).toContain('<li>Wordcloud</li>');
+    expect(tileMatch[0]).toContain('<li>…</li>');
+    expect(tileMatch[0]).not.toMatch(/<img|openDashboardTab|preview-card-image|<p\b/i);
+    expect(html).not.toContain('id="previewCard-andMuchMore"');
   });
 
   it('preserves import-required guidance for data-dependent preview actions', () => {

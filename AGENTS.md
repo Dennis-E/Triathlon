@@ -26,6 +26,7 @@
 - Keep raw Strava files and personal exports local to the browser and out of version control. Do not assume `test-data/` contains fixtures; use synthetic or explicitly supplied local data for tests.
 - Be precise about privacy wording: local file processing does not mean the entire app makes no network requests. Changes involving the analysis API must preserve its explicit origin, client-key, validation, rate-limit, and Firestore behavior.
 - Before changing a dashboard tab, update the tab constants and IDs in [src/tab-navigation.js](src/tab-navigation.js), the matching markup and inline dispatch logic in [index.html](index.html), and the related tab-navigation tests.
+- Every newly added visualization tab MUST include a working Share/Export action using the existing local image-preview/download flow; register its capture target and data/no-data behavior and add focused tests in the same feature. Any exception must be justified explicitly in that feature's specification. See the normative rule in [.specify/memory/constitution.md](.specify/memory/constitution.md).
 
 ## Useful references
 

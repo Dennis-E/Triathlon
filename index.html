@@ -29,6 +29,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Wordcloud layout (pinned version) -->
+  <script src="https://cdn.jsdelivr.net/npm/wordcloud@1.2.3/src/wordcloud2.js"></script>
   <!-- PapaParse for CSV parsing -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <!-- html2canvas for the Instagram-ready visualization export -->
@@ -51,6 +53,7 @@
   <script src="./src/zip-importer.js"></script>
   <script src="./src/heatmap-utils.js"></script>
   <script src="./src/training-calendar-utils.js"></script>
+  <script src="./src/wordcloud-utils.js"></script>
   <script src="./src/analysis-counter.js"></script>
   <style>
     /* Custom scrollbar for modern feel */
@@ -76,6 +79,28 @@
 
     #visualizationTabsViewport::-webkit-scrollbar {
       display: none;
+    }
+
+    #wordcloudListPanel.is-collapsed #wordcloudListContent { display: none; }
+    #wordcloudListPanel.is-collapsed { padding: 0.5rem; }
+    @media (min-width: 1024px) {
+      #wordcloudLayout.is-list-collapsed { grid-template-columns: minmax(0, 1fr) 3.5rem; }
+      #wordcloudListPanel.is-collapsed #wordcloudListToggle {
+        min-height: 100%;
+        width: 100%;
+        flex-direction: column;
+      }
+      #wordcloudListPanel.is-collapsed #wordcloudListToggleLabel {
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+      }
+    }
+    @media (max-width: 1023px) {
+      #wordcloudListPanel.is-collapsed #wordcloudListToggle {
+        min-height: 2.5rem;
+        width: 100%;
+        flex-direction: row;
+      }
     }
 
     @media (min-width: 1024px) {
@@ -690,6 +715,14 @@
         </div>
       </button>
 
+      <div id="andMuchMoreTile" class="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+        <h3 class="font-semibold text-sm text-slate-100">And much more</h3>
+        <ul class="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-300">
+          <li>Wordcloud</li>
+          <li>…</li>
+        </ul>
+      </div>
+
     </div>
 
     <!-- Enter Dashboard button -->
@@ -840,6 +873,19 @@
             class="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
           >
             Training Calendar
+          </button>
+          <button
+            id="vizTabWordcloud"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="vizPanelWordcloud"
+            tabindex="-1"
+            onclick="setVisualizationTab('wordcloud')"
+            onkeydown="handleVisualizationTabKeydown(event, 'wordcloud')"
+            class="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
+          >
+            Wordcloud
           </button>
           </div>
           </div>
@@ -1412,6 +1458,45 @@
         </div>
       </div>
 
+      <div id="vizPanelWordcloud" role="tabpanel" aria-labelledby="vizTabWordcloud" class="hidden min-w-0 space-y-5">
+        <div class="flex flex-col gap-4 border-b border-slate-800 pb-5 sm:flex-row sm:items-center sm:justify-between">
+          <div class="space-y-1">
+            <h2 class="text-2xl font-bold tracking-tight">Workout Title Wordcloud</h2>
+            <p class="text-xs text-slate-400">Explore the most frequent words in your activity titles.</p>
+          </div>
+          <button type="button" onclick="exportVisualizationTab('wordcloud')" aria-label="Export for Insta / Strava: Workout Title Wordcloud" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
+            <img src="assets/Strava_Logo.svg" alt="Strava" class="h-5 w-8 object-contain">
+            Export for Insta / Strava
+            <img src="assets/Instagram_logo_2016.svg" alt="Instagram" class="h-5 w-5 object-contain">
+          </button>
+          <label for="wordcloudCountSlider" class="flex min-w-56 flex-col gap-2 text-sm text-slate-300">
+            <span class="flex items-center justify-between gap-4"><span>Number of words</span><output id="wordcloudCountValue" for="wordcloudCountSlider" class="tabular-nums text-slate-100">50 words</output></span>
+            <input id="wordcloudCountSlider" type="range" min="10" max="100" step="1" value="50" class="w-full accent-indigo-500">
+          </label>
+        </div>
+
+        <div id="wordcloudLayout" class="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
+          <div class="relative min-w-0 overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
+            <canvas id="wordcloudCanvas" class="block h-[420px] w-full md:h-[500px]" role="img" aria-label="Wordcloud showing the frequency of words in workout titles"></canvas>
+            <div id="wordcloudEmptyState" class="hidden absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-slate-400" role="status" aria-live="polite">No usable words were found in the imported activity titles.</div>
+            <div id="wordcloudUnavailableState" class="hidden absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-amber-200" role="status" aria-live="polite">The wordcloud could not be rendered in this browser. Your ranked word list is still available.</div>
+          </div>
+
+          <section id="wordcloudListPanel" class="relative min-w-0 rounded-xl border border-slate-800 bg-slate-950/70 p-4 transition-all duration-200" aria-labelledby="wordcloudListHeading">
+            <button id="wordcloudListToggle" type="button" aria-controls="wordcloudListContent" aria-expanded="true" aria-label="Collapse ranked word list" onclick="toggleWordcloudList()" class="mb-3 inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-500 hover:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <span id="wordcloudListToggleIcon" aria-hidden="true">›</span>
+              <span id="wordcloudListToggleLabel">Collapse ranked words</span>
+            </button>
+            <div id="wordcloudListContent">
+              <h3 id="wordcloudListHeading" class="font-semibold text-sm text-slate-100">Ranked words</h3>
+              <p class="mt-1 text-xs text-slate-400">Uncheck words to remove them from the cloud.</p>
+              <ul id="wordcloudWordList" class="mt-3 max-h-[450px] overflow-y-auto pr-1" aria-label="Choose words shown in the cloud"></ul>
+              <p id="wordcloudUnplacedNotice" class="hidden mt-3 rounded-lg border border-amber-800/70 bg-amber-950/40 p-2 text-xs text-amber-200" role="status" aria-live="polite"></p>
+            </div>
+          </section>
+        </div>
+      </div>
+
     </div>
 
   </main>
@@ -1835,6 +1920,7 @@
   <script src="./src/dashboard-scatter.js"></script>
   <script src="./src/dashboard-heatmap.js"></script>
   <script src="./src/dashboard-training-calendar.js"></script>
+  <script src="./src/dashboard-wordcloud.js"></script>
   <script src="./src/dashboard-export.js"></script>
   <script src="./src/dashboard-tabs.js"></script>
 </body>

@@ -47,6 +47,7 @@ function createMockDocument() {
     vizTabDistributions: createMockElement(),
     vizTabWorkoutTime: createMockElement(),
     vizTabTrainingCalendar: createMockElement(),
+    vizTabWordcloud: createMockElement(),
     vizPanelTotalDistance: createMockElement(),
     vizPanelPaceMetrics: createMockElement(),
     vizPanelEquipment: createMockElement(),
@@ -55,7 +56,8 @@ function createMockDocument() {
     vizPanelHeatmap: createMockElement(),
     vizPanelDistributions: createMockElement(),
     vizPanelWorkoutTime: createMockElement(),
-    vizPanelTrainingCalendar: createMockElement()
+    vizPanelTrainingCalendar: createMockElement(),
+    vizPanelWordcloud: createMockElement()
   };
 
   return {
@@ -119,8 +121,9 @@ describe('tab navigation helpers', () => {
     expect(getNextVisualizationTab('heatmap', 1)).toBe('distributions');
     expect(getNextVisualizationTab('distributions', 1)).toBe('workoutTime');
     expect(getNextVisualizationTab('workoutTime', 1)).toBe('trainingCalendar');
-    expect(getNextVisualizationTab('trainingCalendar', 1)).toBe('totalDistance');
-    expect(getNextVisualizationTab('totalDistance', -1)).toBe('trainingCalendar');
+    expect(getNextVisualizationTab('trainingCalendar', 1)).toBe('wordcloud');
+    expect(getNextVisualizationTab('wordcloud', 1)).toBe('totalDistance');
+    expect(getNextVisualizationTab('totalDistance', -1)).toBe('wordcloud');
     expect(getNextVisualizationTab('workoutTime', -1)).toBe('distributions');
     expect(getNextVisualizationTab('unknown', 1)).toBe('totalDistance');
   });
@@ -152,6 +155,15 @@ describe('tab navigation helpers', () => {
     expect(nextTab).toBe('paceMetrics');
     expect(event.preventDefault).toHaveBeenCalledTimes(1);
     expect(onTabChange).toHaveBeenCalledWith('paceMetrics', { focusTab: true });
+  });
+
+  it('reaches Wordcloud from Training Calendar with ArrowRight', () => {
+    const event = { key: 'ArrowRight', preventDefault: jest.fn() };
+    const onTabChange = jest.fn();
+
+    expect(handleVisualizationTabKeydown(event, 'trainingCalendar', { onTabChange })).toBe('wordcloud');
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(onTabChange).toHaveBeenCalledWith('wordcloud', { focusTab: true });
   });
 
   it('allows Shift+Tab to leave the tablist through normal focus order', () => {
@@ -246,6 +258,19 @@ describe('tab navigation helpers', () => {
     expect(mockDocument.elements.vizPanelTrainingCalendar.classList.contains('hidden')).toBe(false);
     expect(mockDocument.elements.vizPanelWorkoutTime.classList.contains('hidden')).toBe(true);
     expect(mockDocument.elements.vizTabTrainingCalendar.focused).toBe(true);
+  });
+
+  it('activates the Wordcloud tab, hides other panels, and focuses its button', () => {
+    const mockDocument = createMockDocument();
+    const selected = setVisualizationTab('wordcloud', { document: mockDocument, focusTab: true });
+
+    expect(selected).toBe('wordcloud');
+    expect(mockDocument.elements.vizTabWordcloud.getAttribute('aria-selected')).toBe('true');
+    expect(mockDocument.elements.vizTabWordcloud.getAttribute('tabindex')).toBe('0');
+    expect(mockDocument.elements.vizPanelWordcloud.classList.contains('hidden')).toBe(false);
+    expect(mockDocument.elements.vizTabTotalDistance.getAttribute('aria-selected')).toBe('false');
+    expect(mockDocument.elements.vizPanelTotalDistance.classList.contains('hidden')).toBe(true);
+    expect(mockDocument.elements.vizTabWordcloud.focused).toBe(true);
   });
 
   it('ignores unrelated keys', () => {

@@ -1,11 +1,8 @@
 <!--
 Sync Impact Report
-- Version change: 1.0.0 → 1.0.1
-- Modified principles: II. Dual-Target Reusable Modules — added a clarifying paragraph
-  scoping the CommonJS+`window.*` bridge requirement to data-processing/visualization
-  utility modules, and explicitly exempting `src/`-located DOM-orchestration files that
-  belong to `index.html`'s domain under Principle I (no behavioral or normative change to
-  existing utility modules; clarification only)
+- Version change: 1.0.1 → 1.1.0
+- Modified principles: III. Narrowest-Scope Test-First Verification — newly introduced visualization tabs must provide Share/Export using the established local preview/download flow unless a feature specification documents a justified exception; capture target, data availability, wiring and tests are part of the tab change.
+- Historical clarification retained: II. Dual-Target Reusable Modules — scope the CommonJS + `window.*` bridge to reusable utilities and exempt DOM-orchestration scripts.
 - Added sections: none
 - Removed sections: none
 - Templates requiring follow-up: none found referencing outdated principle text
@@ -49,6 +46,14 @@ in the same change, the tab constants/IDs in `src/tab-navigation.js`, the matchi
 markup and inline dispatch logic in `index.html`, and the related tab-navigation tests.
 Rationale: the absence of a jsdom environment and the split test suites make it easy to
 silently break the other surface; explicit, scoped verification is the only guard.
+
+Every newly introduced dashboard visualization tab MUST provide a discoverable
+Share/Export action using the established local image-preview and download flow. Its
+capture target, data/no-data behavior, navigation wiring, export mapping, and focused
+tests MUST be included in the same feature work. An exception is allowed only when the
+feature specification explicitly records and justifies why Share/Export does not
+apply. Rationale: users should be able to share each new visualization consistently,
+and a visible button without working capture behavior is not a completed feature.
 
 ### IV. Faithful Locale-Aware Data Parsing
 CSV and GPX processing MUST preserve existing Strava data semantics: support German and
@@ -105,4 +110,4 @@ clarifications and wording fixes. Reviewers MUST treat a pull request that viola
 Core Principle as blocking unless the constitution is amended first; complexity or
 deviation MUST be justified in the PR description.
 
-**Version**: 1.0.1 | **Ratified**: TODO(RATIFICATION_DATE): original adoption date not recorded | **Last Amended**: 2026-09-22
+**Version**: 1.1.0 | **Ratified**: TODO(RATIFICATION_DATE): original adoption date not recorded | **Last Amended**: 2026-10-05

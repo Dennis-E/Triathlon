@@ -46,6 +46,25 @@ describe('export-utils', () => {
     })).toMatchObject({ targetElementId: 'trainingCalendarYears', hasData: true });
   });
 
+  it('supports Wordcloud export title, filename slug, and canvas target', () => {
+    expect(getTabDisplayTitle('wordcloud')).toBe('Workout Title Wordcloud');
+    expect(generateExportFilename('wordcloud', new Date(2026, 9, 5, 10, 11, 12)))
+      .toBe('trianalytica-wordcloud-20261005-101112.png');
+    expect(createExportTarget({
+      kind: 'tab',
+      key: 'wordcloud',
+      title: 'Workout Title Wordcloud',
+      targetElementId: 'wordcloudCanvas',
+      hasData: true
+    })).toMatchObject({
+      kind: 'tab',
+      key: 'wordcloud',
+      title: 'Workout Title Wordcloud',
+      targetElementId: 'wordcloudCanvas',
+      hasData: true
+    });
+  });
+
   describe('computeSquareFit', () => {
     it('fits a wider-than-tall source fully inside the square, centered vertically', () => {
       const result = computeSquareFit(800, 400, 500);

@@ -9,7 +9,8 @@ const TAB_DISPLAY_TITLES = {
   personalBests: 'Personal Bests',
   heatmap: 'GPS Heatmap',
   workoutTime: 'Workout Time',
-  trainingCalendar: 'Training Calendar'
+  trainingCalendar: 'Training Calendar',
+  wordcloud: 'Workout Title Wordcloud'
 };
 
 const TAB_FILENAME_SLUGS = {
@@ -20,7 +21,8 @@ const TAB_FILENAME_SLUGS = {
   personalBests: 'personal-bests',
   heatmap: 'heatmap',
   workoutTime: 'workout-time',
-  trainingCalendar: 'training-calendar'
+  trainingCalendar: 'training-calendar',
+  wordcloud: 'wordcloud'
 };
 
 const EXPORT_ASSET_PATHS = {

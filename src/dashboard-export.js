@@ -14,7 +14,8 @@
       heatmap: 'heatmapMapContainer',
       distributions: 'distributionsChartWrapper',
       workoutTime: 'workoutTimeChartWrapper',
-      trainingCalendar: 'trainingCalendarYears'
+      trainingCalendar: 'trainingCalendarYears',
+      wordcloud: 'wordcloudCanvas'
     };
 
     const EXPORT_DOMAIN = window.exportUtils.getExportBrandConfig().domain;
@@ -43,7 +44,8 @@
         heatmap: isEmptyStateHidden('heatmapEmptyState'),
         distributions: isEmptyStateHidden('distributionsEmptyState'),
         workoutTime: isEmptyStateHidden('workoutTimeEmptyState'),
-        trainingCalendar: typeof processedActivities !== 'undefined' && processedActivities.length > 0
+        trainingCalendar: typeof processedActivities !== 'undefined' && processedActivities.length > 0,
+        wordcloud: !!(window.wordcloudDashboard && window.wordcloudDashboard.canRequestExport())
       };
     }
 
@@ -76,7 +78,8 @@
         'vizTabHeatmap',
         'vizTabDistributions',
         'vizTabWorkoutTime',
-        'vizTabTrainingCalendar'
+        'vizTabTrainingCalendar',
+        'vizTabWordcloud'
       ];
       const groups = [getControlGroup('Views', viewIds)];
       const tabGroups = {
@@ -108,7 +111,8 @@
         trainingCalendar: [
           getControlGroup('Palette', ['trainingCalendarPaletteGreen', 'trainingCalendarPaletteBlue', 'trainingCalendarPaletteFire']),
           getControlGroup('Sport', Array.from(document.querySelectorAll('#trainingCalendarSportFilters button')).map(button => button.id))
-        ]
+        ],
+        wordcloud: []
       };
       return window.exportUtils.summarizeAvailableControls(groups.concat(tabGroups[tabName] || []));
     }
@@ -144,7 +148,8 @@
         trainingCalendar: [
           { label: 'Palette', value: getActiveButtonText(['trainingCalendarPaletteGreen', 'trainingCalendarPaletteBlue', 'trainingCalendarPaletteFire']) },
           { label: 'Sport', value: getActiveButtonText(Array.from(document.querySelectorAll('#trainingCalendarSportFilters button')).map(button => button.id)) }
-        ]
+        ],
+        wordcloud: []
       };
       return window.exportUtils.summarizeFilters(contexts[tabName] || []);
     }
@@ -408,7 +413,20 @@
       const tooltipWasVisible = tooltip && !tooltip.classList.contains('hidden');
       try {
         if (tooltipWasVisible) tooltip.classList.add('hidden');
+        if (target.key === 'wordcloud') {
+          const completed = await window.wordcloudDashboard.waitForCurrentRender();
+          if (!completed || !window.wordcloudDashboard.hasExportableCloud()) {
+            exportRequestState = 'idle';
+            showExportToast('The Wordcloud is not ready to export. Wait for the cloud to finish rendering and try again.');
+            return;
+          }
+        }
         await waitForChartRenderSettle();
+        if (target.key === 'wordcloud' && !window.wordcloudDashboard.hasExportableCloud()) {
+          exportRequestState = 'idle';
+          showExportToast('The Wordcloud changed before capture completed. Wait for the current cloud and try again.');
+          return;
+        }
         const assets = await loadExportAssets();
 
         const captured = await html2canvas(targetEl, {

@@ -105,6 +105,8 @@
           renderWorkoutTimeChart();
         } else if (nextTab === 'trainingCalendar') {
           renderTrainingCalendar();
+        } else if (nextTab === 'wordcloud') {
+          renderWordcloud();
         }
         ensureVisualizationTabVisible(nextTab);
       }
@@ -151,6 +153,7 @@
         tabName === 'distributions' ? 'vizTabDistributions' :
         tabName === 'workoutTime' ? 'vizTabWorkoutTime' :
         tabName === 'trainingCalendar' ? 'vizTabTrainingCalendar' :
+        tabName === 'wordcloud' ? 'vizTabWordcloud' :
         'vizTabPersonalBests'
       );
       if (tabButton) tabButton.focus();

@@ -106,6 +106,6 @@ A user who has found the export button on one visualization tab expects to find 
 
 - "Instagram" refers to sharing a static image file that the user manually uploads through Instagram's own app/website; this feature does not perform a direct API integration with Instagram.
 - Sharing the exported image via email ("mail to") is explicitly out of scope for this iteration; Download is the only distribution action required. Email/other sharing may be considered in a future iteration.
-- The six current visualization tabs (Total Distance, Heart Rate & Pace, Equipment, Equipment Timeline, Personal Bests, Heatmap) are the full initial scope; any future visualization tabs are expected to adopt the same export button by convention but are not individually enumerated here.
+- The six current visualization tabs (Total Distance, Heart Rate & Pace, Equipment, Equipment Timeline, Personal Bests, Heatmap) are the full initial scope. Every future visualization tab is required by the project constitution to adopt the same working Share/Export action unless its feature specification records a justified exception; those future tabs are not individually enumerated here.
 - A single captured image per export is sufficient; multi-image carousels or video/animated exports are out of scope for this feature.
 - "Meaningful title" means a short, human-readable caption identifying the visualization (e.g., tab name and/or key stat), generated automatically without requiring user input at export time.

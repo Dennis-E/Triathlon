@@ -1,4 +1,4 @@
-const TAB_ORDER = ['totalDistance', 'paceMetrics', 'equipment', 'equipmentTimeline', 'personalBests', 'heatmap', 'distributions', 'workoutTime', 'trainingCalendar'];
+const TAB_ORDER = ['totalDistance', 'paceMetrics', 'equipment', 'equipmentTimeline', 'personalBests', 'heatmap', 'distributions', 'workoutTime', 'trainingCalendar', 'wordcloud'];
 
 const TAB_BUTTON_IDS = {
   totalDistance: 'vizTabTotalDistance',
@@ -9,7 +9,8 @@ const TAB_BUTTON_IDS = {
   heatmap: 'vizTabHeatmap',
   distributions: 'vizTabDistributions',
   workoutTime: 'vizTabWorkoutTime',
-  trainingCalendar: 'vizTabTrainingCalendar'
+  trainingCalendar: 'vizTabTrainingCalendar',
+  wordcloud: 'vizTabWordcloud'
 };
 
 const TAB_PANEL_IDS = {
@@ -21,7 +22,8 @@ const TAB_PANEL_IDS = {
   heatmap: 'vizPanelHeatmap',
   distributions: 'vizPanelDistributions',
   workoutTime: 'vizPanelWorkoutTime',
-  trainingCalendar: 'vizPanelTrainingCalendar'
+  trainingCalendar: 'vizPanelTrainingCalendar',
+  wordcloud: 'vizPanelWordcloud'
 };
 
 const TAB_ACTIVE_CLASS = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25';
@@ -88,6 +90,7 @@ function setVisualizationTab(tabName, options = {}) {
   const distributionsBtn = doc.getElementById(TAB_BUTTON_IDS.distributions);
   const workoutTimeBtn = doc.getElementById(TAB_BUTTON_IDS.workoutTime);
   const trainingCalendarBtn = doc.getElementById(TAB_BUTTON_IDS.trainingCalendar);
+  const wordcloudBtn = doc.getElementById(TAB_BUTTON_IDS.wordcloud);
   const totalDistancePanel = doc.getElementById(TAB_PANEL_IDS.totalDistance);
   const paceMetricsPanel = doc.getElementById(TAB_PANEL_IDS.paceMetrics);
   const equipmentPanel = doc.getElementById(TAB_PANEL_IDS.equipment);
@@ -97,9 +100,10 @@ function setVisualizationTab(tabName, options = {}) {
   const distributionsPanel = doc.getElementById(TAB_PANEL_IDS.distributions);
     const workoutTimePanel = doc.getElementById(TAB_PANEL_IDS.workoutTime);
   const trainingCalendarPanel = doc.getElementById(TAB_PANEL_IDS.trainingCalendar);
+  const wordcloudPanel = doc.getElementById(TAB_PANEL_IDS.wordcloud);
 
-    if (!totalDistanceBtn || !paceMetricsBtn || !equipmentBtn || !equipmentTimelineBtn || !personalBestsBtn || !heatmapBtn || !distributionsBtn || !workoutTimeBtn ||
-      !trainingCalendarBtn || !totalDistancePanel || !paceMetricsPanel || !equipmentPanel || !equipmentTimelinePanel || !personalBestsPanel || !heatmapPanel || !distributionsPanel || !workoutTimePanel || !trainingCalendarPanel) {
+  if (!totalDistanceBtn || !paceMetricsBtn || !equipmentBtn || !equipmentTimelineBtn || !personalBestsBtn || !heatmapBtn || !distributionsBtn || !workoutTimeBtn ||
+      !trainingCalendarBtn || !wordcloudBtn || !totalDistancePanel || !paceMetricsPanel || !equipmentPanel || !equipmentTimelinePanel || !personalBestsPanel || !heatmapPanel || !distributionsPanel || !workoutTimePanel || !trainingCalendarPanel || !wordcloudPanel) {
     return tabName;
   }
 
@@ -112,6 +116,7 @@ function setVisualizationTab(tabName, options = {}) {
   const isDistributions = tabName === 'distributions';
   const isWorkoutTime = tabName === 'workoutTime';
   const isTrainingCalendar = tabName === 'trainingCalendar';
+  const isWordcloud = tabName === 'wordcloud';
 
   totalDistanceBtn.setAttribute('aria-selected', isTotalDistance ? 'true' : 'false');
   totalDistanceBtn.setAttribute('tabindex', isTotalDistance ? '0' : '-1');
@@ -148,6 +153,9 @@ function setVisualizationTab(tabName, options = {}) {
   trainingCalendarBtn.setAttribute('aria-selected', isTrainingCalendar ? 'true' : 'false');
   trainingCalendarBtn.setAttribute('tabindex', isTrainingCalendar ? '0' : '-1');
   trainingCalendarBtn.className = isTrainingCalendar ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
+  wordcloudBtn.setAttribute('aria-selected', isWordcloud ? 'true' : 'false');
+  wordcloudBtn.setAttribute('tabindex', isWordcloud ? '0' : '-1');
+  wordcloudBtn.className = isWordcloud ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
 
   totalDistancePanel.classList.toggle('hidden', !isTotalDistance);
   paceMetricsPanel.classList.toggle('hidden', !isPaceMetrics);
@@ -158,6 +166,7 @@ function setVisualizationTab(tabName, options = {}) {
   distributionsPanel.classList.toggle('hidden', !isDistributions);
   workoutTimePanel.classList.toggle('hidden', !isWorkoutTime);
   trainingCalendarPanel.classList.toggle('hidden', !isTrainingCalendar);
+  wordcloudPanel.classList.toggle('hidden', !isWordcloud);
 
   if (options.focusTab) {
     (isTotalDistance ? totalDistanceBtn :
@@ -168,7 +177,8 @@ function setVisualizationTab(tabName, options = {}) {
     isHeatmap ? heatmapBtn :
     isDistributions ? distributionsBtn :
     isWorkoutTime ? workoutTimeBtn :
-    trainingCalendarBtn).focus();
+    isTrainingCalendar ? trainingCalendarBtn :
+    wordcloudBtn).focus();
   }
 
   return tabName;

@@ -30,6 +30,7 @@ const DASHBOARD_MODULE_FILES = [
   'dashboard-scatter.js',
   'dashboard-heatmap.js',
   'dashboard-training-calendar.js',
+  'dashboard-wordcloud.js',
   'dashboard-export.js',
   'dashboard-tabs.js'
 ];
@@ -73,6 +74,24 @@ describe('index.html inline script syntax', () => {
 
   it('loads the browser power utility before the dashboard script', () => {
     expect(html).toMatch(/<script src="\.\/src\/power-pb-utils\.js"><\/script>[\s\S]*<script>/);
+  });
+
+  it('loads the pinned Wordcloud library and utility before its dashboard renderer', () => {
+    expect(html).toContain('<script src="https://cdn.jsdelivr.net/npm/wordcloud@1.2.3/src/wordcloud2.js"></script>');
+    expect(html).toContain('<script src="./src/wordcloud-utils.js"></script>');
+    expect(html).toContain('<script src="./src/dashboard-wordcloud.js"></script>');
+    expect(html.indexOf('wordcloud2.js')).toBeLessThan(html.indexOf('./src/wordcloud-utils.js'));
+    expect(html.indexOf('./src/wordcloud-utils.js')).toBeLessThan(html.indexOf('./src/dashboard-wordcloud.js'));
+    expect(html.indexOf('./src/dashboard-wordcloud.js')).toBeLessThan(html.indexOf('./src/dashboard-tabs.js'));
+  });
+
+  it('wires the Wordcloud tab through click, keyboard, ARIA, and dashboard dispatch', () => {
+    expect(html).toContain('id="vizTabWordcloud"');
+    expect(html).toContain('id="vizPanelWordcloud"');
+    expect(html).toContain("onclick=\"setVisualizationTab('wordcloud')\"");
+    expect(html).toContain("onkeydown=\"handleVisualizationTabKeydown(event, 'wordcloud')\"");
+    expect(inlineCode).toContain("nextTab === 'wordcloud'");
+    expect(inlineCode).toContain('renderWordcloud();');
   });
 
   it('loads the Training Calendar utility before its dashboard renderer', () => {
@@ -187,6 +206,25 @@ describe('index.html inline script syntax', () => {
     expect(inlineCode).toContain('selectedWorkoutTimeGranularity');
     expect(inlineCode).toContain('selectedWorkoutTimeSport');
     expect(inlineCode).toContain('getWorkoutTimeDateBounds');
+  });
+
+  it('registers every branded visualization Share/Export button with an export capture target', () => {
+    const exportCode = fs.readFileSync(path.join(__dirname, '../src/dashboard-export.js'), 'utf-8');
+    const expectedTabs = [
+      'totalDistance', 'paceMetrics', 'equipment', 'equipmentTimeline', 'heatmap',
+      'distributions', 'workoutTime', 'trainingCalendar', 'wordcloud'
+    ];
+
+    expectedTabs.forEach(tabName => {
+      expect(html.includes(`exportVisualizationTab('${tabName}')`)).toBe(true);
+      expect(Boolean(exportCode.match(new RegExp(`${tabName}:\\s*'[^']+'`)))).toBe(true);
+    });
+    expect(html).toContain('id="wordcloudCanvas"');
+  });
+
+  it('starts the Wordcloud slider at 50 while retaining its 10–100 range', () => {
+    expect(html).toMatch(/id="wordcloudCountSlider"[^>]*min="10"[^>]*max="100"[^>]*value="50"/);
+    expect(html).toMatch(/id="wordcloudCountValue"[^>]*>50 words<\/output>/);
   });
 
   it('provides rotating prepared import previews and humorous messages', () => {

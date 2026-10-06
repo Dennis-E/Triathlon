@@ -31,6 +31,7 @@ const DASHBOARD_MODULE_FILES = [
   'dashboard-heatmap.js',
   'dashboard-training-calendar.js',
   'dashboard-wordcloud.js',
+  'dashboard-pie-charts.js',
   'dashboard-export.js',
   'dashboard-tabs.js'
 ];
@@ -83,6 +84,22 @@ describe('index.html inline script syntax', () => {
     expect(html.indexOf('wordcloud2.js')).toBeLessThan(html.indexOf('./src/wordcloud-utils.js'));
     expect(html.indexOf('./src/wordcloud-utils.js')).toBeLessThan(html.indexOf('./src/dashboard-wordcloud.js'));
     expect(html.indexOf('./src/dashboard-wordcloud.js')).toBeLessThan(html.indexOf('./src/dashboard-tabs.js'));
+  });
+
+  it('loads the pie chart utility after distribution utils and its renderer before export', () => {
+    expect(html).toContain('<script src="./src/pie-chart-utils.js"></script>');
+    expect(html.indexOf('./src/distribution-utils.js')).toBeLessThan(html.indexOf('./src/pie-chart-utils.js'));
+    expect(html.indexOf('./src/dashboard-wordcloud.js')).toBeLessThan(html.indexOf('./src/dashboard-pie-charts.js'));
+    expect(html.indexOf('./src/dashboard-pie-charts.js')).toBeLessThan(html.indexOf('./src/dashboard-export.js'));
+  });
+
+  it('wires the Pie Charts tab through click, keyboard, ARIA, and dashboard dispatch', () => {
+    expect(html).toMatch(/id="vizTabPieCharts"[\s\S]*?role="tab"[\s\S]*?aria-controls="vizPanelPieCharts"/);
+    expect(html).toMatch(/id="vizPanelPieCharts" role="tabpanel" aria-labelledby="vizTabPieCharts"/);
+    expect(html).toContain("onclick=\"setVisualizationTab('pieCharts')\"");
+    expect(html).toContain("onkeydown=\"handleVisualizationTabKeydown(event, 'pieCharts')\"");
+    expect(inlineCode).toContain("nextTab === 'pieCharts'");
+    expect(inlineCode).toContain('window.pieChartsDashboard.render();');
   });
 
   it('wires the Wordcloud tab through click, keyboard, ARIA, and dashboard dispatch', () => {
@@ -212,7 +229,7 @@ describe('index.html inline script syntax', () => {
     const exportCode = fs.readFileSync(path.join(__dirname, '../src/dashboard-export.js'), 'utf-8');
     const expectedTabs = [
       'totalDistance', 'paceMetrics', 'equipment', 'equipmentTimeline', 'heatmap',
-      'distributions', 'workoutTime', 'trainingCalendar', 'wordcloud'
+      'distributions', 'workoutTime', 'trainingCalendar', 'wordcloud', 'pieCharts'
     ];
 
     expectedTabs.forEach(tabName => {

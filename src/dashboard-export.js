@@ -15,7 +15,8 @@
       distributions: 'distributionsChartWrapper',
       workoutTime: 'workoutTimeChartWrapper',
       trainingCalendar: 'trainingCalendarYears',
-      wordcloud: 'wordcloudCanvas'
+      wordcloud: 'wordcloudCanvas',
+      pieCharts: 'pieChartsCaptureArea'
     };
 
     const EXPORT_DOMAIN = window.exportUtils.getExportBrandConfig().domain;
@@ -45,7 +46,8 @@
         distributions: isEmptyStateHidden('distributionsEmptyState'),
         workoutTime: isEmptyStateHidden('workoutTimeEmptyState'),
         trainingCalendar: typeof processedActivities !== 'undefined' && processedActivities.length > 0,
-        wordcloud: !!(window.wordcloudDashboard && window.wordcloudDashboard.canRequestExport())
+        wordcloud: !!(window.wordcloudDashboard && window.wordcloudDashboard.canRequestExport()),
+        pieCharts: isEmptyStateHidden('pieChartsEmptyState')
       };
     }
 
@@ -79,7 +81,8 @@
         'vizTabDistributions',
         'vizTabWorkoutTime',
         'vizTabTrainingCalendar',
-        'vizTabWordcloud'
+        'vizTabWordcloud',
+        'vizTabPieCharts'
       ];
       const groups = [getControlGroup('Views', viewIds)];
       const tabGroups = {
@@ -112,7 +115,12 @@
           getControlGroup('Palette', ['trainingCalendarPaletteGreen', 'trainingCalendarPaletteBlue', 'trainingCalendarPaletteFire']),
           getControlGroup('Sport', Array.from(document.querySelectorAll('#trainingCalendarSportFilters button')).map(button => button.id))
         ],
-        wordcloud: []
+        wordcloud: [],
+        pieCharts: [
+          getControlGroup('Group by', ['pieDimensionBtnSport', 'pieDimensionBtnDuration', 'pieDimensionBtnPace', 'pieDimensionBtnEquipment', 'pieDimensionBtnLength', 'pieDimensionBtnPower']),
+          getControlGroup('Slice size', ['pieMeasureBtnCount', 'pieMeasureBtnTime', 'pieMeasureBtnDistance']),
+          getControlGroup('Sport', ['pieSportBtnAll', 'pieSportBtnRun', 'pieSportBtnBike', 'pieSportBtnSwim'])
+        ]
       };
       return window.exportUtils.summarizeAvailableControls(groups.concat(tabGroups[tabName] || []));
     }
@@ -149,7 +157,13 @@
           { label: 'Palette', value: getActiveButtonText(['trainingCalendarPaletteGreen', 'trainingCalendarPaletteBlue', 'trainingCalendarPaletteFire']) },
           { label: 'Sport', value: getActiveButtonText(Array.from(document.querySelectorAll('#trainingCalendarSportFilters button')).map(button => button.id)) }
         ],
-        wordcloud: []
+        wordcloud: [],
+        pieCharts: [
+          { label: 'Group by', value: getActiveButtonText(['pieDimensionBtnSport', 'pieDimensionBtnDuration', 'pieDimensionBtnPace', 'pieDimensionBtnEquipment', 'pieDimensionBtnLength', 'pieDimensionBtnPower']) },
+          { label: 'Slice size', value: getActiveButtonText(['pieMeasureBtnCount', 'pieMeasureBtnTime', 'pieMeasureBtnDistance']) },
+          { label: 'Sport', value: getActiveButtonText(['pieSportBtnAll', 'pieSportBtnRun', 'pieSportBtnBike', 'pieSportBtnSwim']) },
+          { label: 'Colour scheme', value: document.getElementById('pieChartsColorScheme')?.selectedOptions[0]?.textContent.trim() }
+        ]
       };
       return window.exportUtils.summarizeFilters(contexts[tabName] || []);
     }

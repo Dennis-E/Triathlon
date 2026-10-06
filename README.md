@@ -45,6 +45,11 @@ Your data stays in the browser. No login is required, and your files are process
   - Hover route lines to inspect all contributing activities or a random sample of ten for frequently traveled routes
   - Filter routes by All Sports, Run, Bike, or Swim
 
+- Pie charts
+  - See how your training splits up by sport, duration, pace, equipment, length, or power
+  - Size slices by activity count, moving time, or distance
+  - Filter by sport: All Sports, Run, Bike, Swim, and choose the "On fire" or "Monochrome blue" color scheme
+
 ## Features and filters
 
 The dashboard currently includes the following filters and controls:

@@ -41,6 +41,7 @@
   <script src="./src/scatter-utils.js"></script>
   <!-- Distribution chart helpers -->
   <script src="./src/distribution-utils.js"></script>
+  <script src="./src/pie-chart-utils.js"></script>
   <!-- Workout Time chart helpers -->
   <script src="./src/workout-time-utils.js"></script>
   <script src="./src/equipment-utils.js"></script>
@@ -720,6 +721,7 @@
         <ul class="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-300">
           <li>Wordcloud</li>
           <li>Calendar view</li>
+          <li>Pie charts</li>
           <li>…</li>
         </ul>
       </div>
@@ -887,6 +889,19 @@
             class="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
           >
             Wordcloud
+          </button>
+          <button
+            id="vizTabPieCharts"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="vizPanelPieCharts"
+            tabindex="-1"
+            onclick="setVisualizationTab('pieCharts')"
+            onkeydown="handleVisualizationTabKeydown(event, 'pieCharts')"
+            class="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
+          >
+            Pie Charts
           </button>
           </div>
           </div>
@@ -1498,6 +1513,65 @@
         </div>
       </div>
 
+      <div id="vizPanelPieCharts" role="tabpanel" aria-labelledby="vizTabPieCharts" class="hidden min-w-0 space-y-5">
+        <div class="flex flex-col gap-4 border-b border-slate-800 pb-5 sm:flex-row sm:items-center sm:justify-between">
+          <div class="space-y-1">
+            <h2 class="text-2xl font-bold tracking-tight">Pie Charts</h2>
+            <p class="text-xs text-slate-400">See how your training splits up by sport, duration, pace, equipment, length or power.</p>
+          </div>
+          <button type="button" onclick="exportVisualizationTab('pieCharts')" aria-label="Export for Insta / Strava: Pie Charts" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
+            <img src="assets/Strava_Logo.svg" alt="Strava" class="h-5 w-8 object-contain">
+            Export for Insta / Strava
+            <img src="assets/Instagram_logo_2016.svg" alt="Instagram" class="h-5 w-5 object-contain">
+          </button>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="flex flex-wrap bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner" role="group" aria-label="Group slices by">
+            <button onclick="setPieDimension('sport')" id="pieDimensionBtnSport" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">Sport</button>
+            <button onclick="setPieDimension('duration')" id="pieDimensionBtnDuration" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Duration</button>
+            <button onclick="setPieDimension('pace')" id="pieDimensionBtnPace" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Pace</button>
+            <button onclick="setPieDimension('equipment')" id="pieDimensionBtnEquipment" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Equipment</button>
+            <button onclick="setPieDimension('length')" id="pieDimensionBtnLength" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Length</button>
+            <button onclick="setPieDimension('power')" id="pieDimensionBtnPower" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Power (Watt)</button>
+          </div>
+
+          <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner" role="group" aria-label="Slice size">
+            <button onclick="setPieMeasure('count')" id="pieMeasureBtnCount" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">Activities</button>
+            <button onclick="setPieMeasure('time')" id="pieMeasureBtnTime" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Time</button>
+            <button onclick="setPieMeasure('distance')" id="pieMeasureBtnDistance" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Distance</button>
+          </div>
+
+          <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner" role="group" aria-label="Sport filter">
+            <button onclick="setPieSportFilter('All')" id="pieSportBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">All Sports</button>
+            <button onclick="setPieSportFilter('Run')" id="pieSportBtnRun" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Run</button>
+            <button onclick="setPieSportFilter('Bike')" id="pieSportBtnBike" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Bike</button>
+            <button onclick="setPieSportFilter('Swim')" id="pieSportBtnSwim" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Swim</button>
+          </div>
+
+          <label class="flex items-center gap-2 text-xs text-slate-400">
+            <span>Color scheme</span>
+            <select id="pieChartsColorScheme" onchange="setPieColorScheme(this.value)" class="rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-300">
+              <option value="fire" selected>On fire</option>
+              <option value="monochrome-blue">Monochrome blue</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="pieChartsCaptureArea" class="min-w-0 rounded-xl border border-slate-800 bg-slate-950 p-4 sm:p-6">
+          <p id="pieChartsSummary" class="mb-4 text-center text-sm font-medium text-slate-300"></p>
+          <div class="grid min-w-0 grid-cols-1 items-center gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+            <div class="relative mx-auto h-[420px] w-full max-w-[520px] md:h-[520px]">
+              <canvas id="pieChartsCanvas" role="img" aria-label="Pie chart of imported activities"></canvas>
+            </div>
+            <ul id="pieChartsLegend" class="min-w-0 space-y-2 text-sm" aria-label="Pie chart legend"></ul>
+          </div>
+        </div>
+        <div id="pieChartsEmptyState" class="hidden rounded-xl border border-dashed border-slate-700 bg-slate-950/80 px-6 py-10 text-center text-sm text-slate-400" role="status" aria-live="polite">
+          No data available for this combination.
+        </div>
+      </div>
+
     </div>
 
   </main>
@@ -1922,6 +1996,7 @@
   <script src="./src/dashboard-heatmap.js"></script>
   <script src="./src/dashboard-training-calendar.js"></script>
   <script src="./src/dashboard-wordcloud.js"></script>
+  <script src="./src/dashboard-pie-charts.js"></script>
   <script src="./src/dashboard-export.js"></script>
   <script src="./src/dashboard-tabs.js"></script>
 </body>

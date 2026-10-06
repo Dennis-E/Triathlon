@@ -10,7 +10,8 @@ const TAB_DISPLAY_TITLES = {
   heatmap: 'GPS Heatmap',
   workoutTime: 'Workout Time',
   trainingCalendar: 'Training Calendar',
-  wordcloud: 'Workout Title Wordcloud'
+  wordcloud: 'Workout Title Wordcloud',
+  pieCharts: 'Pie Charts'
 };
 
 const TAB_FILENAME_SLUGS = {
@@ -22,7 +23,8 @@ const TAB_FILENAME_SLUGS = {
   heatmap: 'heatmap',
   workoutTime: 'workout-time',
   trainingCalendar: 'training-calendar',
-  wordcloud: 'wordcloud'
+  wordcloud: 'wordcloud',
+  pieCharts: 'pie-charts'
 };
 
 const EXPORT_ASSET_PATHS = {

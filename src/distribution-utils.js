@@ -397,7 +397,8 @@ if (typeof module !== 'undefined' && module.exports) {
     getFireGradientColor,
     getDistributionColor,
     getHistogramBoundaryTicks,
-    computeDurationNiceStep
+    computeDurationNiceStep,
+    findBucketIndexForValue
   };
 }
 
@@ -415,6 +416,7 @@ if (typeof window !== 'undefined') {
     getFireGradientColor,
     getDistributionColor,
     getHistogramBoundaryTicks,
-    computeDurationNiceStep
+    computeDurationNiceStep,
+    findBucketIndexForValue
   };
 }

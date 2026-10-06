@@ -43,9 +43,11 @@ describe('landing visualization previews', () => {
     expect(tileMatch[0]).toMatch(/<h3\b[^>]*>And much more<\/h3>/);
     expect(tileMatch[0]).toContain('<li>Wordcloud</li>');
     expect(tileMatch[0]).toContain('<li>Calendar view</li>');
+    expect(tileMatch[0]).toContain('<li>Pie charts</li>');
     expect(tileMatch[0]).toContain('<li>…</li>');
     expect(tileMatch[0].indexOf('<li>Wordcloud</li>')).toBeLessThan(tileMatch[0].indexOf('<li>Calendar view</li>'));
-    expect(tileMatch[0].indexOf('<li>Calendar view</li>')).toBeLessThan(tileMatch[0].indexOf('<li>…</li>'));
+    expect(tileMatch[0].indexOf('<li>Calendar view</li>')).toBeLessThan(tileMatch[0].indexOf('<li>Pie charts</li>'));
+    expect(tileMatch[0].indexOf('<li>Pie charts</li>')).toBeLessThan(tileMatch[0].indexOf('<li>…</li>'));
     expect(tileMatch[0]).not.toMatch(/<img|openDashboardTab|preview-card-image|<p\b/i);
     expect(html).not.toContain('id="previewCard-andMuchMore"');
   });

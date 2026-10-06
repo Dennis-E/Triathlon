@@ -107,6 +107,8 @@
           renderTrainingCalendar();
         } else if (nextTab === 'wordcloud') {
           renderWordcloud();
+        } else if (nextTab === 'pieCharts') {
+          window.pieChartsDashboard.render();
         }
         ensureVisualizationTabVisible(nextTab);
       }
@@ -154,6 +156,7 @@
         tabName === 'workoutTime' ? 'vizTabWorkoutTime' :
         tabName === 'trainingCalendar' ? 'vizTabTrainingCalendar' :
         tabName === 'wordcloud' ? 'vizTabWordcloud' :
+        tabName === 'pieCharts' ? 'vizTabPieCharts' :
         'vizTabPersonalBests'
       );
       if (tabButton) tabButton.focus();

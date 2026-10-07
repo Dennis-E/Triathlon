@@ -65,6 +65,23 @@ describe('export-utils', () => {
     });
   });
 
+  it('supports the Lifetime Statistics export title, filename slug, and capture target', () => {
+    expect(getTabDisplayTitle('lifetimeStatistics')).toBe('Lifetime Statistics');
+    expect(generateExportFilename('lifetimeStatistics', new Date(2026, 9, 7, 14, 5, 6)))
+      .toBe('trianalytica-lifetime-statistics-20261007-140506.png');
+    expect(createExportTarget({
+      kind: 'tab',
+      key: 'lifetimeStatistics',
+      title: 'Lifetime Statistics',
+      targetElementId: 'lifetimeStatisticsCaptureArea',
+      hasData: true
+    })).toMatchObject({
+      key: 'lifetimeStatistics',
+      targetElementId: 'lifetimeStatisticsCaptureArea',
+      hasData: true
+    });
+  });
+
   describe('computeSquareFit', () => {
     it('fits a wider-than-tall source fully inside the square, centered vertically', () => {
       const result = computeSquareFit(800, 400, 500);

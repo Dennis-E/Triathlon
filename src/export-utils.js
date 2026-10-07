@@ -11,7 +11,8 @@ const TAB_DISPLAY_TITLES = {
   workoutTime: 'Workout Time',
   trainingCalendar: 'Training Calendar',
   wordcloud: 'Workout Title Wordcloud',
-  pieCharts: 'Pie Charts'
+  pieCharts: 'Pie Charts',
+  lifetimeStatistics: 'Lifetime Statistics'
 };
 
 const TAB_FILENAME_SLUGS = {
@@ -24,7 +25,8 @@ const TAB_FILENAME_SLUGS = {
   workoutTime: 'workout-time',
   trainingCalendar: 'training-calendar',
   wordcloud: 'wordcloud',
-  pieCharts: 'pie-charts'
+  pieCharts: 'pie-charts',
+  lifetimeStatistics: 'lifetime-statistics'
 };
 
 const EXPORT_ASSET_PATHS = {

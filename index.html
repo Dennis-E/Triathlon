@@ -42,6 +42,7 @@
   <!-- Distribution chart helpers -->
   <script src="./src/distribution-utils.js"></script>
   <script src="./src/pie-chart-utils.js"></script>
+  <script src="./src/lifetime-statistics-utils.js"></script>
   <!-- Workout Time chart helpers -->
   <script src="./src/workout-time-utils.js"></script>
   <script src="./src/equipment-utils.js"></script>
@@ -903,6 +904,19 @@
           >
             Pie Charts
           </button>
+          <button
+            id="vizTabLifetimeStatistics"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="vizPanelLifetimeStatistics"
+            tabindex="-1"
+            onclick="setVisualizationTab('lifetimeStatistics')"
+            onkeydown="handleVisualizationTabKeydown(event, 'lifetimeStatistics')"
+            class="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200"
+          >
+            Lifetime Statistics
+          </button>
           </div>
           </div>
           <button
@@ -1572,6 +1586,24 @@
         </div>
       </div>
 
+      <div id="vizPanelLifetimeStatistics" role="tabpanel" aria-labelledby="vizTabLifetimeStatistics" class="hidden min-w-0 space-y-5">
+        <div class="flex flex-col gap-4 border-b border-slate-800 pb-5 sm:flex-row sm:items-center sm:justify-between">
+          <div class="space-y-1">
+            <h2 class="text-2xl font-bold tracking-tight">Lifetime Statistics</h2>
+            <p class="text-xs text-slate-400">Your training history at a glance.</p>
+          </div>
+          <button type="button" onclick="exportVisualizationTab('lifetimeStatistics')" aria-label="Export for Insta / Strava: Lifetime Statistics" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
+            <img src="assets/Strava_Logo.svg" alt="Strava" class="h-5 w-8 object-contain">
+            Export for Insta / Strava
+            <img src="assets/Instagram_logo_2016.svg" alt="Instagram" class="h-5 w-5 object-contain">
+          </button>
+        </div>
+        <div id="lifetimeStatisticsEmptyState" class="hidden rounded-xl border border-dashed border-slate-700 bg-slate-950/80 px-6 py-10 text-center text-sm text-slate-400" role="status" aria-live="polite">
+          Import activities to view your lifetime statistics.
+        </div>
+        <div id="lifetimeStatisticsCaptureArea" class="hidden min-w-0 space-y-5"></div>
+      </div>
+
     </div>
 
   </main>
@@ -1997,6 +2029,7 @@
   <script src="./src/dashboard-training-calendar.js"></script>
   <script src="./src/dashboard-wordcloud.js"></script>
   <script src="./src/dashboard-pie-charts.js"></script>
+  <script src="./src/dashboard-lifetime-statistics.js"></script>
   <script src="./src/dashboard-export.js"></script>
   <script src="./src/dashboard-tabs.js"></script>
 </body>

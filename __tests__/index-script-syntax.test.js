@@ -32,6 +32,7 @@ const DASHBOARD_MODULE_FILES = [
   'dashboard-training-calendar.js',
   'dashboard-wordcloud.js',
   'dashboard-pie-charts.js',
+  'dashboard-lifetime-statistics.js',
   'dashboard-export.js',
   'dashboard-tabs.js'
 ];
@@ -93,6 +94,14 @@ describe('index.html inline script syntax', () => {
     expect(html.indexOf('./src/dashboard-pie-charts.js')).toBeLessThan(html.indexOf('./src/dashboard-export.js'));
   });
 
+  it('loads lifetime statistics utility before its dashboard renderer and before export', () => {
+    expect(html).toContain('<script src="./src/lifetime-statistics-utils.js"></script>');
+    expect(html).toContain('<script src="./src/dashboard-lifetime-statistics.js"></script>');
+    expect(html.indexOf('./src/lifetime-statistics-utils.js')).toBeLessThan(html.indexOf('./src/dashboard-lifetime-statistics.js'));
+    expect(html.indexOf('./src/dashboard-pie-charts.js')).toBeLessThan(html.indexOf('./src/dashboard-lifetime-statistics.js'));
+    expect(html.indexOf('./src/dashboard-lifetime-statistics.js')).toBeLessThan(html.indexOf('./src/dashboard-export.js'));
+  });
+
   it('wires the Pie Charts tab through click, keyboard, ARIA, and dashboard dispatch', () => {
     expect(html).toMatch(/id="vizTabPieCharts"[\s\S]*?role="tab"[\s\S]*?aria-controls="vizPanelPieCharts"/);
     expect(html).toMatch(/id="vizPanelPieCharts" role="tabpanel" aria-labelledby="vizTabPieCharts"/);
@@ -100,6 +109,19 @@ describe('index.html inline script syntax', () => {
     expect(html).toContain("onkeydown=\"handleVisualizationTabKeydown(event, 'pieCharts')\"");
     expect(inlineCode).toContain("nextTab === 'pieCharts'");
     expect(inlineCode).toContain('window.pieChartsDashboard.render();');
+  });
+
+  it('wires the Lifetime Statistics tab through click, keyboard, ARIA, and dashboard dispatch', () => {
+    expect(html).toMatch(/id="vizTabLifetimeStatistics"[\s\S]*?role="tab"[\s\S]*?aria-controls="vizPanelLifetimeStatistics"/);
+    expect(html).toMatch(/id="vizPanelLifetimeStatistics" role="tabpanel" aria-labelledby="vizTabLifetimeStatistics"/);
+    expect(html).toContain('id="lifetimeStatisticsCaptureArea"');
+    expect(html).toContain('id="lifetimeStatisticsEmptyState"');
+    expect(html).toContain('Your training history at a glance.');
+    expect(html).not.toContain('Your imported training history at a glance.');
+    expect(html).toContain("onclick=\"setVisualizationTab('lifetimeStatistics')\"");
+    expect(html).toContain("onkeydown=\"handleVisualizationTabKeydown(event, 'lifetimeStatistics')\"");
+    expect(inlineCode).toContain("nextTab === 'lifetimeStatistics'");
+    expect(inlineCode).toContain('window.lifetimeStatisticsDashboard.render();');
   });
 
   it('wires the Wordcloud tab through click, keyboard, ARIA, and dashboard dispatch', () => {
@@ -229,13 +251,15 @@ describe('index.html inline script syntax', () => {
     const exportCode = fs.readFileSync(path.join(__dirname, '../src/dashboard-export.js'), 'utf-8');
     const expectedTabs = [
       'totalDistance', 'paceMetrics', 'equipment', 'equipmentTimeline', 'heatmap',
-      'distributions', 'workoutTime', 'trainingCalendar', 'wordcloud', 'pieCharts'
+      'distributions', 'workoutTime', 'trainingCalendar', 'wordcloud', 'pieCharts', 'lifetimeStatistics'
     ];
 
     expectedTabs.forEach(tabName => {
       expect(html.includes(`exportVisualizationTab('${tabName}')`)).toBe(true);
       expect(Boolean(exportCode.match(new RegExp(`${tabName}:\\s*'[^']+'`)))).toBe(true);
     });
+    expect(exportCode).toContain("lifetimeStatistics: isEmptyStateHidden('lifetimeStatisticsEmptyState')");
+    expect(exportCode).toContain("lifetimeStatistics: 'lifetimeStatisticsCaptureArea'");
     expect(html).toContain('id="wordcloudCanvas"');
   });
 

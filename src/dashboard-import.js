@@ -290,6 +290,7 @@
 
         // Raw distance is in meters in index 17
         let distKm = 0;
+        let distanceAvailable = false;
         if (distIdx !== -1) {
           let rawDist = row[distIdx];
           if (rawDist) {
@@ -299,6 +300,7 @@
             }
             const numericDist = parseFloat(rawDist);
             if (!isNaN(numericDist)) {
+              distanceAvailable = Number.isFinite(numericDist) && numericDist >= 0;
               // If we are using the 2nd Distanz column, it is in meters
               if (distIdx === distIndices[1]) {
                 distKm = numericDist / 1000;
@@ -311,10 +313,12 @@
         }
 
         let durationSeconds = 0;
+        let durationAvailable = false;
         if (durationIdx !== -1) {
           const rawDuration = parseFloat(row[durationIdx]);
           if (!isNaN(rawDuration)) {
             durationSeconds = rawDuration;
+            durationAvailable = Number.isFinite(rawDuration) && rawDuration >= 0;
           }
         }
 
@@ -344,8 +348,10 @@
           sportRaw: rawSport,
           sport: sportCategory, // 'Run', 'Bike', 'Swim' or null
           distance: distKm,
+          distanceAvailable,
           equipment,
           duration: durationSeconds,
+          durationAvailable,
           avgHeartRate: avgHeartRate,
           avgWatts: sportCategory === 'Bike' ? avgWatts : null,
           avgCadence: Number.isFinite(parsedCadence) && parsedCadence > 0 ? parsedCadence : null,

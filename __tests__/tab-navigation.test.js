@@ -49,6 +49,7 @@ function createMockDocument() {
     vizTabTrainingCalendar: createMockElement(),
     vizTabWordcloud: createMockElement(),
     vizTabPieCharts: createMockElement(),
+    vizTabLifetimeStatistics: createMockElement(),
     vizPanelTotalDistance: createMockElement(),
     vizPanelPaceMetrics: createMockElement(),
     vizPanelEquipment: createMockElement(),
@@ -59,7 +60,8 @@ function createMockDocument() {
     vizPanelWorkoutTime: createMockElement(),
     vizPanelTrainingCalendar: createMockElement(),
     vizPanelWordcloud: createMockElement(),
-    vizPanelPieCharts: createMockElement()
+    vizPanelPieCharts: createMockElement(),
+    vizPanelLifetimeStatistics: createMockElement()
   };
 
   return {
@@ -125,8 +127,9 @@ describe('tab navigation helpers', () => {
     expect(getNextVisualizationTab('workoutTime', 1)).toBe('trainingCalendar');
     expect(getNextVisualizationTab('trainingCalendar', 1)).toBe('wordcloud');
     expect(getNextVisualizationTab('wordcloud', 1)).toBe('pieCharts');
-    expect(getNextVisualizationTab('pieCharts', 1)).toBe('totalDistance');
-    expect(getNextVisualizationTab('totalDistance', -1)).toBe('pieCharts');
+    expect(getNextVisualizationTab('pieCharts', 1)).toBe('lifetimeStatistics');
+    expect(getNextVisualizationTab('lifetimeStatistics', 1)).toBe('totalDistance');
+    expect(getNextVisualizationTab('totalDistance', -1)).toBe('lifetimeStatistics');
     expect(getNextVisualizationTab('workoutTime', -1)).toBe('distributions');
     expect(getNextVisualizationTab('unknown', 1)).toBe('totalDistance');
   });
@@ -290,11 +293,25 @@ describe('tab navigation helpers', () => {
     expect(mockDocument.elements.vizTabPieCharts.focused).toBe(true);
   });
 
-  it('reaches Pie Charts from Wordcloud and wraps to Total distance with ArrowRight', () => {
+  it('activates the Lifetime Statistics tab, hides other panels, and focuses its button', () => {
+    const mockDocument = createMockDocument();
+    const selected = setVisualizationTab('lifetimeStatistics', { document: mockDocument, focusTab: true });
+
+    expect(selected).toBe('lifetimeStatistics');
+    expect(mockDocument.elements.vizTabLifetimeStatistics.getAttribute('aria-selected')).toBe('true');
+    expect(mockDocument.elements.vizTabLifetimeStatistics.getAttribute('tabindex')).toBe('0');
+    expect(mockDocument.elements.vizPanelLifetimeStatistics.classList.contains('hidden')).toBe(false);
+    expect(mockDocument.elements.vizTabPieCharts.getAttribute('aria-selected')).toBe('false');
+    expect(mockDocument.elements.vizPanelPieCharts.classList.contains('hidden')).toBe(true);
+    expect(mockDocument.elements.vizTabLifetimeStatistics.focused).toBe(true);
+  });
+
+  it('reaches Pie Charts and Lifetime Statistics in order and wraps with ArrowRight', () => {
     const onTabChange = jest.fn();
 
     expect(handleVisualizationTabKeydown({ key: 'ArrowRight', preventDefault: jest.fn() }, 'wordcloud', { onTabChange })).toBe('pieCharts');
-    expect(handleVisualizationTabKeydown({ key: 'ArrowRight', preventDefault: jest.fn() }, 'pieCharts', { onTabChange })).toBe('totalDistance');
+    expect(handleVisualizationTabKeydown({ key: 'ArrowRight', preventDefault: jest.fn() }, 'pieCharts', { onTabChange })).toBe('lifetimeStatistics');
+    expect(handleVisualizationTabKeydown({ key: 'ArrowRight', preventDefault: jest.fn() }, 'lifetimeStatistics', { onTabChange })).toBe('totalDistance');
     expect(onTabChange).toHaveBeenCalledWith('pieCharts', { focusTab: true });
   });
 

@@ -13,11 +13,16 @@ werden, sonst schlagen `ReferenceError`s zur Laufzeit fehl.
 <script src="./src/tab-navigation.js"></script>
 <script src="./src/scatter-utils.js"></script>
 <script src="./src/distribution-utils.js"></script>
+<script src="./src/pie-chart-utils.js"></script>
+<script src="./src/lifetime-statistics-utils.js"></script>
+<script src="./src/workout-time-utils.js"></script>
 <script src="./src/equipment-utils.js"></script>
 <script src="./src/export-utils.js"></script>
 <script src="./src/power-pb-utils.js"></script>
 <script src="./src/zip-importer.js"></script>
 <script src="./src/heatmap-utils.js"></script>
+<script src="./src/training-calendar-utils.js"></script>
+<script src="./src/wordcloud-utils.js"></script>
 <script src="./src/analysis-counter.js"></script>
 
 <!-- NEU: Dashboard-Orchestrierung, in dieser exakten Reihenfolge -->
@@ -27,8 +32,13 @@ werden, sonst schlagen `ReferenceError`s zur Laufzeit fehl.
 <script src="./src/dashboard-equipment.js"></script>
 <script src="./src/dashboard-power-pb.js"></script>
 <script src="./src/dashboard-distributions.js"></script>
+<script src="./src/dashboard-workout-time.js"></script>
 <script src="./src/dashboard-scatter.js"></script>
 <script src="./src/dashboard-heatmap.js"></script>
+<script src="./src/dashboard-training-calendar.js"></script>
+<script src="./src/dashboard-wordcloud.js"></script>
+<script src="./src/dashboard-pie-charts.js"></script>
+<script src="./src/dashboard-lifetime-statistics.js"></script>
 <script src="./src/dashboard-export.js"></script>
 <script src="./src/dashboard-tabs.js"></script>
 ```

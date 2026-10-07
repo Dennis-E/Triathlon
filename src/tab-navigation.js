@@ -1,4 +1,4 @@
-const TAB_ORDER = ['totalDistance', 'paceMetrics', 'equipment', 'equipmentTimeline', 'personalBests', 'heatmap', 'distributions', 'workoutTime', 'trainingCalendar', 'wordcloud', 'pieCharts'];
+const TAB_ORDER = ['totalDistance', 'paceMetrics', 'equipment', 'equipmentTimeline', 'personalBests', 'heatmap', 'distributions', 'workoutTime', 'trainingCalendar', 'wordcloud', 'pieCharts', 'lifetimeStatistics'];
 
 const TAB_BUTTON_IDS = {
   totalDistance: 'vizTabTotalDistance',
@@ -11,7 +11,8 @@ const TAB_BUTTON_IDS = {
   workoutTime: 'vizTabWorkoutTime',
   trainingCalendar: 'vizTabTrainingCalendar',
   wordcloud: 'vizTabWordcloud',
-  pieCharts: 'vizTabPieCharts'
+  pieCharts: 'vizTabPieCharts',
+  lifetimeStatistics: 'vizTabLifetimeStatistics'
 };
 
 const TAB_PANEL_IDS = {
@@ -25,7 +26,8 @@ const TAB_PANEL_IDS = {
   workoutTime: 'vizPanelWorkoutTime',
   trainingCalendar: 'vizPanelTrainingCalendar',
   wordcloud: 'vizPanelWordcloud',
-  pieCharts: 'vizPanelPieCharts'
+  pieCharts: 'vizPanelPieCharts',
+  lifetimeStatistics: 'vizPanelLifetimeStatistics'
 };
 
 const TAB_ACTIVE_CLASS = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25';
@@ -94,6 +96,7 @@ function setVisualizationTab(tabName, options = {}) {
   const trainingCalendarBtn = doc.getElementById(TAB_BUTTON_IDS.trainingCalendar);
   const wordcloudBtn = doc.getElementById(TAB_BUTTON_IDS.wordcloud);
   const pieChartsBtn = doc.getElementById(TAB_BUTTON_IDS.pieCharts);
+  const lifetimeStatisticsBtn = doc.getElementById(TAB_BUTTON_IDS.lifetimeStatistics);
   const totalDistancePanel = doc.getElementById(TAB_PANEL_IDS.totalDistance);
   const paceMetricsPanel = doc.getElementById(TAB_PANEL_IDS.paceMetrics);
   const equipmentPanel = doc.getElementById(TAB_PANEL_IDS.equipment);
@@ -105,9 +108,10 @@ function setVisualizationTab(tabName, options = {}) {
   const trainingCalendarPanel = doc.getElementById(TAB_PANEL_IDS.trainingCalendar);
   const wordcloudPanel = doc.getElementById(TAB_PANEL_IDS.wordcloud);
   const pieChartsPanel = doc.getElementById(TAB_PANEL_IDS.pieCharts);
+  const lifetimeStatisticsPanel = doc.getElementById(TAB_PANEL_IDS.lifetimeStatistics);
 
   if (!totalDistanceBtn || !paceMetricsBtn || !equipmentBtn || !equipmentTimelineBtn || !personalBestsBtn || !heatmapBtn || !distributionsBtn || !workoutTimeBtn ||
-      !trainingCalendarBtn || !wordcloudBtn || !pieChartsBtn || !totalDistancePanel || !paceMetricsPanel || !equipmentPanel || !equipmentTimelinePanel || !personalBestsPanel || !heatmapPanel || !distributionsPanel || !workoutTimePanel || !trainingCalendarPanel || !wordcloudPanel || !pieChartsPanel) {
+      !trainingCalendarBtn || !wordcloudBtn || !pieChartsBtn || !lifetimeStatisticsBtn || !totalDistancePanel || !paceMetricsPanel || !equipmentPanel || !equipmentTimelinePanel || !personalBestsPanel || !heatmapPanel || !distributionsPanel || !workoutTimePanel || !trainingCalendarPanel || !wordcloudPanel || !pieChartsPanel || !lifetimeStatisticsPanel) {
     return tabName;
   }
 
@@ -122,6 +126,7 @@ function setVisualizationTab(tabName, options = {}) {
   const isTrainingCalendar = tabName === 'trainingCalendar';
   const isWordcloud = tabName === 'wordcloud';
   const isPieCharts = tabName === 'pieCharts';
+  const isLifetimeStatistics = tabName === 'lifetimeStatistics';
 
   totalDistanceBtn.setAttribute('aria-selected', isTotalDistance ? 'true' : 'false');
   totalDistanceBtn.setAttribute('tabindex', isTotalDistance ? '0' : '-1');
@@ -164,6 +169,9 @@ function setVisualizationTab(tabName, options = {}) {
   pieChartsBtn.setAttribute('aria-selected', isPieCharts ? 'true' : 'false');
   pieChartsBtn.setAttribute('tabindex', isPieCharts ? '0' : '-1');
   pieChartsBtn.className = isPieCharts ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
+  lifetimeStatisticsBtn.setAttribute('aria-selected', isLifetimeStatistics ? 'true' : 'false');
+  lifetimeStatisticsBtn.setAttribute('tabindex', isLifetimeStatistics ? '0' : '-1');
+  lifetimeStatisticsBtn.className = isLifetimeStatistics ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
 
   totalDistancePanel.classList.toggle('hidden', !isTotalDistance);
   paceMetricsPanel.classList.toggle('hidden', !isPaceMetrics);
@@ -176,6 +184,7 @@ function setVisualizationTab(tabName, options = {}) {
   trainingCalendarPanel.classList.toggle('hidden', !isTrainingCalendar);
   wordcloudPanel.classList.toggle('hidden', !isWordcloud);
   pieChartsPanel.classList.toggle('hidden', !isPieCharts);
+  lifetimeStatisticsPanel.classList.toggle('hidden', !isLifetimeStatistics);
 
   if (options.focusTab) {
     (isTotalDistance ? totalDistanceBtn :
@@ -188,7 +197,7 @@ function setVisualizationTab(tabName, options = {}) {
     isWorkoutTime ? workoutTimeBtn :
     isTrainingCalendar ? trainingCalendarBtn :
     isWordcloud ? wordcloudBtn :
-    pieChartsBtn).focus();
+    isPieCharts ? pieChartsBtn : lifetimeStatisticsBtn).focus();
   }
 
   return tabName;

@@ -257,6 +257,7 @@ function processData(rawCsvData) {
     const sportCategory = categorizeSport(rawSport);
 
     let distKm = 0;
+    let distanceAvailable = false;
     if (distIdx !== -1) {
       let rawDist = row[distIdx];
       if (rawDist) {
@@ -265,6 +266,7 @@ function processData(rawCsvData) {
         }
         const numericDist = parseFloat(rawDist);
         if (!isNaN(numericDist)) {
+          distanceAvailable = Number.isFinite(numericDist) && numericDist >= 0;
           // If we have 2 Distanz columns, the 2nd is in meters; if only 1, assume it's in meters
           // (matching Strava export format)
           if (distIndices.length > 1 && distIdx === distIndices[1]) {
@@ -279,10 +281,12 @@ function processData(rawCsvData) {
     }
 
     let durationSeconds = 0;
+    let durationAvailable = false;
     if (durationIdx !== -1) {
       const rawDuration = parseFloat(row[durationIdx]);
       if (!isNaN(rawDuration)) {
         durationSeconds = rawDuration;
+        durationAvailable = Number.isFinite(rawDuration) && rawDuration >= 0;
       }
     }
 
@@ -302,8 +306,10 @@ function processData(rawCsvData) {
       sportRaw: rawSport,
       sport: sportCategory,
       distance: distKm,
+      distanceAvailable,
       equipment,
       duration: durationSeconds,
+      durationAvailable,
       avgHeartRate,
       avgWatts: sportCategory === 'Bike' ? avgWatts : null,
       avgCadence: Number.isFinite(parsedCadence) && parsedCadence > 0 ? parsedCadence : null,

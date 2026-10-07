@@ -40,6 +40,24 @@ describe('parseCsvSimple', () => {
 });
 
 describe('processData', () => {
+  it('tracks source availability for positive values, real zeroes, and unusable distance/time values', () => {
+    const data = [
+      ['Activity Date', 'Activity Type', 'Activity Name', 'Moving Time', 'Distance', 'Distance'],
+      ['19.07.2026, 14:52:02', 'Run', 'Positive values', '3600', '10', '10000'],
+      ['19.07.2026, 14:52:02', 'Run', 'Recorded zeroes', '0', '0', '0'],
+      ['19.07.2026, 14:52:02', 'Run', 'Missing values', '', '10', ''],
+      ['19.07.2026, 14:52:02', 'Run', 'Invalid values', 'invalid', '10', 'invalid'],
+      ['19.07.2026, 14:52:02', 'Run', 'Negative values', '-60', '10', '-1000']
+    ];
+
+    const result = processData(data);
+
+    expect(result.map(activity => activity.distance)).toEqual([10, 0, 0, 0, -1]);
+    expect(result.map(activity => activity.duration)).toEqual([3600, 0, 0, 0, -60]);
+    expect(result.map(activity => activity.distanceAvailable)).toEqual([true, true, false, false, false]);
+    expect(result.map(activity => activity.durationAvailable)).toEqual([true, true, false, false, false]);
+  });
+
   it('should return empty array for null data', () => {
     expect(processData(null)).toEqual([]);
   });

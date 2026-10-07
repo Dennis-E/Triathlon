@@ -16,7 +16,8 @@
       workoutTime: 'workoutTimeChartWrapper',
       trainingCalendar: 'trainingCalendarYears',
       wordcloud: 'wordcloudCanvas',
-      pieCharts: 'pieChartsCaptureArea'
+      pieCharts: 'pieChartsCaptureArea',
+      lifetimeStatistics: 'lifetimeStatisticsCaptureArea'
     };
 
     const EXPORT_DOMAIN = window.exportUtils.getExportBrandConfig().domain;
@@ -47,7 +48,8 @@
         workoutTime: isEmptyStateHidden('workoutTimeEmptyState'),
         trainingCalendar: typeof processedActivities !== 'undefined' && processedActivities.length > 0,
         wordcloud: !!(window.wordcloudDashboard && window.wordcloudDashboard.canRequestExport()),
-        pieCharts: isEmptyStateHidden('pieChartsEmptyState')
+        pieCharts: isEmptyStateHidden('pieChartsEmptyState'),
+        lifetimeStatistics: isEmptyStateHidden('lifetimeStatisticsEmptyState')
       };
     }
 
@@ -82,7 +84,8 @@
         'vizTabWorkoutTime',
         'vizTabTrainingCalendar',
         'vizTabWordcloud',
-        'vizTabPieCharts'
+        'vizTabPieCharts',
+        'vizTabLifetimeStatistics'
       ];
       const groups = [getControlGroup('Views', viewIds)];
       const tabGroups = {
@@ -120,7 +123,8 @@
           getControlGroup('Group by', ['pieDimensionBtnSport', 'pieDimensionBtnDuration', 'pieDimensionBtnPace', 'pieDimensionBtnEquipment', 'pieDimensionBtnLength', 'pieDimensionBtnPower']),
           getControlGroup('Slice size', ['pieMeasureBtnCount', 'pieMeasureBtnTime', 'pieMeasureBtnDistance']),
           getControlGroup('Sport', ['pieSportBtnAll', 'pieSportBtnRun', 'pieSportBtnBike', 'pieSportBtnSwim'])
-        ]
+        ],
+        lifetimeStatistics: []
       };
       return window.exportUtils.summarizeAvailableControls(groups.concat(tabGroups[tabName] || []));
     }
@@ -163,7 +167,8 @@
           { label: 'Slice size', value: getActiveButtonText(['pieMeasureBtnCount', 'pieMeasureBtnTime', 'pieMeasureBtnDistance']) },
           { label: 'Sport', value: getActiveButtonText(['pieSportBtnAll', 'pieSportBtnRun', 'pieSportBtnBike', 'pieSportBtnSwim']) },
           { label: 'Colour scheme', value: document.getElementById('pieChartsColorScheme')?.selectedOptions[0]?.textContent.trim() }
-        ]
+        ],
+        lifetimeStatistics: []
       };
       return window.exportUtils.summarizeFilters(contexts[tabName] || []);
     }

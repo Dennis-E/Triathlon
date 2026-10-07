@@ -109,6 +109,8 @@
           renderWordcloud();
         } else if (nextTab === 'pieCharts') {
           window.pieChartsDashboard.render();
+        } else if (nextTab === 'lifetimeStatistics') {
+          window.lifetimeStatisticsDashboard.render();
         }
         ensureVisualizationTabVisible(nextTab);
       }
@@ -157,6 +159,7 @@
         tabName === 'trainingCalendar' ? 'vizTabTrainingCalendar' :
         tabName === 'wordcloud' ? 'vizTabWordcloud' :
         tabName === 'pieCharts' ? 'vizTabPieCharts' :
+        tabName === 'lifetimeStatistics' ? 'vizTabLifetimeStatistics' :
         'vizTabPersonalBests'
       );
       if (tabButton) tabButton.focus();

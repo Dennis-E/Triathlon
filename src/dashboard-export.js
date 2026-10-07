@@ -17,7 +17,7 @@
       trainingCalendar: 'trainingCalendarYears',
       wordcloud: 'wordcloudCanvas',
       pieCharts: 'pieChartsCaptureArea',
-      lifetimeStatistics: 'lifetimeStatisticsCaptureArea'
+      lifetimeStatistics: 'lifetimeStatisticsExportArea'
     };
 
     const EXPORT_DOMAIN = window.exportUtils.getExportBrandConfig().domain;
@@ -187,7 +187,8 @@
         hasData: flags[tabName],
         filters: getExportContext(tabName),
         availableControls: getAvailableControlContext(tabName),
-        legend: window.exportUtils.getExportLegend(tabName)
+        legend: window.exportUtils.getExportLegend(tabName),
+        contentFit: tabName === 'lifetimeStatistics' ? 'lifetime-kpis' : undefined
       });
     }
 
@@ -316,14 +317,17 @@
       ctx.fillText(EXPORT_DOMAIN, 194, 145);
       ctx.drawImage(assets.qrCode, 930, 28, 120, 120);
 
-      const contentWidth = target.contentFit === 'pb-tight' ? 1032 : 960;
-      const contentHeight = target.contentFit === 'pb-tight' ? 560 : 500;
+      const isLifetimeKpiExport = target.contentFit === 'lifetime-kpis';
+      const contentWidth = target.contentFit === 'pb-tight' || isLifetimeKpiExport ? 1032 : 960;
+      const contentHeight = target.contentFit === 'pb-tight' ? 560 : isLifetimeKpiExport ? 840 : 500;
       const scale = Math.min(contentWidth / captured.width, contentHeight / captured.height);
       const drawWidth = captured.width * scale;
       const drawHeight = captured.height * scale;
-      const contentX = target.kind === 'pb-tile' ? 24 : 60;
-      const contentY = 205;
+      const contentX = target.kind === 'pb-tile' ? 24 : isLifetimeKpiExport ? 24 : 60;
+      const contentY = isLifetimeKpiExport ? 190 : 205;
       ctx.drawImage(captured, contentX + (contentWidth - drawWidth) / 2, contentY + (contentHeight - drawHeight) / 2, drawWidth, drawHeight);
+
+      if (isLifetimeKpiExport) return finalCanvas.toDataURL('image/png');
 
       ctx.fillStyle = '#cbd5e1';
       ctx.font = '600 24px system-ui, -apple-system, "Segoe UI", sans-serif';

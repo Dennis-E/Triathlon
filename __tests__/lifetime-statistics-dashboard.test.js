@@ -17,6 +17,7 @@ function createClassList() {
 function createDashboardContext(activities, summary) {
   const elements = {
     lifetimeStatisticsCaptureArea: { classList: createClassList(), innerHTML: '' },
+    lifetimeStatisticsExportArea: { style: {}, innerHTML: '', setAttribute: jest.fn() },
     lifetimeStatisticsEmptyState: { classList: createClassList(), textContent: 'Import activities to view lifetime statistics.' }
   };
   const document = {
@@ -81,6 +82,41 @@ describe('lifetime statistics dashboard', () => {
     expect(elements.lifetimeStatisticsCaptureArea.innerHTML).toContain('55');
     expect(elements.lifetimeStatisticsCaptureArea.innerHTML).toContain('3h 30m');
     expect(elements.lifetimeStatisticsCaptureArea.innerHTML).toContain('4');
+  });
+
+  it('shows total distance as whole kilometers without decimal places', () => {
+    const summary = {
+      ...coreSummary,
+      distance: { value: 55.6, availableCount: 4, activityCount: 4, status: 'complete' }
+    };
+    const { context, elements } = createDashboardContext(createLifetimeBaselineActivities(), summary);
+
+    context.window.lifetimeStatisticsDashboard.render();
+
+    expect(elements.lifetimeStatisticsCaptureArea.innerHTML).toContain('56 km');
+    expect(elements.lifetimeStatisticsCaptureArea.innerHTML).not.toMatch(/55[,.]6 km/);
+  });
+
+  it('builds an export-only KPI view without the across-sports table', () => {
+    const activities = createLifetimeBaselineActivities();
+    const summary = {
+      ...coreSummary,
+      elevationGain: { value: 300, availableCount: 3, activityCount: 4, status: 'partial' }
+    };
+    const { context, elements } = createDashboardContext(activities, summary);
+
+    context.window.lifetimeStatisticsDashboard.render();
+
+    expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain('Total distance');
+    expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain('Moving time');
+    expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain('Workouts');
+    expect(elements.lifetimeStatisticsExportArea.innerHTML).not.toContain('By sport');
+    expect(elements.lifetimeStatisticsExportArea.innerHTML).not.toContain('lifetimeSportBreakdownHeading');
+    expect(elements.lifetimeStatisticsExportArea.innerHTML).not.toContain('No supported sport categories');
+    expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain('text-5xl');
+    expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain('0,3 km');
+    expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain('grid-cols-4');
+    expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain('Lifetime milestones');
   });
 
   it('renders lifetime milestones without partial-data notifications', () => {

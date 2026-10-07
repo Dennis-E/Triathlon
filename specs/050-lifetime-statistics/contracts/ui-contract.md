@@ -13,6 +13,7 @@
 ## Content structure
 
 - A single capture region, `#lifetimeStatisticsCaptureArea`, contains all summary content intended for export.
+- The export uses a dedicated `#lifetimeStatisticsExportArea`: it excludes the “By sport” cross-sport table, enlarges the total distance, moving-time and workout KPI cards, uses compact supporting milestones, and omits filter/control metadata so the KPIs occupy more of the square share image.
 - A total summary presents distance, moving time, and total workout count as the first visible group.
 - A sport breakdown lists only represented supported sports (`Run`, `Bike`, `Swim`) and shows workout count, distance and moving time for each.
 - Supporting lifetime measures show recorded elevation, unique active days, longest activity by distance, longest activity by moving time, and separate shoe/bike counts derived from imported gear labels. Do not show gear names or a Bike equipment list.
@@ -37,8 +38,8 @@
 ## Share/Export contract
 
 - Export action calls the established `exportVisualizationTab('lifetimeStatistics')` flow.
-- Register `lifetimeStatisticsCaptureArea` as the capture target and make export available only when imported activity data is present.
-- The captured region includes the current total, sport breakdown, milestone and equipment summary. Empty state follows the existing standard no-data behavior.
+- Register `lifetimeStatisticsExportArea` as the capture target and make export available only when imported activity data is present.
+- The captured region includes enlarged total, moving-time and workout KPIs plus lifetime milestones and equipment totals, but excludes the cross-sport breakdown table. Empty state follows the existing standard no-data behavior.
 - Register a human-readable tab title and filename slug in `src/export-utils.js`; do not add an external export endpoint or new network request.
 
 ## Script loading

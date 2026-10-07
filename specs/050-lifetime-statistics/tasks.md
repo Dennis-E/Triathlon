@@ -74,7 +74,7 @@ description: "Actionable implementation tasks for Lifetime Statistics"
 
 **Goal**: Export the currently displayed lifetime summary through the established local preview/download flow, with standard no-data behavior.
 
-**Independent Test**: With imported synthetic data, export and verify the capture includes totals, sport breakdown, milestones, and equipment; with no data, verify export is blocked by the existing no-data behavior.
+**Independent Test**: With imported synthetic data, export and verify the enlarged total distance, moving-time, and workout KPIs are prominent, supporting milestones remain readable, the cross-sport table is omitted, and no-data export is blocked by the existing behavior.
 
 - [X] T019 [US4] Add export title, filename-slug, capture-target, exportability, and no-data assertions in `__tests__/export-utils.test.js`, `__tests__/index-script-syntax.test.js`, and `__tests__/lifetime-statistics-dashboard.test.js` before wiring export.
 - [X] T020 [P] [US4] Register the `lifetimeStatistics` display title and filename slug in `src/export-utils.js`, and capture target, data flag, view ID, and export context in `src/dashboard-export.js`.

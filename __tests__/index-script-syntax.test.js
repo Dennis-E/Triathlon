@@ -259,7 +259,9 @@ describe('index.html inline script syntax', () => {
       expect(Boolean(exportCode.match(new RegExp(`${tabName}:\\s*'[^']+'`)))).toBe(true);
     });
     expect(exportCode).toContain("lifetimeStatistics: isEmptyStateHidden('lifetimeStatisticsEmptyState')");
-    expect(exportCode).toContain("lifetimeStatistics: 'lifetimeStatisticsCaptureArea'");
+    expect(exportCode).toContain("lifetimeStatistics: 'lifetimeStatisticsExportArea'");
+    expect(exportCode).toContain("tabName === 'lifetimeStatistics' ? 'lifetime-kpis' : undefined");
+    expect(html).toContain('id="lifetimeStatisticsExportArea"');
     expect(html).toContain('id="wordcloudCanvas"');
   });
 
@@ -494,8 +496,11 @@ describe('index.html inline script syntax', () => {
     expect(inlineCode).not.toContain('footerLogoBox');
     expect(inlineCode).toContain('computeFilterRowLayout');
     expect(inlineCode).toContain('rowPaddingBottom');
-    expect(inlineCode).toContain("target.contentFit === 'pb-tight' ? 1032 : 960");
-    expect(inlineCode).toContain("target.contentFit === 'pb-tight' ? 560 : 500");
+    expect(inlineCode).toContain("target.contentFit === 'pb-tight' || isLifetimeKpiExport ? 1032 : 960");
+    expect(inlineCode).toContain("target.contentFit === 'pb-tight' ? 560 : isLifetimeKpiExport ? 840 : 500");
+    expect(inlineCode).toContain("target.contentFit === 'pb-tight' || isLifetimeKpiExport ? 1032 : 960");
+    expect(inlineCode).toContain("isLifetimeKpiExport ? 24 : 60");
+    expect(inlineCode).toContain('if (isLifetimeKpiExport) return finalCanvas.toDataURL');
     expect(inlineCode).toContain("ctx.font = '600 24px system-ui");
     expect(inlineCode).toContain("ctx.drawImage(assets.qrCode");
     expect(inlineCode).toContain("kind: 'pb-tile'");

@@ -15,6 +15,7 @@
 
 const fs   = require('fs');
 const path = require('path');
+const importExperienceCatalog = require('../src/import-experience-catalog');
 
 // The dashboard orchestration files extracted from the former big inline script
 // (specs/022-modularize-inline-script). Order matches the required <script src>
@@ -53,6 +54,7 @@ describe('index.html inline script syntax', () => {
   let html;
   let inlineCode;
   let trainingCalendarCode;
+  let dashboardImportSource;
 
   beforeAll(() => {
     const htmlPath = path.join(__dirname, '../index.html');
@@ -60,6 +62,7 @@ describe('index.html inline script syntax', () => {
     const dashboardModulesCode = DASHBOARD_MODULE_FILES
       .map(fileName => fs.readFileSync(path.join(__dirname, '../src', fileName), 'utf-8'))
       .join('\n');
+    dashboardImportSource = fs.readFileSync(path.join(__dirname, '../src/dashboard-import.js'), 'utf-8');
     inlineCode = extractInlineScripts(html) + '\n' + dashboardModulesCode;
     trainingCalendarCode = fs.readFileSync(path.join(__dirname, '../src/dashboard-training-calendar.js'), 'utf-8');
   });
@@ -72,6 +75,15 @@ describe('index.html inline script syntax', () => {
     const scriptSrcTags = [...html.matchAll(/<script src="\.\/src\/(dashboard-[a-z-]+\.js)"><\/script>/g)]
       .map(m => m[1]);
     expect(scriptSrcTags).toEqual(DASHBOARD_MODULE_FILES);
+  });
+
+  it('loads the import experience catalog before dashboard orchestration and exposes its modal anchors', () => {
+    expect(html).toContain('<script src="./src/import-experience-catalog.js"></script>');
+    expect(html.indexOf('./src/import-experience-catalog.js')).toBeLessThan(html.indexOf('./src/dashboard-import.js'));
+    expect(html).toContain('id="importProgressPreview"');
+    expect(html).toContain('id="importExperienceIllustration"');
+    expect(html).toContain('id="importProgressMessage"');
+    expect(html).toContain('id="importPrivacyReminder"');
   });
 
   it('loads the browser power utility before the dashboard script', () => {
@@ -270,14 +282,26 @@ describe('index.html inline script syntax', () => {
     expect(html).toMatch(/id="wordcloudCountValue"[^>]*>50 words<\/output>/);
   });
 
-  it('provides rotating prepared import previews and humorous messages', () => {
+  it('provides one responsive message and illustration area for the import experience', () => {
     expect(html).toContain('id="importProgressPreview"');
-    expect(html).toContain('data-import-preview="0"');
-    expect(html).toContain('data-import-preview="1"');
-    expect(inlineCode).toContain('startImportPreviewRotation');
-    expect(inlineCode).toContain('stopImportPreviewRotation');
-    expect(inlineCode).toContain('Crunching your kilometers...');
-    expect(inlineCode).toContain('Looking for suspiciously fast segments...');
+    expect(html).toContain('id="importExperienceIllustration"');
+    expect(html).toContain('id="importProgressMessage"');
+    expect(html).toContain('id="importPrivacyReminder"');
+    expect(html).toContain('min-h-14');
+    expect(html).not.toContain('data-import-preview=');
+  });
+
+  it('maps all twenty catalog entries to local SVG scenes with reduced-motion fallbacks', () => {
+    expect(importExperienceCatalog.messages).toHaveLength(20);
+    importExperienceCatalog.messages.forEach(message => {
+      const assetPath = path.join(__dirname, '..', message.illustrationPath.replace(/^\.\//, ''));
+      expect(fs.existsSync(assetPath)).toBe(true);
+      const svg = fs.readFileSync(assetPath, 'utf-8');
+      expect(svg).toMatch(/<svg\b/);
+      expect(svg).toMatch(/prefers-reduced-motion:\s*reduce/);
+      expect(svg).not.toMatch(/(?:href|src)=["']https?:\/\//i);
+    });
+    expect(html).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)/);
   });
 
   it('keeps one import headline and one black detail status box', () => {
@@ -296,11 +320,19 @@ describe('index.html inline script syntax', () => {
     expect(inlineCode).toContain('stageEl.textContent = stage');
   });
 
-  it('uses a calm five-second preview timer independent of progress updates', () => {
-    expect(inlineCode).toContain('}, 5000);');
-    expect(inlineCode).not.toContain('}, 1800);');
-    expect(inlineCode).toContain('startImportPreviewRotation();');
-    expect(inlineCode).toContain('stopImportPreviewRotation();');
+  it('uses a calm message interval and keeps message rotation independent of progress updates', () => {
+    expect(dashboardImportSource).toContain('IMPORT_EXPERIENCE_ROTATION_INTERVAL');
+    expect(dashboardImportSource).toMatch(/IMPORT_EXPERIENCE_ROTATION_INTERVAL\s*=\s*(7000|8000|9000|10000)/);
+    expect(dashboardImportSource).not.toContain('}, 5000);');
+    expect(dashboardImportSource).toContain('startImportExperienceRotation');
+    expect(dashboardImportSource).toContain('stopImportExperienceRotation');
+  });
+
+  it('keeps reduced-motion and live announcement behavior on the import message presentation', () => {
+    expect(html).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*#importProgressPreview/);
+    expect(html).toMatch(/id="importProgressMessage"[^>]*aria-live="polite"/);
+    expect(html).toMatch(/id="importExperienceIllustration"[^>]*aria-hidden="true"/);
+    expect(html).toMatch(/id="importPrivacyReminder"[^>]*aria-live="polite"/);
   });
 
   it('renders a distinct activity-average power section for Bike PBs', () => {

@@ -6,16 +6,11 @@
       'schwimmen': 'Swim', 'swim': 'Swim', 'swimming': 'Swim'
     };
 
-    let importPreviewTimer = null;
-    let importPreviewIndex = 0;
-    const IMPORT_PREVIEW_MESSAGES = [
-      'Crunching your kilometers...',
-      'Looking for suspiciously fast segments...',
-      'Turning sweat into charts...',
-      'Finding out which bike you actually ride...',
-      'Your Strava history has opinions.',
-      'Almost there - the charts are warming up.'
-    ];
+    let importExperienceTimer = null;
+    let importExperienceSession = null;
+    let importExperienceVisibilityHandler = null;
+    let importExperienceFadeFrame = null;
+    const IMPORT_EXPERIENCE_ROTATION_INTERVAL = 8000;
 
     function findHeaderIndex(headers, matcher) {
       if (!Array.isArray(headers)) return -1;
@@ -40,13 +35,17 @@
     }
 
     function createImportedDataset(csvRows, sourceLabel) {
-      const activities = processData(csvRows);
+      const statisticsAccumulator = window.importExperienceCatalog.createStatisticsAccumulator();
+      const activities = processData(csvRows, activity => {
+        window.importExperienceCatalog.accumulateActivityStatistics(statisticsAccumulator, activity);
+      });
       return {
         kind: 'tri-activities-v1',
         importedAt: new Date().toISOString(),
         sourceLabel,
         rawCsvData: csvRows,
         activities,
+        importExperienceStatistics: window.importExperienceCatalog.finalizeStatistics(statisticsAccumulator),
         fitBestEffortsByActivityId: {},
         gpsTracksByActivityId: {}
       };
@@ -106,42 +105,88 @@
       if (!modal) return;
       modal.classList.remove('hidden');
       modal.classList.add('flex');
-      startImportPreviewRotation();
+      startImportExperienceRotation();
     }
 
     function hideImportProgressModal() {
       const modal = document.getElementById('importProgressModal');
       if (!modal) return;
-      stopImportPreviewRotation();
+      stopImportExperienceRotation();
       modal.classList.add('hidden');
       modal.classList.remove('flex');
     }
 
-    function renderImportPreview(index) {
-      const previews = document.querySelectorAll('[data-import-preview]');
+    function renderImportExperienceMessage(entry) {
+      if (!entry) return;
       const message = document.getElementById('importProgressMessage');
-      if (!previews.length || !message) return;
-
-      importPreviewIndex = index % previews.length;
-      previews.forEach((preview, previewIndex) => {
-        preview.classList.toggle('hidden', previewIndex !== importPreviewIndex);
-      });
-      message.textContent = IMPORT_PREVIEW_MESSAGES[importPreviewIndex % IMPORT_PREVIEW_MESSAGES.length];
+      const illustration = document.getElementById('importExperienceIllustration');
+      const privacyReminder = document.getElementById('importPrivacyReminder');
+      if (!message || !illustration) return;
+      const preview = document.getElementById('importProgressPreview');
+      if (preview) {
+        if (importExperienceFadeFrame !== null) cancelAnimationFrame(importExperienceFadeFrame);
+        preview.classList.add('import-experience-is-changing');
+        importExperienceFadeFrame = requestAnimationFrame(() => {
+          preview.classList.remove('import-experience-is-changing');
+          importExperienceFadeFrame = null;
+        });
+      }
+      message.textContent = entry.text;
+      illustration.src = entry.illustrationPath;
+      illustration.alt = '';
+      illustration.setAttribute('aria-hidden', 'true');
+      if (privacyReminder) {
+        const reminderDue = !!(importExperienceSession && importExperienceSession.privacyReminderDue);
+        privacyReminder.textContent = reminderDue ? window.importExperienceCatalog.privacyReminder : '';
+        privacyReminder.classList.toggle('hidden', !reminderDue);
+      }
     }
 
-    function startImportPreviewRotation() {
-      stopImportPreviewRotation();
-      importPreviewIndex = 0;
-      renderImportPreview(importPreviewIndex);
-      importPreviewTimer = setInterval(() => {
-        renderImportPreview(importPreviewIndex + 1);
-      }, 5000);
+    function advanceImportExperience() {
+      if (!importExperienceSession || !importExperienceSession.active || document.hidden) return;
+      const nextMessage = window.importExperienceCatalog.getNextMessage(importExperienceSession);
+      renderImportExperienceMessage(nextMessage);
     }
 
-    function stopImportPreviewRotation() {
-      if (importPreviewTimer !== null) {
-        clearInterval(importPreviewTimer);
-        importPreviewTimer = null;
+    function scheduleImportExperienceRotation() {
+      if (importExperienceTimer !== null || !importExperienceSession || document.hidden) return;
+      importExperienceTimer = setInterval(advanceImportExperience, IMPORT_EXPERIENCE_ROTATION_INTERVAL);
+    }
+
+    function handleImportExperienceVisibilityChange() {
+      if (document.hidden) {
+        if (importExperienceTimer !== null) clearInterval(importExperienceTimer);
+        importExperienceTimer = null;
+        return;
+      }
+      scheduleImportExperienceRotation();
+    }
+
+    function startImportExperienceRotation() {
+      stopImportExperienceRotation();
+      importExperienceSession = window.importExperienceCatalog.createSession({ phase: 'processing' });
+      renderImportExperienceMessage(window.importExperienceCatalog.getNextMessage(importExperienceSession));
+      importExperienceVisibilityHandler = handleImportExperienceVisibilityChange;
+      document.addEventListener('visibilitychange', importExperienceVisibilityHandler);
+      scheduleImportExperienceRotation();
+    }
+
+    function stopImportExperienceRotation() {
+      if (importExperienceTimer !== null) {
+        clearInterval(importExperienceTimer);
+        importExperienceTimer = null;
+      }
+      if (importExperienceFadeFrame !== null) {
+        cancelAnimationFrame(importExperienceFadeFrame);
+        importExperienceFadeFrame = null;
+      }
+      if (importExperienceVisibilityHandler) {
+        document.removeEventListener('visibilitychange', importExperienceVisibilityHandler);
+        importExperienceVisibilityHandler = null;
+      }
+      if (importExperienceSession) {
+        window.importExperienceCatalog.stopSession(importExperienceSession);
+        importExperienceSession = null;
       }
     }
 
@@ -165,7 +210,8 @@
               if (options.gpsTracksByActivityId && typeof options.gpsTracksByActivityId === 'object') {
                 dataset.gpsTracksByActivityId = options.gpsTracksByActivityId;
               }
-              applyImportedDataset(dataset, options);
+                  if (typeof options.onDatasetPrepared === 'function') options.onDatasetPrepared(dataset);
+                  applyImportedDataset(dataset, options);
               resolve(dataset);
             } catch (err) {
               updateStatusBadge('error', err.message || 'Could not process imported data');
@@ -213,7 +259,7 @@
     }
 
     // Map CSV rows to objects
-    function processData(csvRows) {
+    function processData(csvRows, onActivityProcessed) {
       if (!Array.isArray(csvRows) || csvRows.length < 2) {
         throw new Error('CSV is empty or invalid');
       }
@@ -340,7 +386,7 @@
           : null;
         const equipment = equipmentIdx !== -1 ? (row[equipmentIdx] || '').trim() : '';
 
-        nextProcessedActivities.push({
+        const processedActivity = {
           id: row[0],
           date: date,
           startTime: startTime,
@@ -358,7 +404,9 @@
           totalSteps: sportCategory === 'Run' && Number.isFinite(parsedTotalSteps) && parsedTotalSteps > 0 ? parsedTotalSteps : null,
           elevationGain: elevationGain,
           name: name
-        });
+        };
+        nextProcessedActivities.push(processedActivity);
+        if (typeof onActivityProcessed === 'function') onActivityProcessed(processedActivity);
       }
 
       // Sort chronological ascending for line/bar charts
@@ -398,7 +446,7 @@
           showImportProgressModal();
           errorDiv.classList.add('hidden');
           setImportModalVisualState('loader', true);
-          updateImportProgress(5, 'Extracting ZIP file...');
+          updateImportProgress(0, 'Reading archive...');
 
           // Import the ZIP file
           const importResult = await importStravaZip(file, (progress) => {
@@ -407,17 +455,26 @@
           });
 
           // Parse the CSV
-          updateImportProgress(70, 'Processing data...');
+          updateImportProgress(null, 'Processing data...');
           await importCsvText(importResult.csvText, {
             sourceLabel: 'Strava ZIP import',
             openDashboard: true,
+            onDatasetPrepared: dataset => {
+              if (!importExperienceSession || !importExperienceSession.active) return;
+              const personalMessages = window.importExperienceCatalog.buildPersonalMessages(dataset.importExperienceStatistics);
+              window.importExperienceCatalog.addCandidates(importExperienceSession, personalMessages, { prioritize: true });
+              if (personalMessages.length) advanceImportExperience();
+            },
             fitBestEffortsByActivityId: importResult.fitBestEffortsByActivityId || {},
             gpsTracksByActivityId: importResult.gpsTracksByActivityId || {}
           });
           recordCompletedAnalysis();
 
           // Update progress
-          updateImportProgress(95, 'Finalizing...');
+          if (importExperienceSession) {
+            window.importExperienceCatalog.setPhase(importExperienceSession, 'finalizing');
+          }
+          updateImportProgress(null, 'Preparing visualizations...');
 
           // Hide modal after a short delay
           setTimeout(() => {
@@ -425,7 +482,7 @@
           }, 1000);
         } catch (error) {
           console.error('Import failed:', error);
-          updateImportProgress(100, 'Error', true);
+          updateImportProgress(null, 'Import failed', true);
           document.getElementById('importProgressError').classList.remove('hidden');
           document.getElementById('importProgressDetail').textContent = error.message || 'Unknown error occurred';
         }
@@ -439,15 +496,20 @@
       const percentEl = document.getElementById('importProgressPercent');
       const stageEl = document.getElementById('importProgressStage');
       const detailEl = document.getElementById('importProgressDetail');
+      const detailContainer = detailEl && detailEl.parentElement;
       const errorDiv = document.getElementById('importProgressError');
 
-      bar.style.width = percent + '%';
-      percentEl.textContent = percent + '%';
+      const hasProgressValue = Number.isFinite(percent);
+      if (hasProgressValue) {
+        const boundedPercent = Math.max(0, Math.min(100, percent));
+        bar.style.width = boundedPercent + '%';
+        percentEl.textContent = boundedPercent + '%';
+      }
       stageEl.textContent = stage;
-      detailEl.textContent = stage;
+      if (detailContainer) detailContainer.classList.toggle('hidden', !isError);
 
       if (isError) {
-        stopImportPreviewRotation();
+        stopImportExperienceRotation();
         setImportModalVisualState('alert-circle', false);
       }
     }

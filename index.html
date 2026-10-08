@@ -58,6 +58,24 @@
   <script src="./src/wordcloud-utils.js"></script>
   <script src="./src/analysis-counter.js"></script>
   <style>
+    #importProgressPreview {
+      transition: opacity 320ms ease;
+    }
+
+    #importProgressPreview.import-experience-is-changing {
+      opacity: 0.45;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #importProgressPreview {
+        transition: none;
+      }
+
+      #importProgressPreview.import-experience-is-changing {
+        opacity: 1;
+      }
+    }
+
     /* Custom scrollbar for modern feel */
     ::-webkit-scrollbar {
       width: 6px;
@@ -188,31 +206,13 @@
         </div>
       </div>
 
-      <!-- Prepared previews of existing TriAnalytica visualizations -->
-      <div id="importProgressPreview" class="mt-6 overflow-hidden rounded-lg border border-slate-800 bg-slate-950" aria-live="polite">
-        <div data-import-preview="0" class="p-4">
-          <div class="mb-3 flex items-center justify-between">
-            <span class="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-300">Training volume</span>
-            <span class="text-[10px] text-slate-500">Dashboard preview</span>
-          </div>
-          <svg viewBox="0 0 320 88" class="h-20 w-full" role="img" aria-label="Training volume chart preview">
-            <path d="M8 72 C42 64 48 42 78 50 S118 68 148 38 S196 46 222 24 S274 30 312 10" fill="none" stroke="#818cf8" stroke-width="4" stroke-linecap="round" />
-            <path d="M8 72 C42 64 48 42 78 50 S118 68 148 38 S196 46 222 24 S274 30 312 10 V88 H8 Z" fill="#6366f1" opacity=".14" />
-            <path d="M8 80 H312" stroke="#334155" />
-          </svg>
-        </div>
-        <div data-import-preview="1" class="hidden p-4">
-          <div class="mb-3 flex items-center justify-between">
-            <span class="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">GPS heatmap</span>
-            <span class="text-[10px] text-slate-500">Dashboard preview</span>
-          </div>
-          <svg viewBox="0 0 320 88" class="h-20 w-full" role="img" aria-label="GPS heatmap preview">
-            <path d="M24 64 C48 16 82 76 112 34 S162 20 184 56 S238 70 292 22" fill="none" stroke="#34d399" stroke-width="16" opacity=".18" stroke-linecap="round" />
-            <path d="M24 64 C48 16 82 76 112 34 S162 20 184 56 S238 70 292 22" fill="none" stroke="#34d399" stroke-width="4" stroke-linecap="round" />
-            <circle cx="112" cy="34" r="5" fill="#fbbf24" /><circle cx="184" cy="56" r="5" fill="#fb7185" />
-          </svg>
-        </div>
-        <p id="importProgressMessage" class="border-t border-slate-800 px-4 py-3 text-center text-xs italic text-slate-400">Crunching your kilometers...</p>
+      <!-- Message and illustration are paired by the local import-experience catalog. -->
+      <div id="importProgressPreview" class="mt-6 overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
+        <figure class="flex h-36 items-center justify-center p-4 sm:h-40">
+          <img id="importExperienceIllustration" class="h-full w-full object-contain" src="./assets/import-illustrations/message-01.svg" alt="" aria-hidden="true">
+        </figure>
+        <p id="importProgressMessage" class="min-h-14 border-t border-slate-800 px-4 py-3 text-center text-sm leading-relaxed text-slate-200" aria-live="polite">Your training data has entered T1. This may take a moment.</p>
+        <p id="importPrivacyReminder" class="hidden min-h-10 px-4 pb-3 text-center text-xs leading-relaxed text-emerald-300" aria-live="polite"></p>
       </div>
 
       <!-- Details -->
@@ -2018,6 +2018,7 @@
 
   </script>
 
+  <script src="./src/import-experience-catalog.js"></script>
   <script src="./src/dashboard-state.js"></script>
   <script src="./src/dashboard-core.js"></script>
   <script src="./src/dashboard-import.js"></script>

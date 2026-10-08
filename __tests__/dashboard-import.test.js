@@ -6,6 +6,7 @@ const dashboardImportSource = fs.readFileSync(
   path.join(__dirname, '../src/dashboard-import.js'),
   'utf8'
 );
+const importExperienceCatalog = require('../src/import-experience-catalog');
 
 function loadRuntimeProcessData() {
   const context = {
@@ -39,6 +40,45 @@ function loadRuntimeProcessData() {
 
 const processRuntimeData = loadRuntimeProcessData();
 const headers = ['Activity Date', 'Activity Type', 'Activity Name', 'Moving Time', 'Distance', 'Distance'];
+
+function loadRuntimeProgress() {
+  const nodes = {
+    importProgressBar: { style: {} },
+    importProgressPercent: { textContent: '' },
+    importProgressStage: { textContent: '' },
+    importProgressDetail: { textContent: '', parentElement: { classList: { toggle() {} } } },
+    importProgressError: { classList: { add() {}, remove() {} } },
+    importProgressPreview: { classList: { add() {}, remove() {} } },
+    importProgressMessage: { textContent: '' },
+    importExperienceIllustration: { src: '', alt: '', setAttribute() {} },
+    importPrivacyReminder: { textContent: '', classList: { add() {}, remove() {}, toggle() {} } },
+    importProgressModal: {
+      classList: { add() {}, remove() {} },
+      querySelector() { return null; }
+    }
+  };
+  const activeIntervals = new Set();
+  const removedListeners = [];
+  let nextInterval = 1;
+  const context = {
+    document: {
+      hidden: false,
+      getElementById: id => nodes[id] || null,
+      addEventListener() {},
+      removeEventListener: (event, handler) => removedListeners.push({ event, handler })
+    },
+    window: { importExperienceCatalog },
+    setInterval: () => { const id = nextInterval++; activeIntervals.add(id); return id; },
+    clearInterval: id => activeIntervals.delete(id),
+    requestAnimationFrame: () => 1,
+    cancelAnimationFrame() {}
+  };
+  vm.createContext(context);
+  vm.runInContext(`${dashboardImportSource}\nthis.__updateProgress = updateImportProgress; this.__showModal = showImportProgressModal; this.__hideModal = hideImportProgressModal; this.__activeSession = () => importExperienceSession;`, context, {
+    filename: 'src/dashboard-import.js'
+  });
+  return { updateProgress: context.__updateProgress, showModal: context.__showModal, hideModal: context.__hideModal, activeSession: context.__activeSession, nodes, activeIntervals, removedListeners };
+}
 
 function activityRow(name, duration, km, meters) {
   return ['19.07.2026, 14:52:02', 'Run', name, duration, km, meters];
@@ -85,5 +125,49 @@ describe('runtime dashboard-import metric availability', () => {
     expect(result[0].durationAvailable).toBe(false);
     expect(result[0].distance).toBe(0);
     expect(result[0].duration).toBe(0);
+  });
+});
+
+describe('runtime dashboard-import progress updates', () => {
+  it('retains the last reported percentage when only the factual stage changes', () => {
+    const runtime = loadRuntimeProgress();
+    runtime.updateProgress(95, 'Extracting GPS tracks...');
+    runtime.updateProgress(null, 'Processing data...');
+
+    expect(runtime.nodes.importProgressBar.style.width).toBe('95%');
+    expect(runtime.nodes.importProgressPercent.textContent).toBe('95%');
+    expect(runtime.nodes.importProgressStage.textContent).toBe('Processing data...');
+    expect(runtime.nodes.importProgressDetail.textContent).toBe('');
+  });
+
+  it('excludes percentage-only eligibility and keeps the final message phase-gated', () => {
+    const session = importExperienceCatalog.createSession({ phase: 'processing', random: () => 0 });
+    expect(session.orderedMessageIds).not.toContain('message-20');
+    importExperienceCatalog.setPhase(session, 'finalizing');
+    expect(session.orderedMessageIds).toContain('message-20');
+    expect(dashboardImportSource).toContain("setPhase(importExperienceSession, 'finalizing')");
+    expect(dashboardImportSource).not.toContain('updateImportProgress(5,');
+    expect(dashboardImportSource).not.toContain('updateImportProgress(70,');
+  });
+
+  it('cleans up the previous timer and session on error, modal close, and restart', () => {
+    const runtime = loadRuntimeProgress();
+    runtime.showModal();
+    const firstSession = runtime.activeSession();
+    expect(runtime.activeIntervals.size).toBe(1);
+
+    runtime.updateProgress(null, 'Import failed', true);
+    expect(runtime.activeIntervals.size).toBe(0);
+    expect(firstSession.active).toBe(false);
+
+    runtime.showModal();
+    const secondSession = runtime.activeSession();
+    expect(secondSession).not.toBe(firstSession);
+    expect(runtime.activeIntervals.size).toBe(1);
+
+    runtime.hideModal();
+    expect(runtime.activeIntervals.size).toBe(0);
+    expect(secondSession.active).toBe(false);
+    expect(runtime.removedListeners.map(item => item.event)).toEqual(['visibilitychange', 'visibilitychange']);
   });
 });

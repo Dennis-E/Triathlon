@@ -30,6 +30,8 @@ describe('News page contract', () => {
   });
 
   it('publishes the latest customer-facing updates first', () => {
+    expect(newsHtml).toMatch(/<article\b[\s\S]*?<h2[^>]*>More ways to explore your training—and a new way to import it[\s\S]*?<time datetime="2026-10-12">October 12, 2026<\/time>[\s\S]*?TrainingPeaks import[\s\S]*?Pie Charts[\s\S]*?Lifetime Statistics[\s\S]*?activity-aware messages[\s\S]*?<\/article>/i);
+    expect(newsHtml.indexOf('More ways to explore your training—and a new way to import it')).toBeLessThan(newsHtml.indexOf('Wordcloud, clearer Personal Bests, and more control'));
     expect(newsHtml).toMatch(/<article\b[\s\S]*?<h2[^>]*>Wordcloud, clearer Personal Bests, and more control[\s\S]*?<time datetime="2026-10-05">October 5, 2026<\/time>[\s\S]*?frequency-ranked cloud[\s\S]*?Equipment and Personal Bests[\s\S]*?navigation arrows[\s\S]*?<\/article>/i);
     expect(newsHtml.indexOf('Wordcloud, clearer Personal Bests, and more control')).toBeLessThan(newsHtml.indexOf('Your training has a calendar now'));
     expect(newsHtml).toMatch(/<article\b[\s\S]*?<h2[^>]*>Your training has a calendar now[\s\S]*?<time datetime="2026-09-28">September 28, 2026<\/time>[\s\S]*?Training Calendar[\s\S]*?Pace vs \.\.\.[\s\S]*?<\/article>/i);
@@ -38,7 +40,7 @@ describe('News page contract', () => {
 
   it('keeps the published content in one ordered collection', () => {
     expect(newsHtml).toMatch(/<main\b[\s\S]*?(?:id="newsArticles"|aria-label="Published news")[\s\S]*?<article\b[\s\S]*?<\/article>[\s\S]*?<\/main>/i);
-    expect((newsHtml.match(/<article\b/gi) || []).length).toBe(3);
+    expect((newsHtml.match(/<article\b/gi) || []).length).toBe(4);
     expect(newsHtml).not.toMatch(/coming soon|more news soon|unpublished/i);
   });
 
@@ -53,6 +55,7 @@ describe('News page contract', () => {
     expect(newsHtml).toMatch(/<div[^>]*class="[^"]*\bnews-shell\b[^"]*\bflex\b[^"]*\bitems-center\b[^"]*"/i);
     expect(newsHtml).toMatch(/TriAnalytica is now in alpha/);
     expect(newsHtml).toMatch(/Wordcloud, clearer Personal Bests, and more control/);
+    expect(newsHtml).toMatch(/More ways to explore your training—and a new way to import it/);
     expect(newsHtml).toMatch(/Your training has a calendar now/);
     expect(newsHtml).toMatch(/fellow athletes[\s\S]*?feedback, suggestions, and wishes/i);
   });

@@ -1,15 +1,17 @@
 # Welcome to TriAnalytica - my Triathlon Data Visualization Tool!
 
-This dashboard helps you explore your training history from your Strava data in a simple, browser-based view. Upload your Strava export ZIP and turn your activities into clear charts for training volume, pacing, equipment, and performance trends.
+This dashboard helps you explore training history from Strava or TrainingPeaks in a simple, browser-based view. Import a Strava export ZIP or multiple TrainingPeaks Workout Files ZIPs and turn supported activities into charts for training volume, pacing, equipment, and performance trends.
 
 ## How it works
 
 1. Open the app.
-2. Click the Strava Ingest button.
-3. Upload your Strava ZIP export.
+2. Choose Strava or TrainingPeaks on the landing page.
+3. Select the provider's export ZIP. For TrainingPeaks histories longer than 12 months, create period exports of 12 months or less and select all required ZIPs together.
 4. Explore the dashboard with your own data.
 
-Your data stays in the browser. No login is required, and your files are processed locally on your device.
+Selected workout files are processed locally in the browser and are not uploaded or persisted by TriAnalytica. No login is required. The app still makes network requests for third-party libraries and its aggregate analysis counter; workout files and activity fields are not included in the counter request.
+
+See [TrainingPeaks export instructions](docs/trainingpeaks-export-how-to.html) for the provider's Workout Files export flow and [docs/IMPORT_FEATURE.md](docs/IMPORT_FEATURE.md) for import behavior and privacy details.
 
 ## Available visualizations
 
@@ -81,7 +83,7 @@ If you want to run the project locally:
 python -m http.server
 ```
 
-Then open the app in your browser and import your Strava ZIP export from the landing page.
+Then open the app in your browser and import your Strava ZIP or TrainingPeaks Workout Files ZIP archives from the landing page.
 
 ## Contributing and feedback
 

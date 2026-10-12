@@ -71,6 +71,21 @@ describe('legal footer', () => {
       expect(html).toMatch(/privacyPolicyModal/i);
       expect(html).toMatch(/Verarbeitung importierter Aktivitätsdaten|Processing of imported activity data/i);
     });
+
+    it('documents TrainingPeaks FIT/GPX processing and separates local workout data from counter metadata', () => {
+      expect(html).toMatch(/FIT\.GZ-Workouts/);
+      expect(html).toMatch(/GPX\.GZ-Routen/);
+      expect(html).toMatch(/FIT\.GZ workouts/);
+      expect(html).toMatch(/GPX\.GZ routes/);
+      expect(html).toMatch(/weder in Cookies, localStorage oder IndexedDB/);
+      expect(html).toMatch(/or write workout data to cookies, localStorage, IndexedDB/);
+      expect(html).toMatch(/keinen Request-Body und keine Workout-Felder/);
+      expect(html).toMatch(/has no request body, and contains no workout fields/);
+      expect(html).toMatch(/Firestore speichert/);
+      expect(html).toMatch(/Firestore stores/);
+      expect(html).not.toMatch(/lokal im Browser gespeicherten Status für die Analyse-Zählung/);
+      expect(html).not.toMatch(/local browser storage for lightweight client-side deduplication of the analysis counter/);
+    });
   });
 
   describe('reachable from every tab (US3)', () => {

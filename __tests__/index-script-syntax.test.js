@@ -305,11 +305,30 @@ describe('index.html inline script syntax', () => {
   });
 
   it('keeps one import headline and one black detail status box', () => {
-    expect((html.match(/<h2 class="font-semibold text-lg">Importing Strava Data<\/h2>/g) || []).length).toBe(1);
+    expect((html.match(/<h2 class="font-semibold text-lg">Importing Training Data<\/h2>/g) || []).length).toBe(1);
     expect(html).toContain('id="importProgressDetail"');
     expect(html).toContain('bg-slate-950 border border-slate-800 rounded-lg');
     expect(html).toContain('id="importProgressStage"');
     expect(inlineCode).toContain('stageEl.textContent = stage');
+  });
+
+  it('offers both import sources, multi-ZIP TrainingPeaks selection, export instructions, and precise privacy copy', () => {
+    const trainingPeaksGuide = fs.readFileSync(path.join(__dirname, '../docs/trainingpeaks-export-how-to.html'), 'utf8');
+
+    expect(html).toContain('id="stravaIngestBtn"');
+    expect(html).toContain('id="trainingPeaksIngestBtn"');
+    expect(html).toContain('onclick="handleTrainingPeaksIngest()"');
+    expect(dashboardImportSource).toContain('input.multiple = true');
+    expect(dashboardImportSource).toContain('Array.from(event.target.files || [])');
+    expect(html).toContain('./docs/trainingpeaks-export-how-to.html');
+    expect(html).toContain('are not uploaded or stored by TriAnalytica');
+    expect(html).toContain('still makes network requests for libraries and its analysis counter');
+    expect(trainingPeaksGuide).toContain('204985370-Data-Export');
+    expect(trainingPeaksGuide).toContain('12 months or less');
+    expect(trainingPeaksGuide).toContain('Workout Files');
+    expect(trainingPeaksGuide).toContain('Workout Summary');
+    expect(trainingPeaksGuide).toContain('select all of the ZIP archives together');
+    expect(trainingPeaksGuide).not.toContain('No internet transmission');
   });
 
   it('places the factual import stage above the progress bar', () => {

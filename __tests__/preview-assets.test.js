@@ -54,8 +54,8 @@ describe('landing visualization previews', () => {
 
   it('preserves import-required guidance for data-dependent preview actions', () => {
     expect(html).toContain('id="previewGateModal"');
-    expect(html).toContain('Import Strava Data First');
-    expect(html).toContain('These dashboards become interactive after you import your Strava export.');
+    expect(html).toContain('Import Training Data First');
+    expect(html).toContain('These dashboards become interactive after you import a Strava or TrainingPeaks export.');
   });
 
   it('does not reference private source data from landing-page runtime markup', () => {

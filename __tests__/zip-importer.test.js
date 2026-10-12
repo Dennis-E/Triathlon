@@ -12,7 +12,8 @@ const {
   simplifyTrackPoints,
   extractGpsTracksFromZip,
   extractFitPowerEffortsFromZip,
-  extractGpsAndPowerFromZip
+  extractGpsAndPowerFromZip,
+  importTrainingPeaksZips
 } = require('../src/zip-importer');
 const {
   POWER_DURATIONS,
@@ -593,5 +594,203 @@ describe('extractGpsAndPowerFromZip (spec 021 - faster bike power import)', () =
     expect(result.gpsTracksByActivityId['2']).toBeDefined();
     expect(result.fitBestEffortsByActivityId['2']).toBeDefined();
     expect(fitDeps.gunzipUint8Array).toHaveBeenCalledTimes(1);
+  });
+});
+
+function makeTrainingPeaksZipEntry(bytes) {
+  return { dir: false, async: jest.fn().mockResolvedValue(new Uint8Array(bytes)) };
+}
+
+function makeTrainingPeaksFitDeps(archivesByName, dataByMarker) {
+  return {
+    loadZipArchive: jest.fn(async file => {
+      if (!archivesByName[file.name]) throw new Error('unreadable archive');
+      return archivesByName[file.name];
+    }),
+    gunzipUint8Array: jest.fn(async bytes => bytes),
+    ensureFitParserLoaded: jest.fn().mockResolvedValue(function FakeFitParser() {}),
+    parseFitData: jest.fn(async (_Parser, bytes) => {
+      const parsed = dataByMarker[bytes[0]];
+      if (!parsed) throw new Error('corrupt FIT data');
+      return parsed;
+    })
+  };
+}
+
+function makeFitSession({ start, end, sport, distance, duration, heartRate, cadence, ascent } = {}) {
+  return {
+    start_time: start ? new Date(start) : undefined,
+    timestamp: end ? new Date(end) : undefined,
+    sport,
+    total_distance: distance,
+    total_timer_time: duration,
+    avg_heart_rate: heartRate,
+    avg_cadence: cadence,
+    total_ascent: ascent
+  };
+}
+
+describe('importTrainingPeaksZips', () => {
+  it('combines archives chronologically and segments GPS by FIT session sport', async () => {
+    const archives = {
+      'later.zip': { files: { 'run.fit.gz': makeTrainingPeaksZipEntry([2]) } },
+      'earlier.zip': { files: { 'tri.fit.gz': makeTrainingPeaksZipEntry([1]) } }
+    };
+    const records = [
+      { timestamp: new Date('2025-05-01T09:01:00Z'), position_lat: 48.1, position_long: 11.5 },
+      { timestamp: new Date('2025-05-01T09:09:00Z'), position_lat: 48.2, position_long: 11.6 },
+      { timestamp: new Date('2025-05-01T09:10:30Z'), position_lat: 48.25, position_long: 11.65 },
+      { timestamp: new Date('2025-05-01T09:12:00Z'), position_lat: 48.3, position_long: 11.7 }
+    ];
+    const fitDeps = makeTrainingPeaksFitDeps(archives, {
+      1: {
+        sessions: [
+          makeFitSession({ start: '2025-05-01T09:00:00Z', end: '2025-05-01T09:10:00Z', sport: 'swimming', distance: 400, duration: 600, heartRate: 140 }),
+          makeFitSession({ start: '2025-05-01T09:11:00Z', end: '2025-05-01T09:20:00Z', sport: 'cycling', distance: 5000, duration: 540, cadence: 85 })
+        ],
+        records
+      },
+      2: { sessions: [makeFitSession({ start: '2026-05-01T09:00:00Z', end: '2026-05-01T10:00:00Z', sport: 'running', distance: 10000, duration: 3600 })], records: [] }
+    });
+    const progress = [];
+
+    const result = await importTrainingPeaksZips(
+      [{ name: 'later.zip', size: 1 }, { name: 'earlier.zip', size: 1 }],
+      update => progress.push(update),
+      fitDeps
+    );
+
+    expect(result.activities.map(activity => activity.sport)).toEqual(['Swim', 'Bike', 'Run']);
+    expect(result.activities.map(activity => activity.startTime.toISOString())).toEqual([
+      '2025-05-01T09:00:00.000Z', '2025-05-01T09:11:00.000Z', '2026-05-01T09:00:00.000Z'
+    ]);
+    expect(result.gpsTracksByActivityId[result.activities[0].id].points).toEqual([[48.1, 11.5], [48.2, 11.6]]);
+    expect(result.gpsTracksByActivityId[result.activities[1].id].points).toEqual([[48.3, 11.7]]);
+    expect(fitDeps.loadZipArchive).toHaveBeenCalledTimes(4);
+    expect(progress[progress.length - 1]).toEqual(expect.objectContaining({ percent: 100, processed: 2, total: 2 }));
+    expect(JSON.stringify(result.activities)).not.toMatch(/later\.zip|earlier\.zip|tri\.fit|run\.fit/);
+  });
+
+  it('deduplicates renamed duplicate workouts while retaining different same-day sessions', async () => {
+    const repeated = makeFitSession({ start: '2026-06-10T07:00:00Z', end: '2026-06-10T08:00:00Z', sport: 'running', distance: 10000, duration: 3600 });
+    const archives = {
+      'period-a.zip': { files: { 'workout-a.fit.gz': makeTrainingPeaksZipEntry([1]), 'second-run.fit.gz': makeTrainingPeaksZipEntry([2]) } },
+      'period-b.zip': { files: { 'renamed-copy.fit.gz': makeTrainingPeaksZipEntry([3]) } }
+    };
+    const fitDeps = makeTrainingPeaksFitDeps(archives, {
+      1: { sessions: [repeated], records: [] },
+      2: { sessions: [makeFitSession({ start: '2026-06-10T07:00:00Z', end: '2026-06-10T07:30:00Z', sport: 'running', distance: 5000, duration: 1800 })], records: [] },
+      3: { sessions: [repeated], records: [] }
+    });
+
+    const result = await importTrainingPeaksZips([{ name: 'period-a.zip', size: 1 }, { name: 'period-b.zip', size: 1 }], undefined, fitDeps);
+
+    expect(result.activities).toHaveLength(2);
+    expect(result.activities.map(activity => activity.distance).sort((a, b) => a - b)).toEqual([5, 10]);
+  });
+
+  it('keeps missing metrics unavailable and counts unknown sports without reclassifying them', async () => {
+    const archive = { files: { 'unknown.fit.gz': makeTrainingPeaksZipEntry([1]), 'minimal.fit.gz': makeTrainingPeaksZipEntry([2]) } };
+    const fitDeps = makeTrainingPeaksFitDeps({ 'mixed.zip': archive }, {
+      1: { sessions: [makeFitSession({ start: '2026-07-01T10:00:00Z', end: '2026-07-01T10:05:00Z', sport: 'transition', distance: 20, duration: 300 })], records: [] },
+      2: { sessions: [makeFitSession({ start: '2026-07-02T10:00:00Z', end: '2026-07-02T10:05:00Z', sport: 'running' })], records: [] }
+    });
+
+    const result = await importTrainingPeaksZips([{ name: 'mixed.zip', size: 1 }], undefined, fitDeps);
+
+    expect(result.activities).toHaveLength(1);
+    expect(result.activities[0].sport).toBe('Run');
+    expect(result.activities[0]).toEqual(expect.objectContaining({ distance: 0, distanceAvailable: false, duration: 0, durationAvailable: false, avgHeartRate: null }));
+    expect(result.skippedUnsupportedSportCount).toBe(1);
+  });
+
+  it('rejects the complete multi-ZIP operation with the failing archive and entry named', async () => {
+    const archives = {
+      'good.zip': { files: { 'good.fit.gz': makeTrainingPeaksZipEntry([1]) } },
+      'bad.zip': { files: { 'activities/broken.FIT.gz': makeTrainingPeaksZipEntry([2]) } }
+    };
+    const fitDeps = makeTrainingPeaksFitDeps(archives, {
+      1: { sessions: [makeFitSession({ start: '2026-01-01T10:00:00Z', end: '2026-01-01T11:00:00Z', sport: 'cycling', distance: 1000, duration: 60 })], records: [] }
+    });
+
+    await expect(importTrainingPeaksZips([{ name: 'good.zip', size: 1 }, { name: 'bad.zip', size: 1 }], undefined, fitDeps))
+      .rejects.toThrow(/bad\.zip.*activities\/broken\.FIT\.gz/);
+  });
+
+  it('explains GZIP decompression failures with the archive and entry context', async () => {
+    const archives = { 'broken-gzip.zip': { files: { 'activities/broken.FIT.gz': makeTrainingPeaksZipEntry([2]) } } };
+    const fitDeps = makeTrainingPeaksFitDeps(archives, {});
+    fitDeps.gunzipUint8Array.mockRejectedValue(new Error('stream failed'));
+
+    await expect(importTrainingPeaksZips([{ name: 'broken-gzip.zip', size: 1 }], undefined, fitDeps))
+      .rejects.toThrow(/broken-gzip\.zip.*activities\/broken\.FIT\.gz.*decompress GZIP/i);
+  });
+
+  it('rejects empty file selections and archives without FIT workout entries', async () => {
+    const fitDeps = makeTrainingPeaksFitDeps({ 'empty.zip': { files: { 'notes.txt': makeTrainingPeaksZipEntry([1]) } } }, {});
+    await expect(importTrainingPeaksZips([], undefined, fitDeps)).rejects.toThrow(/select/i);
+    await expect(importTrainingPeaksZips([{ name: 'empty.zip', size: 1 }], undefined, fitDeps)).rejects.toThrow(/empty\.zip.*FIT/i);
+  });
+
+  it('attaches a timestamped GPX.GZ route only when exactly one FIT session matches', async () => {
+    const gpx = '<gpx><trk><trkseg><trkpt lat="48.1" lon="11.5"><time>2026-07-01T10:01:00Z</time></trkpt><trkpt lat="48.2" lon="11.6"><time>2026-07-01T10:04:00Z</time></trkpt></trkseg></trk></gpx>';
+    const archives = {
+      'workout.zip': { files: { 'workout.fit.gz': makeTrainingPeaksZipEntry([1]) } },
+      'route.zip': { files: {
+        'separate-route.gpx.gz': makeTrainingPeaksZipEntry(new TextEncoder().encode(gpx)),
+        'other-workout.fit.gz': makeTrainingPeaksZipEntry([2])
+      } }
+    };
+    const fitDeps = makeTrainingPeaksFitDeps(archives, {
+      1: { sessions: [makeFitSession({ start: '2026-07-01T10:00:00Z', end: '2026-07-01T10:05:00Z', sport: 'running', distance: 1000, duration: 300 })], records: [] },
+      2: { sessions: [makeFitSession({ start: '2026-08-01T10:00:00Z', end: '2026-08-01T11:00:00Z', sport: 'cycling', distance: 10000, duration: 3600 })], records: [] }
+    });
+
+    const result = await importTrainingPeaksZips([{ name: 'workout.zip', size: 1 }, { name: 'route.zip', size: 1 }], undefined, fitDeps);
+
+    expect(result.gpsTracksByActivityId[result.activities[0].id].points).toEqual([[48.1, 11.5], [48.2, 11.6]]);
+    expect(result.skippedGpxRouteCount).toBe(0);
+  });
+
+  it('calculates bike power efforts from records belonging to each session only', async () => {
+    const records = [];
+    for (let index = 0; index <= 6; index += 1) {
+      records.push({ timestamp: new Date(10000 + index * 1000), distance: index * 10, power: 100 });
+      records.push({ timestamp: new Date(30000 + index * 1000), distance: index * 10, power: 300 });
+    }
+    const archive = { files: { 'multisport.fit.gz': makeTrainingPeaksZipEntry([1]) } };
+    const fitDeps = makeTrainingPeaksFitDeps({ 'power.zip': archive }, {
+      1: { sessions: [
+        makeFitSession({ start: '1970-01-01T00:00:10Z', end: '1970-01-01T00:00:16Z', sport: 'cycling', distance: 60, duration: 6 }),
+        makeFitSession({ start: '1970-01-01T00:00:30Z', end: '1970-01-01T00:00:36Z', sport: 'cycling', distance: 60, duration: 6 })
+      ], records }
+    });
+
+    const result = await importTrainingPeaksZips([{ name: 'power.zip', size: 1 }], undefined, fitDeps);
+    const firstEffort = result.fitBestEffortsByActivityId[result.activities[0].id].powerEfforts.find(effort => effort.targetSeconds === 5);
+    const secondEffort = result.fitBestEffortsByActivityId[result.activities[1].id].powerEfforts.find(effort => effort.targetSeconds === 5);
+
+    expect(firstEffort.avgPower).toBe(100);
+    expect(secondEffort.avgPower).toBe(300);
+  });
+
+  it('omits a timestamped GPX route when more than one FIT session matches it', async () => {
+    const gpx = '<gpx><trk><trkseg><trkpt lat="48.1" lon="11.5"><time>2026-07-01T10:01:00Z</time></trkpt><trkpt lat="48.2" lon="11.6"><time>2026-07-01T10:04:00Z</time></trkpt></trkseg></trk></gpx>';
+    const archives = { 'ambiguous.zip': { files: {
+      'workout.fit.gz': makeTrainingPeaksZipEntry([1]),
+      'separate-route.gpx.gz': makeTrainingPeaksZipEntry(new TextEncoder().encode(gpx))
+    } } };
+    const fitDeps = makeTrainingPeaksFitDeps(archives, {
+      1: { sessions: [
+        makeFitSession({ start: '2026-07-01T10:00:00Z', end: '2026-07-01T10:05:00Z', sport: 'running', distance: 1000, duration: 300 }),
+        makeFitSession({ start: '2026-07-01T10:00:00Z', end: '2026-07-01T10:05:00Z', sport: 'cycling', distance: 2000, duration: 300 })
+      ], records: [] }
+    });
+
+    const result = await importTrainingPeaksZips([{ name: 'ambiguous.zip', size: 2 }], undefined, fitDeps);
+
+    expect(Object.keys(result.gpsTracksByActivityId)).toHaveLength(0);
+    expect(result.skippedGpxRouteCount).toBe(1);
+    expect(result.activities).toHaveLength(2);
   });
 });

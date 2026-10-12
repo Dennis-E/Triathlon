@@ -1,6 +1,6 @@
 /**
- * ZIP Import Utility for Strava Data
- * Handles ZIP file extraction, CSV parsing, and relevant column extraction
+ * ZIP Import Utility for Strava and TrainingPeaks Data
+ * Handles provider-specific ZIP extraction, CSV/FIT parsing, and normalization helpers
  */
 
 const FIT_TARGET_DISTANCES_KM = {
@@ -655,7 +655,336 @@ async function readAndParseFitFile(zip, filename, fitDeps) {
   return doParse(FitParserCtor, bytes);
 }
 
+async function readAndParseFitData(zip, filename, fitDeps) {
+  const deps = fitDeps || {};
+  const doGunzip = deps.gunzipUint8Array || gunzipUint8Array;
+  const loadParser = deps.ensureFitParserLoaded || ensureFitParserLoaded;
+  const doParse = deps.parseFitData || parseFitData;
+  const isGzipped = /\.gz$/i.test(filename);
+  const rawBytes = await zip.files[filename].async('uint8array');
+  let bytes = rawBytes;
+  if (isGzipped) {
+    try {
+      bytes = await doGunzip(rawBytes);
+    } catch (error) {
+      throw new Error(`Could not decompress GZIP data: ${error.message}`);
+    }
+  }
+  const FitParserCtor = await loadParser();
+  return doParse(FitParserCtor, bytes);
+}
+
+function toValidDate(value) {
+  if (value instanceof Date && Number.isFinite(value.getTime())) return new Date(value.getTime());
+  if (value === null || value === undefined || value === '') return null;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+function getMondayDate(date) {
+  const monday = new Date(date);
+  const day = monday.getDay();
+  monday.setDate(monday.getDate() - day + (day === 0 ? -6 : 1));
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+}
+
+function hashTrainingPeaksIdentity(value) {
+  let first = 2166136261;
+  let second = 2246822519;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    first = Math.imul(first ^ code, 16777619);
+    second = Math.imul(second ^ code, 3266489917);
+  }
+  return `${(first >>> 0).toString(16).padStart(8, '0')}${(second >>> 0).toString(16).padStart(8, '0')}`;
+}
+
+function normalizeTrainingPeaksSession(session, sourceEntry, sessionIndex) {
+  const startTime = toValidDate(session && (session.start_time || session.startTime));
+  const sportRaw = session && session.sport ? String(session.sport) : '';
+  const sport = normalizeSportForFit(sportRaw);
+  if (!sport) return { skippedReason: 'unsupported-sport' };
+  if (!startTime) return { skippedReason: 'invalid-start-time' };
+
+  const rawDistance = session && Number.isFinite(session.total_distance) ? session.total_distance : null;
+  const rawDuration = session && Number.isFinite(session.total_timer_time)
+    ? session.total_timer_time
+    : (session && Number.isFinite(session.total_elapsed_time) ? session.total_elapsed_time : null);
+  const distanceAvailable = Number.isFinite(rawDistance) && rawDistance >= 0;
+  const durationAvailable = Number.isFinite(rawDuration) && rawDuration >= 0;
+  const distance = distanceAvailable ? rawDistance / 1000 : 0;
+  const duration = durationAvailable ? rawDuration : 0;
+  const date = new Date(startTime);
+  date.setHours(0, 0, 0, 0);
+  const endTime = toValidDate(session && session.timestamp) ||
+    (durationAvailable ? new Date(startTime.getTime() + duration * 1000) : null);
+  const completeFingerprint = distanceAvailable && durationAvailable
+    ? `metadata|${startTime.toISOString()}|${sport}|${Math.round(duration)}|${Math.round(rawDistance)}`
+    : null;
+  const sourceIdentity = `source|${sourceEntry}|${sessionIndex}`;
+  const identity = completeFingerprint || sourceIdentity;
+  const activityId = `tp-${hashTrainingPeaksIdentity(identity)}`;
+  const optionalNumber = value => Number.isFinite(value) && value >= 0 ? value : null;
+
+  return {
+    identity,
+    startTime,
+    endTime,
+    activity: {
+      id: activityId,
+      date,
+      startTime,
+      monday: getMondayDate(date),
+      sportRaw,
+      sport,
+      distance,
+      distanceAvailable,
+      equipment: '',
+      duration,
+      durationAvailable,
+      avgHeartRate: optionalNumber(session.avg_heart_rate),
+      avgWatts: sport === 'Bike' ? optionalNumber(session.avg_power) : null,
+      avgCadence: optionalNumber(session.avg_cadence),
+      totalSteps: null,
+      elevationGain: optionalNumber(session.total_ascent),
+      name: `TrainingPeaks ${sport}`
+    }
+  };
+}
+
+function getSessionRecords(records, sessions, sessionIndex) {
+  const current = sessions[sessionIndex];
+  const startMs = current.startTime.getTime();
+  const nextStartMs = sessions[sessionIndex + 1]
+    ? sessions[sessionIndex + 1].startTime.getTime()
+    : null;
+  const endMs = current.endTime ? current.endTime.getTime() : null;
+  return records.filter(record => {
+    const timestamp = toValidDate(record && record.timestamp);
+    if (!timestamp || timestamp.getTime() < startMs) return false;
+    if (endMs !== null && timestamp.getTime() > endMs) return false;
+    return nextStartMs === null || timestamp.getTime() < nextStartMs;
+  });
+}
+
+function extractGpxTrackpointsWithTimes(xmlText) {
+  if (!xmlText) return [];
+  const points = [];
+  const pattern = /<(?:\w+:)?(?:trkpt|rtept)\b([^>]*)>([\s\S]*?)<\/(?:\w+:)?(?:trkpt|rtept)\s*>/gi;
+  let match;
+  while ((match = pattern.exec(xmlText)) !== null) {
+    const latMatch = match[1].match(/\blat="(-?\d+(?:\.\d+)?)"/i);
+    const lonMatch = match[1].match(/\blon="(-?\d+(?:\.\d+)?)"/i);
+    const timeMatch = match[2].match(/<(?:\w+:)?time\b[^>]*>\s*([^<]+)\s*<\/(?:\w+:)?time\s*>/i);
+    if (!latMatch || !lonMatch || !timeMatch) continue;
+    const lat = Number.parseFloat(latMatch[1]);
+    const lon = Number.parseFloat(lonMatch[1]);
+    const time = toValidDate(timeMatch[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || !time) continue;
+    points.push({ lat, lon, time });
+  }
+  return points;
+}
+
+function uniquelyMatchGpxRouteToSession(points, sessions) {
+  if (!Array.isArray(points) || points.length === 0) return null;
+  let routeStart = Infinity;
+  let routeEnd = -Infinity;
+  for (const point of points) {
+    if (!point || !point.time) continue;
+    const time = point.time.getTime();
+    if (!Number.isFinite(time)) continue;
+    if (time < routeStart) routeStart = time;
+    if (time > routeEnd) routeEnd = time;
+  }
+  if (!Number.isFinite(routeStart) || !Number.isFinite(routeEnd)) return null;
+  const toleranceMs = 5 * 60 * 1000;
+  const candidatesByActivityId = new Map();
+  sessions.filter(session => {
+    if (!session.startTime || !session.endTime) return false;
+    return routeStart >= session.startTime.getTime() - toleranceMs &&
+      routeEnd <= session.endTime.getTime() + toleranceMs;
+  }).forEach(session => candidatesByActivityId.set(session.activityId, session));
+  const candidates = Array.from(candidatesByActivityId.values());
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+/**
+ * Import one or more TrainingPeaks ZIP archives containing FIT.GZ workouts and optional GPX.GZ routes.
+ * Archive and FIT parsing is transactional: any unreadable archive/FIT entry rejects the complete import.
+ * @param {FileList|File[]} zipFiles selected archives
+ * @param {Function} [reportProgress] receives aggregate progress metadata
+ * @param {Object} [fitDeps] test overrides for ZIP, GZIP, and FIT parser dependencies
+ */
+async function importTrainingPeaksZips(zipFiles, reportProgress, fitDeps) {
+  const files = Array.from(zipFiles || []);
+  if (files.length === 0) throw new Error('Select at least one TrainingPeaks ZIP archive.');
+  const notify = typeof reportProgress === 'function' ? reportProgress : () => {};
+  const deps = fitDeps || {};
+  const loadArchive = deps.loadZipArchive || loadZipArchive;
+  const isFitEntry = name => /\.fit(?:\.gz)?$/i.test(name);
+  const isGpxEntry = name => /\.gpx(?:\.gz)?$/i.test(name);
+  let totalEntries = 0;
+
+  for (let index = 0; index < files.length; index += 1) {
+    const file = files[index];
+    let zip;
+    try {
+      zip = await loadArchive(file);
+    } catch (error) {
+      throw new Error(`Could not read archive ${file.name}: ${error.message}`);
+    }
+    const entries = Object.entries(zip.files || {})
+      .filter(([name, entry]) => entry && !entry.dir && (isFitEntry(name) || isGpxEntry(name)))
+      .map(([name]) => name);
+    const fitCount = entries.filter(isFitEntry).length;
+    if (fitCount === 0) throw new Error(`Archive ${file.name} contains no supported FIT workout entries.`);
+    totalEntries += entries.length;
+    notify({
+      percent: Math.floor(((index + 1) / files.length) * 5),
+      stage: `Validating TrainingPeaks archive (${index + 1}/${files.length})...`,
+      processed: 0,
+      total: totalEntries
+    });
+  }
+
+  const activities = [];
+  const seenIdentities = new Set();
+  const gpsTracksByActivityId = {};
+  const fitBestEffortsByActivityId = {};
+  let skippedUnsupportedSportCount = 0;
+  let skippedInvalidSessionCount = 0;
+  let skippedGpxRouteCount = 0;
+  let processed = 0;
+  const totalArchives = files.length;
+  const sessionsAcrossArchives = [];
+  const timestampedGpxRoutes = [];
+
+  for (let archiveIndex = 0; archiveIndex < files.length; archiveIndex += 1) {
+    const file = files[archiveIndex];
+    let zip;
+    try {
+      zip = await loadArchive(file);
+    } catch (error) {
+      throw new Error(`Could not read archive ${file.name}: ${error.message}`);
+    }
+    const entryNames = Object.entries(zip.files || {})
+      .filter(([name, entry]) => entry && !entry.dir && (isFitEntry(name) || isGpxEntry(name)))
+      .map(([name]) => name);
+    const sessionsInArchive = [];
+    const reportEntryProgress = (entryName, phase) => {
+      processed += 1;
+      notify({
+        percent: 5 + Math.floor((processed / totalEntries) * 90),
+        stage: `${phase} ${entryName} (${processed}/${totalEntries})`,
+        processed,
+        total: totalEntries,
+        archiveIndex: archiveIndex + 1,
+        archiveTotal: totalArchives
+      });
+    };
+
+    for (const entryName of entryNames.filter(isFitEntry)) {
+      let fitData;
+      try {
+        fitData = await readAndParseFitData(zip, entryName, deps);
+      } catch (error) {
+        throw new Error(`Could not process ${file.name} entry ${entryName}: ${error.message}`);
+      }
+      const fitSessions = Array.isArray(fitData && fitData.sessions) ? fitData.sessions : [];
+      if (fitSessions.length === 0) {
+        throw new Error(`Could not process ${file.name} entry ${entryName}: no FIT sessions were found.`);
+      }
+      const normalized = fitSessions
+        .map((session, sessionIndex) => normalizeTrainingPeaksSession(session, entryName, sessionIndex))
+        .sort((a, b) => {
+          if (!a.startTime) return 1;
+          if (!b.startTime) return -1;
+          return a.startTime - b.startTime;
+        });
+      const validSessions = normalized.filter(item => item.activity);
+      skippedUnsupportedSportCount += normalized.filter(item => item.skippedReason === 'unsupported-sport').length;
+      skippedInvalidSessionCount += normalized.filter(item => item.skippedReason === 'invalid-start-time').length;
+      const records = Array.isArray(fitData.records) ? fitData.records : [];
+
+      for (let sessionIndex = 0; sessionIndex < validSessions.length; sessionIndex += 1) {
+        const item = validSessions[sessionIndex];
+        const isDuplicate = seenIdentities.has(item.identity);
+        seenIdentities.add(item.identity);
+        sessionsInArchive.push({ ...item, activityId: item.activity.id });
+        if (isDuplicate) continue;
+        activities.push(item.activity);
+        const selectedRecords = getSessionRecords(records, validSessions, sessionIndex);
+        const track = simplifyTrackPoints(extractFitTrackpoints(selectedRecords), { toleranceMeters: 3, maxPoints: 2000 });
+        if (track.length > 0) {
+          gpsTracksByActivityId[item.activity.id] = {
+            sport: item.activity.sport,
+            points: track.map(point => [point.lat, point.lon])
+          };
+        }
+        if (item.activity.sport === 'Bike') {
+          const powerEfforts = buildFitPowerEfforts(selectedRecords);
+          if (powerEfforts.length > 0) fitBestEffortsByActivityId[item.activity.id] = { powerEfforts };
+        }
+      }
+      sessionsAcrossArchives.push(...sessionsInArchive);
+      reportEntryProgress(entryName, 'Parsed FIT workout');
+    }
+
+    for (const entryName of entryNames.filter(isGpxEntry)) {
+      try {
+        const rawBytes = await zip.files[entryName].async('uint8array');
+        const bytes = /\.gz$/i.test(entryName) ? await (deps.gunzipUint8Array || gunzipUint8Array)(rawBytes) : rawBytes;
+        const xmlText = new TextDecoder('utf-8').decode(bytes);
+        const points = extractGpxTrackpointsWithTimes(xmlText);
+        if (points.length === 0) {
+          skippedGpxRouteCount += 1;
+        } else {
+          timestampedGpxRoutes.push(points);
+        }
+      } catch (error) {
+        skippedGpxRouteCount += 1;
+      }
+      reportEntryProgress(entryName, 'Processed GPX route');
+    }
+  }
+
+  for (const points of timestampedGpxRoutes) {
+    const matchedSession = uniquelyMatchGpxRouteToSession(points, sessionsAcrossArchives);
+    if (!matchedSession) {
+      skippedGpxRouteCount += 1;
+      continue;
+    }
+    if (gpsTracksByActivityId[matchedSession.activityId]) continue;
+    const routePoints = simplifyTrackPoints(points, { toleranceMeters: 3, maxPoints: 2000 });
+    if (routePoints.length === 0) {
+      skippedGpxRouteCount += 1;
+      continue;
+    }
+    gpsTracksByActivityId[matchedSession.activityId] = {
+      sport: matchedSession.activity.sport,
+      points: routePoints.map(point => [point.lat, point.lon])
+    };
+  }
+
+  activities.sort((a, b) => a.startTime - b.startTime);
+  notify({ percent: 100, stage: 'TrainingPeaks import complete', processed: totalEntries, total: totalEntries });
+  return {
+    activities,
+    gpsTracksByActivityId,
+    fitBestEffortsByActivityId,
+    skippedUnsupportedSportCount,
+    skippedInvalidSessionCount,
+    skippedGpxRouteCount
+  };
+}
+
 function parseFitRecords(FitParserCtor, fitBytes) {
+  return parseFitData(FitParserCtor, fitBytes).then(data => Array.isArray(data && data.records) ? data.records : []);
+}
+
+function parseFitData(FitParserCtor, fitBytes) {
   return new Promise((resolve, reject) => {
     try {
       const parser = new FitParserCtor({
@@ -665,13 +994,15 @@ function parseFitRecords(FitParserCtor, fitBytes) {
         mode: 'list',
         elapsedRecordField: false
       });
-      parser.parse(fitBytes.buffer, (error, data) => {
+      const bytes = fitBytes instanceof Uint8Array
+        ? fitBytes.buffer.slice(fitBytes.byteOffset, fitBytes.byteOffset + fitBytes.byteLength)
+        : fitBytes;
+      parser.parse(bytes, (error, data) => {
         if (error) {
           reject(new Error(String(error)));
           return;
         }
-        const records = Array.isArray(data && data.records) ? data.records : [];
-        resolve(records);
+        resolve(data || {});
       });
     } catch (err) {
       reject(err);
@@ -864,6 +1195,8 @@ if (typeof module !== 'undefined' && module.exports) {
     buildFitPowerEfforts,
     extractFitPowerEffortsFromZip,
     extractGpsAndPowerFromZip,
-    readAndParseFitFile
+    readAndParseFitFile,
+    importTrainingPeaksZips,
+    extractGpxTrackpointsWithTimes
   };
 }

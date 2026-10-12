@@ -51,6 +51,48 @@
       };
     }
 
+    function createTrainingPeaksImportedDataset(importResult, sourceFileNames = []) {
+      const activities = Array.isArray(importResult && importResult.activities) ? importResult.activities : [];
+      const statisticsAccumulator = window.importExperienceCatalog.createStatisticsAccumulator();
+      activities.forEach(activity => window.importExperienceCatalog.accumulateActivityStatistics(statisticsAccumulator, activity));
+      return {
+        kind: 'tri-activities-v1',
+        importedAt: new Date().toISOString(),
+        sourceLabel: 'TrainingPeaks ZIP import',
+        rawCsvData: [],
+        importedFileCount: sourceFileNames.length,
+        importedSourceFiles: sourceFileNames.map(name => String(name)),
+        activities,
+        importExperienceStatistics: window.importExperienceCatalog.finalizeStatistics(statisticsAccumulator),
+        fitBestEffortsByActivityId: importResult.fitBestEffortsByActivityId || {},
+        gpsTracksByActivityId: importResult.gpsTracksByActivityId || {},
+        skippedUnsupportedSportCount: Number.isSafeInteger(importResult.skippedUnsupportedSportCount)
+          ? importResult.skippedUnsupportedSportCount : 0,
+        skippedInvalidSessionCount: Number.isSafeInteger(importResult.skippedInvalidSessionCount)
+          ? importResult.skippedInvalidSessionCount : 0,
+        skippedGpxRouteCount: Number.isSafeInteger(importResult.skippedGpxRouteCount)
+          ? importResult.skippedGpxRouteCount : 0
+      };
+    }
+
+    async function executeTrainingPeaksZipImport(zipFiles, dependencies = {}) {
+      const selectedFiles = Array.from(zipFiles || []);
+      if (selectedFiles.length === 0) return null;
+
+      const importZips = dependencies.importZips || importTrainingPeaksZips;
+      const reportProgress = typeof dependencies.reportProgress === 'function' ? dependencies.reportProgress : () => {};
+      const importResult = await importZips(selectedFiles, reportProgress);
+      const dataset = createTrainingPeaksImportedDataset(importResult, selectedFiles.map(file => file.name));
+      if (typeof dependencies.onDatasetPrepared === 'function') dependencies.onDatasetPrepared(dataset);
+
+      const applyDataset = dependencies.applyDataset || applyImportedDataset;
+      applyDataset(dataset, { openDashboard: true });
+
+      const recordAnalysis = dependencies.recordAnalysis || recordCompletedAnalysis;
+      await recordAnalysis();
+      return dataset;
+    }
+
     function applyImportedDataset(dataset, options = {}) {
       importedDataset = dataset;
       rawCsvData = dataset.rawCsvData;
@@ -60,7 +102,10 @@
       heatmapActivitySummaryIndex = window.heatmapUtils.buildActivitySummaryIndex(processedActivities);
       hideHeatmapActivityTooltip();
 
-      updateStatusBadge('success', `Loaded ${processedActivities.length} activities`);
+      const importLabel = dataset.sourceLabel === 'TrainingPeaks ZIP import' ? 'Imported TrainingPeaks history' : 'Imported Strava history';
+      const fileCountLabel = Number.isSafeInteger(dataset.importedFileCount) && dataset.importedFileCount > 0
+        ? ` from ${dataset.importedFileCount} ZIP archive(s)` : '';
+      updateStatusBadge('success', `${importLabel}${fileCountLabel}: ${processedActivities.length} activities`);
 
       document.getElementById('previewCardsContainer').classList.remove('hidden');
       document.getElementById('enterDashboardContainer').classList.remove('hidden');
@@ -483,6 +528,53 @@
         } catch (error) {
           console.error('Import failed:', error);
           updateImportProgress(null, 'Import failed', true);
+          document.getElementById('importProgressError').classList.remove('hidden');
+          document.getElementById('importProgressDetail').textContent = error.message || 'Unknown error occurred';
+        }
+      };
+      input.click();
+    }
+
+    function handleTrainingPeaksIngest() {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.zip,application/zip';
+      input.multiple = true;
+      input.onchange = async event => {
+        const selectedFiles = Array.from(event.target.files || []);
+        if (selectedFiles.length === 0) return;
+
+        try {
+          const errorDiv = document.getElementById('importProgressError');
+          showImportProgressModal();
+          errorDiv.classList.add('hidden');
+          setImportModalVisualState('loader', true);
+          updateImportProgress(0, 'Reading TrainingPeaks archives...');
+
+          const dataset = await executeTrainingPeaksZipImport(selectedFiles, {
+            reportProgress: progress => updateImportProgress(progress.percent, progress.stage),
+            onDatasetPrepared: preparedDataset => {
+              if (!importExperienceSession || !importExperienceSession.active) return;
+              const messages = window.importExperienceCatalog.buildPersonalMessages(preparedDataset.importExperienceStatistics);
+              window.importExperienceCatalog.addCandidates(importExperienceSession, messages, { prioritize: true });
+              if (messages.length) advanceImportExperience();
+            }
+          });
+
+          if (!dataset) return;
+          const skippedSessions = dataset.skippedUnsupportedSportCount + dataset.skippedInvalidSessionCount;
+          const summaryParts = [];
+          if (skippedSessions > 0) summaryParts.push(`${skippedSessions} unsupported or undated workout(s) skipped`);
+          if (dataset.skippedGpxRouteCount > 0) summaryParts.push(`${dataset.skippedGpxRouteCount} unmatched GPX route(s) omitted`);
+          const sourceSummary = `Imported TrainingPeaks history from ${dataset.importedFileCount} ZIP archive(s): ${dataset.activities.length} activities`;
+          updateStatusBadge('success', summaryParts.length > 0 ? `${sourceSummary}; ${summaryParts.join('; ')}` : sourceSummary);
+
+          if (importExperienceSession) window.importExperienceCatalog.setPhase(importExperienceSession, 'finalizing');
+          updateImportProgress(null, 'Preparing visualizations...');
+          setTimeout(() => hideImportProgressModal(), 1000);
+        } catch (error) {
+          console.error('TrainingPeaks import failed:', error);
+          updateImportProgress(null, 'TrainingPeaks import failed', true);
           document.getElementById('importProgressError').classList.remove('hidden');
           document.getElementById('importProgressDetail').textContent = error.message || 'Unknown error occurred';
         }

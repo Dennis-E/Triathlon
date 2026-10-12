@@ -177,7 +177,7 @@
       <a href="./news.html" class="text-sm text-slate-300 hover:text-white transition-colors" aria-label="Read TriAnalytica News">News</a>
       <div id="statusBadge" class="flex items-center space-x-2 text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 rounded-full">
         <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-        <span id="statusText">Awaiting Strava ZIP upload</span>
+        <span id="statusText">Awaiting workout data import</span>
       </div>
     </div>
   </header>
@@ -190,7 +190,7 @@
           <i data-lucide="loader" class="w-5 h-5"></i>
         </div>
         <div>
-          <h2 class="font-semibold text-lg">Importing Strava Data</h2>
+          <h2 class="font-semibold text-lg">Importing Training Data</h2>
         </div>
       </div>
 
@@ -242,8 +242,8 @@
             <i data-lucide="lock" class="w-5 h-5"></i>
           </div>
           <div>
-            <h2 id="previewGateModalTitle" class="text-lg font-semibold text-white">Import Strava Data First</h2>
-            <p class="mt-2 text-sm leading-relaxed text-slate-400">These dashboards become interactive after you import your Strava export. Use <span class="font-semibold text-slate-200">Strava Ingest</span> to unlock the full visualizations.</p>
+            <h2 id="previewGateModalTitle" class="text-lg font-semibold text-white">Import Training Data First</h2>
+            <p class="mt-2 text-sm leading-relaxed text-slate-400">These dashboards become interactive after you import a Strava or TrainingPeaks export. Choose either data source on the landing page to unlock the visualizations.</p>
           </div>
         </div>
         <button
@@ -265,10 +265,10 @@
         </button>
         <button
           type="button"
-          onclick="closePreviewGateModal(); handleStravaIngest();"
-          class="inline-flex items-center justify-center rounded-xl bg-[#FC4C02] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#e04402] active:bg-[#c73d02]"
+          onclick="closePreviewGateModal(); goToLanding();"
+          class="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-500"
         >
-          Import Strava data
+          Choose data source
         </button>
       </div>
     </div>
@@ -322,32 +322,50 @@
       <div class="mb-4 flex items-center justify-center gap-3">
         <img src="assets/logo.png" alt="TriAnalytica logo" class="h-16 w-auto">
       </div>
-      <p class="text-slate-400 text-sm leading-relaxed">Import your Strava data export and analyze directly in the browser. No login, no data storage.</p>
+      <p class="text-slate-400 text-sm leading-relaxed">Import Strava or TrainingPeaks workout exports and explore your training locally. Workout files are processed in this browser and are not uploaded or stored by TriAnalytica. The app still makes network requests for libraries and its analysis counter.</p>
     </div>
 
     <!-- Import Actions -->
-    <div class="mb-12 flex flex-col items-center gap-3">
-      <div class="flex flex-wrap items-center justify-center gap-3">
-        <button
-          id="stravaIngestBtn"
-          type="button"
-          onclick="handleStravaIngest()"
-          class="inline-flex items-center space-x-2.5 bg-[#FC4C02] hover:bg-[#e04402] active:bg-[#c73d02] text-white font-semibold px-6 py-3 rounded-xl shadow-lg shadow-orange-600/20 transition text-sm"
-        >
-          <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L8.22 0 3 9.828h4.172"/>
-          </svg>
-          <span>Strava Ingest</span>
-        </button>
-      <div class="w-full text-center">
-        <a
-          href="./docs/strava-export-how-to.html"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="text-xs text-indigo-300 hover:text-indigo-200 underline decoration-indigo-500/70 underline-offset-4 transition"
-        >
-          How to create a Strava data export
-        </a>
+    <div class="mb-12 flex flex-col items-center gap-4">
+      <div class="flex flex-wrap items-start justify-center gap-6">
+        <div class="flex flex-col items-center gap-3">
+          <button
+            id="stravaIngestBtn"
+            type="button"
+            onclick="handleStravaIngest()"
+            class="inline-flex items-center space-x-2.5 bg-[#FC4C02] hover:bg-[#e04402] active:bg-[#c73d02] text-white font-semibold px-6 py-3 rounded-xl shadow-lg shadow-orange-600/20 transition text-sm"
+          >
+            <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L8.22 0 3 9.828h4.172"/>
+            </svg>
+            <span>Import Strava</span>
+          </button>
+          <a
+            href="./docs/strava-export-how-to.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-xs text-indigo-300 hover:text-indigo-200 underline decoration-indigo-500/70 underline-offset-4 transition"
+          >
+            How to export from Strava
+          </a>
+        </div>
+        <div class="flex flex-col items-center gap-3">
+          <button
+            id="trainingPeaksIngestBtn"
+            type="button"
+            onclick="handleTrainingPeaksIngest()"
+            class="inline-flex items-center gap-2.5 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-500"
+          >
+            <span>Import TrainingPeaks</span>
+          </button>
+          <a
+            href="./docs/trainingpeaks-export-how-to.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-xs text-indigo-300 hover:text-indigo-200 underline decoration-indigo-500/70 underline-offset-4 transition"
+          >
+            How to export from TrainingPeaks (up to 12 months per ZIP)
+          </a>
         </div>
       </div>
       <p id="analysisCounter" class="hidden rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-4 py-2 font-mono text-base font-bold tabular-nums tracking-wide text-indigo-200 shadow-lg shadow-indigo-500/10" aria-live="polite"></p>
@@ -355,7 +373,7 @@
 
     <!-- Empty State Message -->
     <div id="emptyStateMessage" class="text-center text-slate-400 text-sm mt-2 mb-8 max-w-xl">
-      <p class="text-xs text-slate-500 mt-2">These example screenshots show what becomes available after you upload your Strava ZIP export.</p>
+      <p class="text-xs text-slate-500 mt-2">These example screenshots show what becomes available after importing a supported Strava or TrainingPeaks export.</p>
     </div>
 
     <!-- Tab Preview Cards -->
@@ -1704,8 +1722,8 @@
 
           <section>
             <h3 class="mb-3 text-base font-semibold text-white">2. Verarbeitung importierter Aktivitätsdaten</h3>
-            <p>Users may select/import GPX and CSV activity files. Users can use the app to import Strava export data or other GPX/CSV activity files for analysis. Diese Dateien werden lokal im Browser des Nutzers verarbeitet. Die Dateien werden nicht auf einen TriAnalytica-Anwendungsserver hochgeladen und TriAnalytica speichert sie nicht dauerhaft auf seinem eigenen Server. Die importierten Daten werden nur verwendet, um die angeforderten Auswertungen, Diagramme und Visualisierungen zu berechnen.</p>
-            <p>Die App verwendet für die Analyse lokal im Browser verarbeitete Daten. Browserspeicher (z. B. lokale Zustände zur Verhinderung doppelter Zählungen) kann im Browser des Nutzers gespeichert werden, bleibt aber auf dem Endgerät und wird nicht auf serverseitige TriAnalytica-Systeme übertragen.</p>
+            <p>Nutzer können Strava- und TrainingPeaks-ZIP-Exporte sowie unterstützte GPX-/CSV-Dateien auswählen. TrainingPeaks-Exporte enthalten FIT.GZ-Workouts und können GPX.GZ-Routen enthalten. Dateien und daraus normalisierte Aktivitäten werden während der aktiven Browser-Sitzung im Arbeitsspeicher verarbeitet; TriAnalytica lädt sie nicht auf einen Anwendungsserver hoch und speichert Workout-Daten weder in Cookies, localStorage oder IndexedDB noch in einer Workout-Datenbank.</p>
+            <p>Nach einem erfolgreichen Import kann der separate Analyse-Zähler eine Anfrage an die Zähler-API senden. Diese Anfrage enthält nur die vorhandenen Zähler-Header (Ereignis-ID und Anwendungsschlüssel), keinen Request-Body und keine Workout-Felder, Dateinamen oder Routen. Firestore speichert für diese Funktion nur den aggregierten Analyse-Zähler und Ereignis-Metadaten (Ereignis-ID und Erstellungszeitpunkt), keine Trainingsdaten. Für die Bereitstellung externer Bibliotheken und den Zähler werden weiterhin Netzwerkverbindungen verwendet.</p>
           </section>
 
           <section>
@@ -1730,6 +1748,7 @@
               <li><strong>Lucide</strong> über cdn.jsdelivr.net – Icons</li>
               <li><strong>Leaflet</strong> über unpkg.com – Heatmap-/Routenvisualisierung</li>
               <li><strong>JSZip</strong> über cdnjs.cloudflare.com – ZIP-Import</li>
+              <li><strong>fit-file-parser</strong> über esm.sh – FIT-Workout-Parsing</li>
               <li><strong>GitHub Pages / GitHub infrastructure</strong> – Bereitstellung der Website</li>
               <li><strong>Google Cloud Run API</strong> – Analyse-Zähler-API unter <code class="rounded bg-slate-800 px-1 py-0.5 text-slate-200">https://trianalytics-api-520098173492.europe-west1.run.app</code> (nur über die Browser-Anwendung, wenn der Analyse-Zähler aktiv verwendet wird)</li>
             </ul>
@@ -1738,14 +1757,14 @@
 
           <section>
             <h3 class="mb-3 text-base font-semibold text-white">6. Cookies, Tracking und Analytics</h3>
-            <p>TriAnalytica verwendet keine werblichen Cookies, keine Analyse- oder Marketing-Tracking-Tags, keine Tracking-Pixel und keine Nutzerkonten. Es gibt keine Personenbezogene Benutzer- oder Login-Sitzung, die durch ein Tracking-System verwaltet würde.</p>
-            <p>Die App nutzt lokal im Browser gespeicherten Status für die Analyse-Zählung (localStorage), um doppelte Analyseereignisse nicht mehrfach zu dokumentieren. Diese Speicherung bleibt auf dem Endgerät des Nutzers und wird nicht an TriAnalytica-Server gesendet.</p>
+            <p>TriAnalytica verwendet keine werblichen Cookies, keine Analyse- oder Marketing-Tracking-Tags, keine Tracking-Pixel und keine Nutzerkonten. Es gibt keine personenbezogene Benutzer- oder Login-Sitzung, die durch ein Tracking-System verwaltet würde.</p>
+            <p>Importierte Workout-Daten werden nicht in localStorage, IndexedDB oder Cookies gespeichert. Der getrennte Analyse-Zähler wird nach einem erfolgreichen Import über die Zähler-API aktualisiert; dabei werden nur die Ereignis-ID und der Anwendungsschlüssel als Header ohne Request-Body übermittelt. Der Dienst speichert ausschließlich den aggregierten Zähler sowie die Ereignis-ID und den Erstellungszeitpunkt, keine Workout- oder Routendaten.</p>
           </section>
 
           <section>
             <h3 class="mb-3 text-base font-semibold text-white">7. Rechtsgrundlagen</h3>
             <p>Für die technisch notwendige Bereitstellung und Sicherung der Website, einschließlich der Verarbeitung von Verbindungsdaten durch den Hosting-Anbieter und die Bereitstellung der Website, gilt insoweit eine rechtmäßige Grundlage nach Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an einer sicheren, zuverlässigen und effizienten Bereitstellung der Website).</p>
-            <p>Für die lokale Verarbeitung importierter GPX-/CSV-Dateien durch den Browser des Nutzers gelten die Anforderungen des Datenschutzes im Verhältnis zur Verarbeitung auf dem Endgerät des Nutzers; TriAnalytica selbst speichert diese importierten Dateien nicht auf einem eigenen Server. Eine gesonderte Einwilligung für die bloße lokale Verarbeitung im Browser wird nicht als Voraussetzung für den technisch notwendigen Betrieb der App angenommen.</p>
+            <p>Importierte Trainingsdateien werden auf dem Endgerät im Arbeitsspeicher verarbeitet und nicht an den Anwendungsserver übertragen. Unabhängig davon können externe Bibliotheksanbieter Verbindungsdaten erhalten, und die Zähler-API erhält bei erfolgreichem Import die beschriebenen Zähler-Metadaten, aber keine Trainingsdaten.</p>
           </section>
 
           <section>
@@ -1766,7 +1785,7 @@
 
           <section>
             <h3 class="mb-3 text-base font-semibold text-white">10. Speicherdauer</h3>
-            <p>TriAnalytica speichert importierte GPX-/CSV-Aktivitätsdateien nicht dauerhaft auf seinem eigenen Anwendungsserver. Die Datei wird im Browser des Nutzers verarbeitet und bleibt dort nur so lange, wie sie von der Browser-Sitzung oder einer lokalen, vom Browser verwalteten Speicherung benötigt wird.</p>
+            <p>Importierte GPX-/CSV-Dateien sowie Strava- und TrainingPeaks-Workout-Daten werden nur im Arbeitsspeicher der aktiven Browser-Sitzung verarbeitet. TriAnalytica speichert sie nicht dauerhaft auf dem Anwendungsserver und schreibt sie nicht in lokale Browser-Speicher.</p>
             <p>Technische Protokolldaten und Server-Logs können je nach Hosting-/Service-Provider unterschiedlich lang aufbewahrt werden. Es gibt keine von TriAnalytica fest vorgegebene eigene Aufbewahrungsdauer für importierte Aktivitätsdaten auf der Applikationsseite.</p>
           </section>
 
@@ -1797,8 +1816,8 @@
 
           <section>
             <h3 class="mb-3 text-base font-semibold text-white">2. Processing of imported activity data</h3>
-            <p>Users may select or import GPX and CSV activity files for analysis in the application. These files are processed locally in the user's browser. The files are not uploaded to a TriAnalytica application server, and TriAnalytica does not persistently store them on its own server. The imported data is used only to generate the requested analyses, charts, and visualizations.</p>
-            <p>The application relies on browser-side processing of the imported data. Browser storage may be used locally to prevent duplicate counting or to keep lightweight client-side state, but that data remains on the user's device and is not transmitted to TriAnalytica server infrastructure.</p>
+            <p>Users may select Strava and TrainingPeaks ZIP exports, as well as supported GPX/CSV files. TrainingPeaks exports contain FIT.GZ workouts and may include GPX.GZ routes. Files and normalized activity data are processed in browser memory during the active page session; TriAnalytica does not upload them to its application server or write workout data to cookies, localStorage, IndexedDB, or a workout database.</p>
+            <p>After a successful import, the separate analysis counter may send a request to its API. That request contains only the existing counter headers (event ID and application key), has no request body, and contains no workout fields, filenames, or routes. Firestore stores only the aggregate analysis count and counter-event metadata (event ID and creation time), not training data. The app still makes network requests for external libraries and the counter.</p>
           </section>
 
           <section>
@@ -1823,6 +1842,7 @@
               <li><strong>Lucide</strong> via cdn.jsdelivr.net – icons</li>
               <li><strong>Leaflet</strong> via unpkg.com – heatmap and route visualization</li>
               <li><strong>JSZip</strong> via cdnjs.cloudflare.com – ZIP import</li>
+              <li><strong>fit-file-parser</strong> via esm.sh – FIT workout parsing</li>
               <li><strong>GitHub Pages / GitHub infrastructure</strong> – website hosting</li>
               <li><strong>Google Cloud Run API</strong> at <code class="rounded bg-slate-800 px-1 py-0.5 text-slate-200">https://trianalytics-api-520098173492.europe-west1.run.app</code> when the analysis counter is used</li>
             </ul>
@@ -1831,14 +1851,14 @@
 
           <section>
             <h3 class="mb-3 text-base font-semibold text-white">6. Cookies, tracking and analytics</h3>
-            <p>TriAnalytica does not use advertising cookies, analytics scripts, marketing trackers, tracking pixels, or user accounts. No user login or tracking system is used for ongoing user profiling.</p>
-            <p>The app may use local browser storage for lightweight client-side deduplication of the analysis counter. This storage remains on the user's device and is not sent to TriAnalytica servers.</p>
+            <p>TriAnalytica does not use advertising cookies, marketing trackers, tracking pixels, or user accounts. No user login or tracking system is used for ongoing user profiling.</p>
+            <p>Imported workout data is not stored in localStorage, IndexedDB, or cookies. The separate analysis counter is updated through its API after a successful import; only the event ID and application key are sent as headers, with no request body. The service stores only the aggregate counter and event ID/creation-time metadata, not workouts or routes.</p>
           </section>
 
           <section>
             <h3 class="mb-3 text-base font-semibold text-white">7. Legal basis</h3>
             <p>For the technically necessary provision and security of the website, including processing of connection data by the hosting provider, the lawful basis is Article 6(1)(f) GDPR (legitimate interest in securely, reliably and efficiently providing the website).</p>
-            <p>For the local processing of imported GPX/CSV data in the browser, TriAnalytica itself does not store those files on a server. The app performs the processing locally on the user's device for the purpose of generating the requested analyses and visualizations.</p>
+            <p>Imported training files are processed in memory on the user's device and are not transmitted to the application server. Separately, external library providers may receive connection data, and the counter API receives the counter metadata described above after a successful import, but no training data.</p>
           </section>
 
           <section>
@@ -1859,7 +1879,7 @@
 
           <section>
             <h3 class="mb-3 text-base font-semibold text-white">10. Data retention</h3>
-            <p>TriAnalytica does not permanently store imported GPX/CSV activity files on its own application backend/server. The files are processed in the user's browser and remain there only as long as needed for local analysis or browser-managed state.</p>
+            <p>Imported GPX/CSV files and Strava/TrainingPeaks workout data are processed only in memory during the active browser session. TriAnalytica does not persist them on its application server or write them to browser storage.</p>
             <p>Technical log data and server logs may be retained by the hosting or infrastructure provider according to that provider's own retention policies. No specific retention period for imported activity files is imposed by TriAnalytica on its own application backend.</p>
           </section>
 

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TriAnalytica - How to Export TrainingPeaks Workout Files</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-full bg-slate-950 text-slate-100 font-sans antialiased flex flex-col">
+  <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur px-6 py-4 shrink-0">
+    <div class="max-w-5xl mx-auto flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <img src="../assets/logo.png" alt="TriAnalytica logo" class="h-8 w-auto">
+        <div>
+          <p class="text-[11px] text-slate-400">How to export TrainingPeaks workout files</p>
+        </div>
+      </div>
+      <a href="../index.html" class="text-sm text-indigo-300 hover:text-indigo-200 underline underline-offset-4">Back to dashboard</a>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-6 py-8 flex-1 w-full">
+    <div class="rounded-2xl border border-slate-800 bg-slate-900 p-6 md:p-8 shadow-xl">
+      <p class="text-slate-300 text-sm leading-relaxed">
+        TrainingPeaks limits each Workout Files export to 12 months or less. Export each period separately, then select the resulting ZIP archives together in TriAnalytica.
+      </p>
+
+      <ol class="mt-6 space-y-4 text-sm text-slate-200 list-decimal list-inside">
+        <li>Sign in to <a href="https://home.trainingpeaks.com/" target="_blank" rel="noopener noreferrer" class="text-indigo-300 hover:text-indigo-200 underline underline-offset-4">TrainingPeaks</a> in a browser.</li>
+        <li>Open your account menu by clicking your name in the upper-right corner, then choose <span class="font-semibold text-white">Settings</span>.</li>
+        <li>Scroll to <span class="font-semibold text-white">Export Data</span>. In the <span class="font-semibold text-white">Workout Files</span> section, enter a date range of 12 months or less and choose <span class="font-semibold text-white">Export</span>.</li>
+        <li>Repeat the Workout Files export for each additional date range you need. Prefer consecutive, non-overlapping periods; TriAnalytica will merge the activities and remove duplicate workouts from overlaps.</li>
+        <li>Download the resulting workout-file archive(s). If TrainingPeaks provides a folder rather than a ZIP, create a ZIP archive of that folder without changing the contained files. TriAnalytica expects the FIT/GZIP workout files and may use timestamped GPX/GZIP tracks for route maps.</li>
+        <li>Return to TriAnalytica, click <span class="font-semibold text-white">Import TrainingPeaks</span>, and select all of the ZIP archives together. You can select more than one file in the file picker.</li>
+      </ol>
+
+      <div class="mt-8 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+        <p class="text-xs leading-relaxed text-amber-200">
+          Choose <span class="font-semibold">Workout Files</span>, not <span class="font-semibold">Workout Summary</span> or <span class="font-semibold">Custom Metrics</span>; those exports are CSVs and are not the FIT workout archives imported here. TrainingPeaks can change its menus; see its current <a href="https://help.trainingpeaks.com/hc/en-us/articles/204985370-Data-Export" target="_blank" rel="noopener noreferrer" class="underline underline-offset-4">official Data Export instructions</a> if labels differ.
+        </p>
+      </div>
+
+      <div class="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+        <p class="text-xs leading-relaxed text-emerald-200">
+          Selected workout files are processed in this browser and are not uploaded or stored by TriAnalytica. The app still makes network requests for libraries and its analysis counter; only the workout files and activity details stay local.
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <footer class="border-t border-slate-900 bg-slate-950/70 px-6 py-4 shrink-0">
+    <div class="max-w-5xl mx-auto flex flex-col items-center gap-2 text-center text-[11px] text-slate-500">
+      <p>TriAnalytica • TrainingPeaks export help</p>
+    </div>
+  </footer>
+</body>
+</html>

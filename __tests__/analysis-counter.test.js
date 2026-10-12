@@ -35,6 +35,7 @@ describe('analysis counter client', () => {
         'X-Analysis-Event-Id': '123e4567-e89b-42d3-a456-426614174000'
       }
     });
+    expect(fetchImpl.mock.calls[0][1]).not.toHaveProperty('body');
   });
 
   it('rejects API failures without manufacturing a count', async () => {

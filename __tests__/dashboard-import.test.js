@@ -171,3 +171,86 @@ describe('runtime dashboard-import progress updates', () => {
     expect(runtime.removedListeners.map(item => item.event)).toEqual(['visibilitychange', 'visibilitychange']);
   });
 });
+
+function loadTrainingPeaksImportRunner() {
+  const importExperienceCatalog = {
+    createStatisticsAccumulator: () => ({ count: 0 }),
+    accumulateActivityStatistics: accumulator => { accumulator.count += 1; },
+    finalizeStatistics: accumulator => ({ activityCount: accumulator.count })
+  };
+  const context = { window: { importExperienceCatalog } };
+  vm.createContext(context);
+  vm.runInContext(`${dashboardImportSource}\nthis.__runTrainingPeaksImport = executeTrainingPeaksZipImport;`, context, {
+    filename: 'src/dashboard-import.js'
+  });
+  return context.__runTrainingPeaksImport;
+}
+
+describe('runtime TrainingPeaks import orchestration', () => {
+  const activities = [
+    { id: 'tp-1', date: new Date('2026-05-01T00:00:00Z'), sport: 'Run', distance: 10, distanceAvailable: true, duration: 3600, durationAvailable: true },
+    { id: 'tp-2', date: new Date('2026-05-02T00:00:00Z'), sport: 'Bike', distance: 20, distanceAvailable: true, duration: 3600, durationAvailable: true }
+  ];
+
+  it('applies one normalized dataset and records the analysis only after a multi-file import succeeds', async () => {
+    const runImport = loadTrainingPeaksImportRunner();
+    const files = [{ name: 'period-a.zip' }, { name: 'period-b.zip' }];
+    const importZips = jest.fn().mockResolvedValue({
+      activities,
+      skippedUnsupportedSportCount: 1,
+      gpsTracksByActivityId: { 'tp-1': { sport: 'Run', points: [[48, 11]] } },
+      fitBestEffortsByActivityId: { 'tp-2': { powerEfforts: [{ targetSeconds: 5, watts: 300 }] } },
+      skippedUnsupportedSportCount: 1,
+      skippedGpxRouteCount: 2
+    });
+    const applyDataset = jest.fn();
+    const recordAnalysis = jest.fn().mockResolvedValue(undefined);
+
+    const dataset = await runImport(files, { importZips, applyDataset, recordAnalysis });
+
+    expect(importZips).toHaveBeenCalledTimes(1);
+    expect(importZips).toHaveBeenCalledWith(files, expect.any(Function));
+    expect(dataset).toEqual(expect.objectContaining({
+      kind: 'tri-activities-v1',
+      sourceLabel: 'TrainingPeaks ZIP import',
+      importedFileCount: 2,
+      importedSourceFiles: ['period-a.zip', 'period-b.zip'],
+      activities,
+      skippedUnsupportedSportCount: 1,
+      skippedGpxRouteCount: 2,
+      importExperienceStatistics: { activityCount: 2 }
+    }));
+    expect(dataset.gpsTracksByActivityId).toHaveProperty('tp-1');
+    expect(dataset.fitBestEffortsByActivityId).toHaveProperty('tp-2');
+    expect(applyDataset).toHaveBeenCalledTimes(1);
+    expect(applyDataset).toHaveBeenCalledWith(dataset, { openDashboard: true });
+    expect(recordAnalysis).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not import or count a cancelled empty file selection', async () => {
+    const runImport = loadTrainingPeaksImportRunner();
+    const importZips = jest.fn();
+    const applyDataset = jest.fn();
+    const recordAnalysis = jest.fn();
+
+    await expect(runImport([], { importZips, applyDataset, recordAnalysis })).resolves.toBeNull();
+
+    expect(importZips).not.toHaveBeenCalled();
+    expect(applyDataset).not.toHaveBeenCalled();
+    expect(recordAnalysis).not.toHaveBeenCalled();
+  });
+
+  it('leaves the current dataset and counter untouched when archive import fails', async () => {
+    const runImport = loadTrainingPeaksImportRunner();
+    const importZips = jest.fn().mockRejectedValue(new Error('bad.zip: corrupt FIT entry'));
+    const applyDataset = jest.fn();
+    const recordAnalysis = jest.fn();
+
+    await expect(runImport([{ name: 'good.zip' }, { name: 'bad.zip' }], {
+      importZips, applyDataset, recordAnalysis
+    })).rejects.toThrow('bad.zip: corrupt FIT entry');
+
+    expect(applyDataset).not.toHaveBeenCalled();
+    expect(recordAnalysis).not.toHaveBeenCalled();
+  });
+});

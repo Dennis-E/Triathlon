@@ -1,45 +1,3 @@
-# Implementation Plan: [FEATURE]
-
-**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
-
-**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
-
-**Note**: This template is filled in by the `/speckit-plan` command; its definition describes the execution workflow.
-
-## Summary
-
-[Extract from feature spec: primary requirement + technical approach from research]
-
-## Technical Context
-
-<!--
-  ACTION REQUIRED: Replace the content in this section with the technical details
-  for the project. The structure here is presented in advisory capacity to guide
-  the iteration process.
--->
-
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]
-
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]
-
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
-
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]
-
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
-
-**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]
-
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]
-
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]
-
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
-
-## Constitution Check
-
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
-
 # Implementation Plan: TriAnalytica Newsletter Signup
 
 **Branch**: `055-newsletter-signup` | **Date**: 2026-10-13 | **Spec**: [spec.md](spec.md)
@@ -66,7 +24,7 @@ Add a discoverable newsletter signup opportunity to the main app footer. Keep th
 
 **Performance Goals**: Before a deliberate form-open action, the newsletter feature makes zero requests to the Brevo form origin. After the action, the form is requested once and remains usable at mobile widths.
 
-**Constraints**: Preserve the no-bundler static deployment; do not send training files/activity data; disclose the external connection before loading the form; do not infer successful subscription from iframe load; preserve existing bilingual privacy modal behavior.
+**Constraints**: Preserve the no-bundler static deployment; do not send training files/activity data; disclose the external connection before loading the form; do not infer successful subscription from iframe load; preserve existing bilingual privacy modal behavior; do not assert Brevo's specific legal role until verified from current account/provider documentation.
 
 **Scale/Scope**: One footer signup entry point and one lazily created form iframe on the main app page; no new API, account system, local subscriber data, or campaign management.
 
@@ -124,7 +82,7 @@ Research decisions and alternatives are recorded in [research.md](research.md). 
 ### Post-design Constitution Check
 
 - Static-only delivery, no new runtime dependencies, and no backend: **PASS**.
-- Provider-origin request is user-action-gated; data disclosures are bilingual and limited to observed data flow: **PASS**, subject to pre-release review of Brevo account settings and applicable privacy disclosures.
+- Provider-origin request is user-action-gated; data disclosures are bilingual, limited to observed data flow, and do not assert an unverified legal role: **PASS**, subject to pre-release review of Brevo account settings and applicable privacy disclosures.
 - Testability and focused validation are included in the design: **PASS**.
 
 **Gate result after design**: PASS. No plan-stage violations require complexity justification.

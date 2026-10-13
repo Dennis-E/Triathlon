@@ -62,7 +62,7 @@ As a visitor considering signup, I can understand that I am subscribing to TriAn
 - **FR-002**: The signup opportunity MUST provide access to the Brevo-hosted signup form supplied for this feature.
 - **FR-003**: The signup form MUST collect an email address and explicit affirmative consent to receive newsletter updates before enrollment.
 - **FR-004**: The signup flow MUST communicate whether a submission was accepted, needs correction, or requires a further confirmation step; it MUST NOT report successful subscription when the provider has not accepted the submission.
-- **FR-005**: The signup opportunity MUST state that it is for TriAnalytica newsletter updates, identify Brevo as the processor of signup details, and link to the existing privacy information.
+- **FR-005**: The signup opportunity MUST state that it is for TriAnalytica newsletter updates, identify Brevo as the signup-form provider that handles submitted signup details, and link to the existing privacy information. The site MUST NOT assert Brevo's specific legal role unless that role has been verified from current provider/account documentation.
 - **FR-006**: The site's privacy information MUST explain that Brevo processes email and consent details for newsletter enrollment and distinguish this from local processing of training files.
 - **FR-007**: Newsletter signup MUST NOT request or transmit uploaded activity files or training-activity data as part of the signup.
 - **FR-008**: The signup opportunity MUST be readable and usable on desktop and mobile screen sizes; if the external form is unavailable or blocked, the page MUST explain that signup is temporarily unavailable and MUST NOT imply that a subscription was completed.
@@ -88,4 +88,4 @@ As a visitor considering signup, I can understand that I am subscribing to TriAn
 - The signup opportunity is placed in the main app page footer; placement on separate pages is outside the initial feature scope.
 - The newsletter's editorial schedule, content, campaign management, and subscriber administration are managed outside the website.
 - Visitors have an internet connection that can reach the external signup provider.
-- The existing privacy information is the appropriate destination for the signup privacy link and will be updated to describe the newsletter signup data flow before launch.
+- The existing privacy information is the appropriate destination for the signup privacy link and will be updated to describe the newsletter signup data flow before launch. Brevo's legal role and account-specific data terms must be verified before making more specific legal statements.

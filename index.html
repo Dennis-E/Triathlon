@@ -209,10 +209,9 @@
       <!-- Message and illustration are paired by the local import-experience catalog. -->
       <div id="importProgressPreview" class="mt-6 overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
         <figure class="flex h-36 items-center justify-center p-4 sm:h-40">
-          <img id="importExperienceIllustration" class="h-full w-full object-contain" src="./assets/import-illustrations/message-01.svg" alt="" aria-hidden="true">
+          <img id="importExperienceIllustration" class="h-full w-full object-contain" src="./assets/import-illustrations/01.png" alt="" aria-hidden="true">
         </figure>
-        <p id="importProgressMessage" class="min-h-14 border-t border-slate-800 px-4 py-3 text-center text-sm leading-relaxed text-slate-200" aria-live="polite">Your training data has entered T1. This may take a moment.</p>
-        <p id="importPrivacyReminder" class="hidden min-h-10 px-4 pb-3 text-center text-xs leading-relaxed text-emerald-300" aria-live="polite"></p>
+        <p id="importProgressMessage" class="min-h-14 border-t border-slate-800 px-4 py-3 text-center text-sm leading-relaxed text-slate-200" aria-live="polite">Calculating how much of your personality is actually endurance sport…</p>
       </div>
 
       <!-- Details -->
@@ -1661,6 +1660,16 @@
   </div>
 
   <footer class="border-t border-slate-900 bg-slate-950/70 px-4 py-3 text-center text-[11px] text-slate-500 shrink-0">
+    <div class="mx-auto mb-3 flex max-w-4xl flex-wrap items-center justify-center gap-x-3 gap-y-2 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 text-left sm:justify-between">
+      <div class="min-w-0 flex-1">
+        <p class="text-xs font-semibold text-cyan-100">TriAnalytica Newsletter</p>
+        <p class="mt-0.5 text-[11px] leading-relaxed text-slate-400">Get product news and updates. Signup details are handled by Brevo. Opening the form connects your browser to Brevo; training files are not included.</p>
+      </div>
+      <div class="flex flex-wrap items-center justify-center gap-2">
+        <button id="newsletterPrivacyLink" type="button" class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-slate-300 underline decoration-slate-600 underline-offset-2 transition hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-400" aria-haspopup="dialog" aria-controls="privacyPolicyModal">Privacy details</button>
+        <button id="newsletterSignupButton" type="button" class="inline-flex items-center justify-center rounded-lg border border-cyan-500/50 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-semibold text-cyan-100 transition hover:border-cyan-400 hover:bg-cyan-500/20 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-2 focus:ring-offset-slate-950" aria-haspopup="dialog" aria-controls="newsletterSignupModal" aria-expanded="false">Sign up</button>
+      </div>
+    </div>
     <div class="flex flex-wrap items-center justify-center gap-2 text-slate-400">
       <a
         href="mailto:myaidevproject@gmail.com?subject=TriAnalytica%20Feedback&body=Hi%20Dennis%2C%0A%0AHere%20is%20my%20feedback%20on%20TriAnalytica%3A%0A%0A"
@@ -1678,6 +1687,27 @@
       </button>
     </div>
   </footer>
+
+  <div id="newsletterSignupModal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm" aria-hidden="true">
+    <div class="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-cyan-500/40 bg-slate-950 shadow-2xl shadow-slate-950/40" role="dialog" aria-modal="true" aria-labelledby="newsletterSignupTitle" tabindex="-1">
+      <div class="flex shrink-0 items-center justify-between gap-3 border-b border-slate-800 px-4 py-3 sm:px-6">
+        <div>
+          <p class="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">Newsletter</p>
+          <h2 id="newsletterSignupTitle" class="text-lg font-semibold text-white">Sign up for TriAnalytica updates</h2>
+        </div>
+        <button id="newsletterSignupClose" type="button" class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-lg text-slate-300 transition hover:border-slate-500 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-400" aria-label="Close newsletter signup">×</button>
+      </div>
+      <div class="overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
+        <p class="text-sm leading-6 text-slate-300">The signup form is provided by Brevo. Brevo handles the email address and consent information you submit. Your training files and activity data are not sent with this signup.</p>
+        <p class="mt-2 text-xs leading-5 text-slate-400">If the embedded form does not appear, you can open the signup form directly at Brevo.</p>
+        <div id="newsletterSignupFrameHost" class="mt-4 min-h-[8rem] w-full overflow-x-auto rounded-lg bg-white/5" aria-live="polite"></div>
+        <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3">
+          <button id="newsletterPrivacyModalLink" type="button" class="text-xs text-slate-300 underline decoration-slate-600 underline-offset-2 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-400" aria-controls="privacyPolicyModal">Read the privacy policy</button>
+          <a id="newsletterFallbackLink" href="https://b7607f4e.sibforms.com/v2/serve/MUIFAJ8OOivDmU5Mx69AcESPOvh-2gWPGoi1WrjAS8AP30bZnuHSm2KG9XP2TBdY0i6jMP3oMW2fNIqs0VvuKtqSHoAK8PkPFueD4xCam-PnR9aiMUE5FA3fV7pWhN-6g-Lr_1u2RdEMaozKc1WRvBESwuNXn4xTNA_c3SZaWJpeVvKm7Va86oj0Zyl_9y0mBn6z5oU2Rvq7OGwJLw==" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" class="text-xs font-medium text-cyan-200 underline underline-offset-2 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-400">Open the form directly at Brevo</a>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div id="imprintModal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm" aria-hidden="true">
     <div class="relative flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-indigo-500/40 bg-slate-950 shadow-2xl shadow-slate-950/40" role="dialog" aria-modal="true" aria-labelledby="imprintTitle" tabindex="-1">
@@ -1775,8 +1805,10 @@
               <li>GitHub und GitHub Pages als Hosting- und Bereitstellungsprovider</li>
               <li>CDN- und Skriptprovider wie cdn.tailwindcss.com, cdn.jsdelivr.net, unpkg.com und cdnjs.cloudflare.com, soweit der Browser entsprechende Ressourcen lädt</li>
               <li>Google Cloud Run bzw. die backendseitige Analyse-API, sofern der Analyse-Zähler im Browser aktiv verwendet wird</li>
+              <li>Brevo als Anbieter des Newsletter-Formulars, wenn dieses bewusst geöffnet oder der direkte Formular-Link verwendet wird</li>
             </ul>
             <p>Die konkreten Empfänger hängen von den tatsächlich geladenen Ressourcen und der Nutzung der jeweiligen Funktionen ab. Data may also be processed in third countries depending on the provider’s infrastructure.</p>
+            <p>Wenn Nutzer das Newsletter-Formular bewusst öffnen, stellt der Browser eine direkte Verbindung zu Brevo her. Dabei können technische Verbindungsdaten wie die IP-Adresse und Request-Metadaten an Brevo übermittelt werden. Wenn Sie das Formular absenden, verarbeitet Brevo Ihre E-Mail-Adresse und Ihre Einwilligung, um die Newsletter-Anmeldung zu verwalten. Trainingsdateien und Trainingsaktivitätsdaten werden durch diese Anmeldung nicht an Brevo gesendet.</p>
           </section>
 
           <section>
@@ -1869,8 +1901,10 @@
               <li>GitHub and GitHub Pages for hosting and delivery</li>
               <li>CDN and script providers such as cdn.tailwindcss.com, cdn.jsdelivr.net, unpkg.com, and cdnjs.cloudflare.com when browser resources are requested</li>
               <li>Google Cloud Run and the analysis API endpoint when the browser uses the analysis counter</li>
+              <li>Brevo as the newsletter form provider when a visitor deliberately opens the form or follows its direct link</li>
             </ul>
             <p>Actual recipients depend on the resources loaded and the features used by the visitor.</p>
+            <p>When visitors deliberately open the newsletter form, the browser connects directly to Brevo. Technical connection data such as the IP address and request metadata may be transmitted to Brevo. If you submit the form, Brevo processes your email address and consent to manage the newsletter signup. Training files and training-activity data are not sent to Brevo by this signup.</p>
           </section>
 
           <section>
@@ -2033,6 +2067,97 @@
       setPrivacyLanguage(fallbackLang);
     })();
 
+  </script>
+
+  <script data-newsletter-signup>
+    (function() {
+      const formUrl = 'https://b7607f4e.sibforms.com/v2/serve/MUIFAJ8OOivDmU5Mx69AcESPOvh-2gWPGoi1WrjAS8AP30bZnuHSm2KG9XP2TBdY0i6jMP3oMW2fNIqs0VvuKtqSHoAK8PkPFueD4xCam-PnR9aiMUE5FA3fV7pWhN-6g-Lr_1u2RdEMaozKc1WRvBESwuNXn4xTNA_c3SZaWJpeVvKm7Va86oj0Zyl_9y0mBn6z5oU2Rvq7OGwJLw==';
+      const signupButton = document.getElementById('newsletterSignupButton');
+      const signupModal = document.getElementById('newsletterSignupModal');
+      const closeButton = document.getElementById('newsletterSignupClose');
+      const frameHost = document.getElementById('newsletterSignupFrameHost');
+      const privacyLink = document.getElementById('newsletterPrivacyLink');
+      const privacyModalLink = document.getElementById('newsletterPrivacyModalLink');
+      const privacyButton = document.getElementById('privacyPolicyButton');
+      let signupFrame = null;
+      let lastFocusedElement = null;
+
+      function openSignup() {
+        if (!signupModal) return;
+        lastFocusedElement = document.activeElement;
+        signupModal.classList.remove('hidden');
+        signupModal.classList.add('flex');
+        signupModal.setAttribute('aria-hidden', 'false');
+        signupButton && signupButton.setAttribute('aria-expanded', 'true');
+        if (!signupFrame && frameHost) {
+          signupFrame = document.createElement('iframe');
+          signupFrame.title = 'TriAnalytica newsletter signup form provided by Brevo';
+          signupFrame.width = '540';
+          signupFrame.height = '305';
+          signupFrame.loading = 'eager';
+          signupFrame.scrolling = 'auto';
+          signupFrame.style.display = 'block';
+          signupFrame.style.marginLeft = 'auto';
+          signupFrame.style.marginRight = 'auto';
+          signupFrame.style.width = '100%';
+          signupFrame.style.maxWidth = '540px';
+          signupFrame.style.border = '0';
+          signupFrame.setAttribute('title', signupFrame.title);
+          signupFrame.setAttribute('referrerpolicy', 'no-referrer');
+          signupFrame.setAttribute('allowfullscreen', '');
+          signupFrame.src = formUrl;
+          frameHost.appendChild(signupFrame);
+        }
+        const focusable = signupModal.querySelectorAll('button, [href], iframe, [tabindex]:not([tabindex="-1"])');
+        if (focusable.length) focusable[0].focus();
+      }
+
+      function closeSignup() {
+        if (!signupModal) return;
+        signupModal.classList.add('hidden');
+        signupModal.classList.remove('flex');
+        signupModal.setAttribute('aria-hidden', 'true');
+        signupButton && signupButton.setAttribute('aria-expanded', 'false');
+        if (lastFocusedElement && typeof lastFocusedElement.focus === 'function') lastFocusedElement.focus();
+      }
+
+      function openPrivacyFromSignup() {
+        closeSignup();
+        if (privacyButton) privacyButton.click();
+      }
+
+      signupButton && signupButton.addEventListener('click', openSignup);
+      closeButton && closeButton.addEventListener('click', closeSignup);
+      privacyLink && privacyLink.addEventListener('click', openPrivacyFromSignup);
+      privacyModalLink && privacyModalLink.addEventListener('click', openPrivacyFromSignup);
+      signupModal && signupModal.addEventListener('click', (event) => {
+        if (event.target === signupModal) closeSignup();
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (!signupModal || signupModal.classList.contains('hidden')) return;
+        if (event.key === 'Escape') {
+          closeSignup();
+          return;
+        }
+        if (event.key === 'Tab') {
+          const focusable = signupModal.querySelectorAll('button, [href], iframe, [tabindex]:not([tabindex="-1"])');
+          if (!focusable.length) {
+            event.preventDefault();
+            return;
+          }
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+          }
+        }
+      });
+    })();
   </script>
 
   <script src="./src/import-experience-catalog.js"></script>

@@ -10,6 +10,7 @@
     let importExperienceSession = null;
     let importExperienceVisibilityHandler = null;
     let importExperienceFadeFrame = null;
+    let importIllustrationRequestToken = 0;
     const IMPORT_EXPERIENCE_ROTATION_INTERVAL = 8000;
 
     function findHeaderIndex(headers, matcher) {
@@ -165,8 +166,8 @@
       if (!entry) return;
       const message = document.getElementById('importProgressMessage');
       const illustration = document.getElementById('importExperienceIllustration');
-      const privacyReminder = document.getElementById('importPrivacyReminder');
       if (!message || !illustration) return;
+      const requestToken = ++importIllustrationRequestToken;
       const preview = document.getElementById('importProgressPreview');
       if (preview) {
         if (importExperienceFadeFrame !== null) cancelAnimationFrame(importExperienceFadeFrame);
@@ -177,14 +178,20 @@
         });
       }
       message.textContent = entry.text;
+      illustration.style.visibility = 'hidden';
+      illustration.onload = () => {
+        if (requestToken !== importIllustrationRequestToken) return;
+        illustration.style.visibility = '';
+      };
+      illustration.onerror = () => {
+        if (requestToken !== importIllustrationRequestToken) return;
+        illustration.onload = null;
+        illustration.onerror = null;
+        illustration.removeAttribute('src');
+      };
       illustration.src = entry.illustrationPath;
       illustration.alt = '';
       illustration.setAttribute('aria-hidden', 'true');
-      if (privacyReminder) {
-        const reminderDue = !!(importExperienceSession && importExperienceSession.privacyReminderDue);
-        privacyReminder.textContent = reminderDue ? window.importExperienceCatalog.privacyReminder : '';
-        privacyReminder.classList.toggle('hidden', !reminderDue);
-      }
     }
 
     function advanceImportExperience() {

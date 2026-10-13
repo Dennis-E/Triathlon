@@ -83,7 +83,27 @@ describe('index.html inline script syntax', () => {
     expect(html).toContain('id="importProgressPreview"');
     expect(html).toContain('id="importExperienceIllustration"');
     expect(html).toContain('id="importProgressMessage"');
-    expect(html).toContain('id="importPrivacyReminder"');
+    expect(html).not.toContain('importPrivacyReminder');
+  });
+
+  it('uses only the nineteen supplied PNGs and has no SVG-backed import message', () => {
+    expect(importExperienceCatalog.messages).toHaveLength(19);
+    importExperienceCatalog.messages.forEach((message, index) => {
+      const imageNumber = String(index + 1).padStart(2, '0');
+      const assetPath = path.join(__dirname, '..', `assets/import-illustrations/${imageNumber}.png`);
+      const png = fs.readFileSync(assetPath);
+      expect(message.illustrationPath).toBe(`./assets/import-illustrations/${imageNumber}.png`);
+      expect(png.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+      expect(png.readUInt32BE(16)).toBeGreaterThan(0);
+      expect(png.readUInt32BE(20)).toBeLessThan(256);
+      expect(message).not.toHaveProperty('fallbackIllustrationPath');
+    });
+    expect(importExperienceCatalog.messages.some(message => message.id === 'message-01')).toBe(false);
+    expect(importExperienceCatalog.messages.some(message => message.id === 'personal-swim-count')).toBe(false);
+    expect(importExperienceCatalog).not.toHaveProperty('privacyReminder');
+    expect(html).toContain('src="./assets/import-illustrations/01.png"');
+    expect(dashboardImportSource).not.toContain('fallbackIllustrationPath');
+    expect(html).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)/);
   });
 
   it('loads the browser power utility before the dashboard script', () => {
@@ -310,28 +330,6 @@ describe('index.html inline script syntax', () => {
     expect(html).toMatch(/id="wordcloudCountValue"[^>]*>50 words<\/output>/);
   });
 
-  it('provides one responsive message and illustration area for the import experience', () => {
-    expect(html).toContain('id="importProgressPreview"');
-    expect(html).toContain('id="importExperienceIllustration"');
-    expect(html).toContain('id="importProgressMessage"');
-    expect(html).toContain('id="importPrivacyReminder"');
-    expect(html).toContain('min-h-14');
-    expect(html).not.toContain('data-import-preview=');
-  });
-
-  it('maps all twenty catalog entries to local SVG scenes with reduced-motion fallbacks', () => {
-    expect(importExperienceCatalog.messages).toHaveLength(20);
-    importExperienceCatalog.messages.forEach(message => {
-      const assetPath = path.join(__dirname, '..', message.illustrationPath.replace(/^\.\//, ''));
-      expect(fs.existsSync(assetPath)).toBe(true);
-      const svg = fs.readFileSync(assetPath, 'utf-8');
-      expect(svg).toMatch(/<svg\b/);
-      expect(svg).toMatch(/prefers-reduced-motion:\s*reduce/);
-      expect(svg).not.toMatch(/(?:href|src)=["']https?:\/\//i);
-    });
-    expect(html).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)/);
-  });
-
   it('keeps one import headline and one black detail status box', () => {
     expect((html.match(/<h2 class="font-semibold text-lg">Importing Training Data<\/h2>/g) || []).length).toBe(1);
     expect(html).toContain('id="importProgressDetail"');
@@ -380,7 +378,6 @@ describe('index.html inline script syntax', () => {
     expect(html).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*#importProgressPreview/);
     expect(html).toMatch(/id="importProgressMessage"[^>]*aria-live="polite"/);
     expect(html).toMatch(/id="importExperienceIllustration"[^>]*aria-hidden="true"/);
-    expect(html).toMatch(/id="importPrivacyReminder"[^>]*aria-live="polite"/);
   });
 
   it('renders a distinct activity-average power section for Bike PBs', () => {

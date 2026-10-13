@@ -2,26 +2,25 @@
   'use strict';
 
   const messages = [
-    { id: 'message-01', text: 'Your training data has entered T1. This may take a moment.', visualDescription: 'A swimmer enters transition and picks up a laptop instead of a bicycle.', illustrationPath: './assets/import-illustrations/message-01.svg', kind: 'humor' },
-    { id: 'message-02', text: 'Calculating how much of your personality is actually endurance sport…', visualDescription: 'A donut chart fills with TRIATHLON versus OTHER.', illustrationPath: './assets/import-illustrations/message-02.svg', kind: 'humor' },
-    { id: 'message-03', text: 'Checking whether all those Zone 2 sessions were actually Zone 2. 👀', visualDescription: 'A heart-rate line repeatedly crosses the Zone 2 boundary.', illustrationPath: './assets/import-illustrations/message-03.svg', kind: 'humor' },
-    { id: 'message-04', text: 'Converting years of questionable life choices into beautiful charts.', visualDescription: 'Swim, bike, and run icons transform into a colorful analytics chart.', illustrationPath: './assets/import-illustrations/message-04.svg', kind: 'humor' },
-    { id: 'message-05', text: 'Good news: buying faster equipment does improve at least one metric — equipment count.', visualDescription: 'A bicycle becomes aerodynamic while its equipment count rises.', illustrationPath: './assets/import-illustrations/message-05.svg', kind: 'humor' },
-    { id: 'message-06', text: 'Looking for evidence that you occasionally took a rest day…', visualDescription: 'A magnifying glass scans a calendar and finds a humorous 404.', illustrationPath: './assets/import-illustrations/message-06.svg', kind: 'humor' },
-    { id: 'message-07', text: 'Analysing thousands of kilometres you could have spent relaxing.', visualDescription: 'An athlete runs an endless GPS track past an unused sofa.', illustrationPath: './assets/import-illustrations/message-07.svg', kind: 'humor' },
-    { id: 'message-08', text: 'Your data is doing a brick session. It also regrets its choices.', visualDescription: 'A cyclist dismounts and runs with exaggerated wobbly legs.', illustrationPath: './assets/import-illustrations/message-08.svg', kind: 'humor' },
-    { id: 'message-09', text: "Finding the exact moment \"I'll just try a triathlon\" got out of control.", visualDescription: 'A single workout multiplies into hundreds of activities.', illustrationPath: './assets/import-illustrations/message-09.svg', kind: 'humor' },
-    { id: 'message-10', text: "Counting activities. Yes, indoor rides count too. We're not monsters.", visualDescription: 'An indoor trainer receives an animated green checkmark.', illustrationPath: './assets/import-illustrations/message-10.svg', kind: 'humor' },
-    { id: 'message-11', text: "Checking whether it really happened if it wasn't recorded…", visualDescription: 'An activity vanishes and returns when a GPS watch saves it.', illustrationPath: './assets/import-illustrations/message-11.svg', kind: 'humor' },
-    { id: 'message-12', text: 'Searching your history for the mythical easy recovery session.', visualDescription: 'A magnifying glass searches activity cards labelled HARD.', illustrationPath: './assets/import-illustrations/message-12.svg', kind: 'humor' },
-    { id: 'message-13', text: 'Plotting your athletic evolution from "this is fun" to "what\'s my FTP?"', visualDescription: 'Athletic evolution ends with an athlete studying a power meter.', illustrationPath: './assets/import-illustrations/message-13.svg', kind: 'humor' },
-    { id: 'message-14', text: 'Separating training volume from compulsive data collection. Difficult.', visualDescription: 'Overlapping circles show TRAINING and ANALYSING TRAINING.', illustrationPath: './assets/import-illustrations/message-14.svg', kind: 'humor' },
-    { id: 'message-15', text: 'Analysing your pacing strategy: optimistic start detected.', visualDescription: 'A pace chart starts aggressively and then deteriorates.', illustrationPath: './assets/import-illustrations/message-15.svg', kind: 'humor' },
-    { id: 'message-16', text: 'Looking for your fastest performances — and pretending tailwind had nothing to do with them.', visualDescription: 'A cyclist is propelled by an enormous tailwind arrow.', illustrationPath: './assets/import-illustrations/message-16.svg', kind: 'humor' },
-    { id: 'message-17', text: 'Reconstructing years of swim, bike, run… and buying things.', visualDescription: 'A repeating sequence shows swimming, cycling, running, and a credit card.', illustrationPath: './assets/import-illustrations/message-17.svg', kind: 'humor' },
-    { id: 'message-18', text: "Your ZIP file is bigger than some people's annual training volume. Respect.", visualDescription: 'An oversized ZIP archive balances against a tiny training log.', illustrationPath: './assets/import-illustrations/message-18.svg', kind: 'humor' },
-    { id: 'message-19', text: 'Crunching the numbers so you can confirm what you already suspected: you need another bike.', visualDescription: 'An equation reads DATA + SCIENCE = NEW BIKE.', illustrationPath: './assets/import-illustrations/message-19.svg', kind: 'humor' },
-    { id: 'message-20', text: 'Almost there. Please resist opening Strava while you wait.', visualDescription: 'A finger approaches a generic activity-feed icon while a warning flashes.', illustrationPath: './assets/import-illustrations/message-20.svg', kind: 'humor', requiresPhase: 'finalizing' }
+    { id: 'message-02', text: 'Calculating how much of your personality is actually endurance sport…', visualDescription: 'A donut chart fills with TRIATHLON versus OTHER.', illustrationPath: './assets/import-illustrations/01.png', kind: 'humor' },
+    { id: 'message-03', text: 'Checking whether all those Zone 2 sessions were actually Zone 2. 👀', visualDescription: 'A heart-rate line repeatedly crosses the Zone 2 boundary.', illustrationPath: './assets/import-illustrations/02.png', kind: 'humor' },
+    { id: 'message-04', text: 'Converting years of questionable life choices into beautiful charts.', visualDescription: 'Swim, bike, and run icons transform into a colorful analytics chart.', illustrationPath: './assets/import-illustrations/03.png', kind: 'humor' },
+    { id: 'message-05', text: 'Good news: buying faster equipment does improve at least one metric — equipment count.', visualDescription: 'A bicycle becomes aerodynamic while its equipment count rises.', illustrationPath: './assets/import-illustrations/04.png', kind: 'humor' },
+    { id: 'message-06', text: 'Looking for evidence that you occasionally took a rest day…', visualDescription: 'A magnifying glass scans a calendar and finds a humorous 404.', illustrationPath: './assets/import-illustrations/05.png', kind: 'humor' },
+    { id: 'message-07', text: 'Analysing thousands of kilometres you could have spent relaxing.', visualDescription: 'An athlete runs an endless GPS track past an unused sofa.', illustrationPath: './assets/import-illustrations/06.png', kind: 'humor' },
+    { id: 'message-08', text: 'Your data is doing a brick session. It also regrets its choices.', visualDescription: 'A cyclist dismounts and runs with exaggerated wobbly legs.', illustrationPath: './assets/import-illustrations/07.png', kind: 'humor' },
+    { id: 'message-09', text: "Finding the exact moment \"I'll just try a triathlon\" got out of control.", visualDescription: 'A single workout multiplies into hundreds of activities.', illustrationPath: './assets/import-illustrations/08.png', kind: 'humor' },
+    { id: 'message-10', text: "Counting activities. Yes, indoor rides count too. We're not monsters.", visualDescription: 'An indoor trainer receives an animated green checkmark.', illustrationPath: './assets/import-illustrations/09.png', kind: 'humor' },
+    { id: 'message-11', text: "Checking whether it really happened if it wasn't recorded…", visualDescription: 'An activity vanishes and returns when a GPS watch saves it.', illustrationPath: './assets/import-illustrations/10.png', kind: 'humor' },
+    { id: 'message-12', text: 'Searching your history for the mythical easy recovery session.', visualDescription: 'A magnifying glass searches activity cards labelled HARD.', illustrationPath: './assets/import-illustrations/11.png', kind: 'humor' },
+    { id: 'message-13', text: 'Plotting your athletic evolution from "this is fun" to "what\'s my FTP?"', visualDescription: 'Athletic evolution ends with an athlete studying a power meter.', illustrationPath: './assets/import-illustrations/12.png', kind: 'humor' },
+    { id: 'message-14', text: 'Separating training volume from compulsive data collection. Difficult.', visualDescription: 'Overlapping circles show TRAINING and ANALYSING TRAINING.', illustrationPath: './assets/import-illustrations/13.png', kind: 'humor' },
+    { id: 'message-15', text: 'Analysing your pacing strategy: optimistic start detected.', visualDescription: 'A pace chart starts aggressively and then deteriorates.', illustrationPath: './assets/import-illustrations/14.png', kind: 'humor' },
+    { id: 'message-16', text: 'Looking for your fastest performances — and pretending tailwind had nothing to do with them.', visualDescription: 'A cyclist is propelled by an enormous tailwind arrow.', illustrationPath: './assets/import-illustrations/15.png', kind: 'humor' },
+    { id: 'message-17', text: 'Reconstructing years of swim, bike, run… and buying things.', visualDescription: 'A repeating sequence shows swimming, cycling, running, and a credit card.', illustrationPath: './assets/import-illustrations/16.png', kind: 'humor' },
+    { id: 'message-18', text: "Your ZIP file is bigger than some people's annual training volume. Respect.", visualDescription: 'An oversized ZIP archive balances against a tiny training log.', illustrationPath: './assets/import-illustrations/17.png', kind: 'humor' },
+    { id: 'message-19', text: 'Crunching the numbers so you can confirm what you already suspected: you need another bike.', visualDescription: 'An equation reads DATA + SCIENCE = NEW BIKE.', illustrationPath: './assets/import-illustrations/18.png', kind: 'humor' },
+    { id: 'message-20', text: 'Almost there. Please resist opening Strava while you wait.', visualDescription: 'A finger approaches a generic activity-feed icon while a warning flashes.', illustrationPath: './assets/import-illustrations/19.png', kind: 'humor', requiresPhase: 'finalizing' }
   ];
 
   function getEligibleMessages(entries, phase) {
@@ -49,8 +48,6 @@
       orderedMessageIds: shuffleWithoutReplacement(eligible, random).map(message => message.id),
       shownMessageIds: new Set(),
       currentMessageId: null,
-      humorousMessageCount: 0,
-      privacyReminderDue: false,
       phase,
       random,
       active: true
@@ -111,10 +108,6 @@
     if (!message) return null;
     session.currentMessageId = message.id;
     session.shownMessageIds.add(message.id);
-    if (message.kind === 'humor' || message.kind === 'personal') {
-      session.humorousMessageCount += 1;
-      session.privacyReminderDue = session.humorousMessageCount % 4 === 0;
-    }
     return message;
   }
 
@@ -193,13 +186,18 @@
       ? formatNumber
       : value => new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value);
     const candidates = [];
-    const add = (id, statistic, text, illustrationId) => candidates.push({
-      id: `personal-${id}`,
-      kind: 'personal',
-      statistic,
-      text,
-      illustrationPath: `./assets/import-illustrations/${illustrationId}.svg`
-    });
+    const add = (id, statistic, text, illustrationId) => {
+      const sceneNumber = Number(illustrationId.replace(/^message-/, ''));
+      const imageNumber = String(sceneNumber - 1).padStart(2, '0');
+      if (sceneNumber < 2 || sceneNumber > 20) return;
+      candidates.push({
+        id: `personal-${id}`,
+        kind: 'personal',
+        statistic,
+        text,
+        illustrationPath: `./assets/import-illustrations/${imageNumber}.png`
+      });
+    };
 
     if (statistics.activityCount !== null) {
       add('activity-count', 'activityCount', `We found ${format(statistics.activityCount)} activities. Apparently “rest day” was more of a guideline.`, 'message-10');
@@ -216,16 +214,12 @@
     if (statistics.longestRideKm !== null) {
       add('longest-ride', 'longestRideKm', `Longest ride found: ${format(statistics.longestRideKm)} km. We assume this seemed like a good idea at the time.`, 'message-16');
     }
-    if (statistics.swimmingActivityCount !== null) {
-      add('swim-count', 'swimmingActivityCount', `${format(statistics.swimmingActivityCount)} swims detected. Good. We were worried you were one of those triathletes.`, 'message-01');
-    }
     return candidates;
   }
 
   const api = {
     messages,
     personalMessages: [],
-    privacyReminder: '🔒 Still local. Your Strava training-file contents are processed in your browser — not uploaded to TriAnalytica servers.',
     getEligibleMessages,
     shuffleWithoutReplacement,
     createSession,

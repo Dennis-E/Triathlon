@@ -50,8 +50,11 @@ function loadRuntimeProgress() {
     importProgressError: { classList: { add() {}, remove() {} } },
     importProgressPreview: { classList: { add() {}, remove() {} } },
     importProgressMessage: { textContent: '' },
-    importExperienceIllustration: { src: '', alt: '', setAttribute() {} },
-    importPrivacyReminder: { textContent: '', classList: { add() {}, remove() {}, toggle() {} } },
+    importExperienceIllustration: {
+      src: '', alt: '', style: {},
+      setAttribute() {},
+      removeAttribute(attribute) { if (attribute === 'src') this.src = ''; }
+    },
     importProgressModal: {
       classList: { add() {}, remove() {} },
       querySelector() { return null; }
@@ -74,10 +77,10 @@ function loadRuntimeProgress() {
     cancelAnimationFrame() {}
   };
   vm.createContext(context);
-  vm.runInContext(`${dashboardImportSource}\nthis.__updateProgress = updateImportProgress; this.__showModal = showImportProgressModal; this.__hideModal = hideImportProgressModal; this.__activeSession = () => importExperienceSession;`, context, {
+  vm.runInContext(`${dashboardImportSource}\nthis.__updateProgress = updateImportProgress; this.__renderMessage = renderImportExperienceMessage; this.__showModal = showImportProgressModal; this.__hideModal = hideImportProgressModal; this.__activeSession = () => importExperienceSession;`, context, {
     filename: 'src/dashboard-import.js'
   });
-  return { updateProgress: context.__updateProgress, showModal: context.__showModal, hideModal: context.__hideModal, activeSession: context.__activeSession, nodes, activeIntervals, removedListeners };
+  return { updateProgress: context.__updateProgress, renderMessage: context.__renderMessage, showModal: context.__showModal, hideModal: context.__hideModal, activeSession: context.__activeSession, nodes, activeIntervals, removedListeners };
 }
 
 function activityRow(name, duration, km, meters) {
@@ -169,6 +172,36 @@ describe('runtime dashboard-import progress updates', () => {
     expect(runtime.activeIntervals.size).toBe(0);
     expect(secondSession.active).toBe(false);
     expect(runtime.removedListeners.map(item => item.event)).toEqual(['visibilitychange', 'visibilitychange']);
+  });
+});
+
+describe('runtime import illustration presentation', () => {
+  it('pairs the current message with its PNG and same-message SVG fallback without changing status', () => {
+    const runtime = loadRuntimeProgress();
+    runtime.updateProgress(35, 'Processing data...');
+    const first = {
+      text: 'First message',
+      illustrationPath: './assets/import-illustrations/01.png'
+    };
+    const second = {
+      text: 'Second message',
+      illustrationPath: './assets/import-illustrations/02.png'
+    };
+
+    runtime.renderMessage(first);
+    const staleErrorHandler = runtime.nodes.importExperienceIllustration.onerror;
+    runtime.renderMessage(second);
+    staleErrorHandler();
+    expect(runtime.nodes.importProgressMessage.textContent).toBe('Second message');
+    expect(runtime.nodes.importExperienceIllustration.src).toBe(second.illustrationPath);
+
+    const activeErrorHandler = runtime.nodes.importExperienceIllustration.onerror;
+    activeErrorHandler();
+    activeErrorHandler();
+    expect(runtime.nodes.importExperienceIllustration.src).toBe('');
+    expect(runtime.nodes.importExperienceIllustration.src).not.toMatch(/\.svg$/i);
+    expect(runtime.nodes.importProgressStage.textContent).toBe('Processing data...');
+    expect(runtime.nodes.importProgressBar.style.width).toBe('35%');
   });
 });
 

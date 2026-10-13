@@ -31,5 +31,5 @@
 
 ## Notes
 
-- Validation passed. Brevo is named only as the user-selected signup provider and external data processor; the specification otherwise describes user-facing outcomes rather than implementation mechanics.
+- Validation passed. Brevo is named as the signup-form provider; its specific legal role is not asserted until verified against current account/provider documentation.
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`.

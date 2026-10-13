@@ -72,6 +72,17 @@ describe('legal footer', () => {
       expect(html).toMatch(/Verarbeitung importierter Aktivitätsdaten|Processing of imported activity data/i);
     });
 
+    it('links the newsletter invitation to the policy and discloses Brevo data handling in both languages', () => {
+      expect(html).toMatch(/id="newsletterPrivacyLink"[^>]*aria-controls="privacyPolicyModal"/i);
+      expect(html).toMatch(/id="newsletterPrivacyModalLink"[^>]*aria-controls="privacyPolicyModal"/i);
+      expect(html).toMatch(/Wenn Nutzer das Newsletter-Formular bewusst öffnen[\s\S]*?Brevo her/i);
+      expect(html).toMatch(/Brevo Ihre E-Mail-Adresse und Ihre Einwilligung/i);
+      expect(html).toMatch(/Trainingsdateien und Trainingsaktivitätsdaten werden durch diese Anmeldung nicht an Brevo gesendet/i);
+      expect(html).toMatch(/When visitors deliberately open the newsletter form[\s\S]*?Brevo/i);
+      expect(html).toMatch(/Brevo processes your email address and consent/i);
+      expect(html).toMatch(/Training files and training-activity data are not sent to Brevo by this signup/i);
+    });
+
     it('documents TrainingPeaks FIT/GPX processing and separates local workout data from counter metadata', () => {
       expect(html).toMatch(/FIT\.GZ-Workouts/);
       expect(html).toMatch(/GPX\.GZ-Routen/);

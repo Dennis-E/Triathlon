@@ -317,6 +317,7 @@ describe('index.html inline script syntax', () => {
 
     expect(html).toContain('id="stravaIngestBtn"');
     expect(html).toContain('id="trainingPeaksIngestBtn"');
+    expect(html).toMatch(/id="trainingPeaksIngestBtn"[\s\S]*?<svg class="h-5 w-5 shrink-0"[\s\S]*?<span>Import TrainingPeaks<\/span>/);
     expect(html).toContain('onclick="handleTrainingPeaksIngest()"');
     expect(dashboardImportSource).toContain('input.multiple = true');
     expect(dashboardImportSource).toContain('Array.from(event.target.files || [])');

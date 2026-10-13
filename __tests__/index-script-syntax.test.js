@@ -229,10 +229,23 @@ describe('index.html inline script syntax', () => {
     expect(trainingCalendarCode).toContain('window.trainingCalendarUtils');
   });
 
-  it('uses a bright palette-independent empty day and renders all year blocks', () => {
-    expect(trainingCalendarCode).toContain('rgba(241,245,249,0.5)');
+  it('uses the shared subtle empty-day color and keeps day-cell borders off the permanent styling', () => {
+    expect(trainingCalendarCode).toContain('window.trainingCalendarUtils.EMPTY_DAY_COLOR');
+    expect(trainingCalendarCode).not.toContain('border-slate-300');
+    expect(trainingCalendarCode).toContain('focus:ring-2 focus:ring-indigo-400');
     expect(trainingCalendarCode).toContain('trainingCalendarYears');
     expect(trainingCalendarCode).toContain('PALETTES');
+  });
+
+  it('renders aligned month headers, seven-day grids, scrollable year sections, and a trailing legend', () => {
+    expect(trainingCalendarCode).toContain('data-calendar-months');
+    expect(trainingCalendarCode).toContain('data-calendar-days');
+    expect(trainingCalendarCode).toContain('grid-rows-[repeat(7,14px)]');
+    expect(trainingCalendarCode).toContain('overflow-x-auto');
+    expect(trainingCalendarCode).toContain('trainingCalendarLegend');
+    expect(trainingCalendarCode).toContain('yearsContainer.appendChild(legend)');
+    expect(html).not.toContain('id="trainingCalendarLegend"');
+    expect(html).toContain('id="trainingCalendarYears"');
   });
 
   it('wires Training Calendar export to the full multi-year target', () => {
@@ -241,6 +254,21 @@ describe('index.html inline script syntax', () => {
     expect(inlineCode).toContain('trainingCalendar:');
     expect(inlineCode).toContain('trainingCalendarYears');
     expect(inlineCode).toContain('trainingCalendarDayTooltip');
+  });
+
+  it('exposes the selected dynamic Training Calendar sport in export metadata', () => {
+    expect(trainingCalendarCode).toContain('id="trainingCalendarSportBtn${sport}"');
+    expect(inlineCode).toContain("getActiveButtonText(Array.from(document.querySelectorAll('#trainingCalendarSportFilters button')).map(button => button.id))");
+    expect(inlineCode).toContain("trainingCalendar: typeof processedActivities !== 'undefined' && processedActivities.length > 0");
+    expect(inlineCode).toContain("const tooltip = document.getElementById('trainingCalendarDayTooltip')");
+    expect(inlineCode).toContain("if (tooltipWasVisible) tooltip.classList.add('hidden')");
+    expect(inlineCode).toContain("showExportToast('Nothing to export for this selection yet.')");
+  });
+
+  it('expands cloned Training Calendar scroll regions for complete image capture', () => {
+    expect(inlineCode).toContain('onclone: clonedDocument =>');
+    expect(inlineCode).toContain("querySelectorAll('[role=\"region\"]')");
+    expect(inlineCode).toContain('region.style.overflow = \'visible\'');
   });
 
   it('wires the Workout Time tab and its dashboard renderer', () => {

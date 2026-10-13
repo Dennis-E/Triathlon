@@ -455,7 +455,21 @@
         const captured = await html2canvas(targetEl, {
           backgroundColor: '#020617',
           useCORS: true,
-          logging: false
+          logging: false,
+          onclone: clonedDocument => {
+            if (target.key !== 'trainingCalendar') return;
+            const clonedTarget = clonedDocument.getElementById(target.targetElementId);
+            if (!clonedTarget) return;
+            const regions = Array.from(clonedTarget.querySelectorAll('[role="region"]'));
+            const captureWidth = Math.max(clonedTarget.clientWidth, ...regions.map(region => region.scrollWidth));
+            regions.forEach(region => {
+              region.style.overflow = 'visible';
+              region.style.width = `${region.scrollWidth}px`;
+              region.style.maxWidth = 'none';
+            });
+            clonedTarget.style.width = `${captureWidth}px`;
+            clonedTarget.style.maxWidth = 'none';
+          }
         });
         const dataUrl = drawExportComposition(captured, target, assets);
         lastExportedImage = { dataUrl, target };

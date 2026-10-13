@@ -43,7 +43,11 @@ describe('export-utils', () => {
       targetElementId: 'trainingCalendarYears',
       hasData: true,
       filters: [{ label: 'Palette', value: 'Fire' }, { label: 'Sport', value: 'All Sports' }]
-    })).toMatchObject({ targetElementId: 'trainingCalendarYears', hasData: true });
+    })).toMatchObject({
+      targetElementId: 'trainingCalendarYears',
+      hasData: true,
+      filters: [{ label: 'Palette', value: 'Fire' }, { label: 'Sport', value: 'All Sports' }]
+    });
   });
 
   it('supports Wordcloud export title, filename slug, and canvas target', () => {

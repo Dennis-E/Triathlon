@@ -126,13 +126,34 @@ describe('training-calendar-utils', () => {
     expect(model.years[1].days).toHaveLength(365);
   });
 
-  it('defines the three ordered palettes with a shared bright empty level', () => {
+  it('defines the three ordered palettes with a shared subdued empty level', () => {
     expect(Object.keys(PALETTES)).toEqual(['green', 'blue', 'fire']);
     expect(PALETTES.green).toHaveLength(5);
     expect(PALETTES.blue).toHaveLength(5);
     expect(PALETTES.fire).toHaveLength(5);
     expect(PALETTES.fire).toEqual(['#FDE047', '#F59E0B', '#F97316', '#EF4444', '#B91C1C']);
-    expect(EMPTY_DAY_COLOR).toBe('rgba(241,245,249,0.5)');
+    expect(EMPTY_DAY_COLOR).toBe('#0B1220');
+  });
+
+  it('keeps the empty level subtly distinguishable and each palette level separated', () => {
+    const luminance = color => {
+      const channels = color.match(/[\da-f]{2}/gi).map(channel => parseInt(channel, 16) / 255);
+      const linear = channels.map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+      return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+    };
+    const contrast = (first, second) => {
+      const values = [luminance(first), luminance(second)].sort((a, b) => b - a);
+      return (values[0] + 0.05) / (values[1] + 0.05);
+    };
+    const background = '#020617';
+
+    expect(contrast(EMPTY_DAY_COLOR, background)).toBeGreaterThan(1);
+    expect(contrast(EMPTY_DAY_COLOR, background)).toBeLessThanOrEqual(1.2);
+    Object.values(PALETTES).forEach(palette => {
+      expect(contrast(palette[0], EMPTY_DAY_COLOR)).toBeGreaterThanOrEqual(3);
+      expect(new Set(palette).size).toBe(5);
+      expect(new Set(palette.map(luminance)).size).toBe(5);
+    });
   });
 
   it('creates display-safe tooltip activity summaries without mutating source data', () => {
@@ -150,7 +171,7 @@ describe('training-calendar-utils', () => {
     expect(source[1].sport).toBe('Yoga');
   });
 
-  it('defines the export-safe transparent empty-cell token', () => {
-    expect(EMPTY_DAY_COLOR).toBe('rgba(241,245,249,0.5)');
+  it('defines the shared opaque empty-cell token used by the export view', () => {
+    expect(EMPTY_DAY_COLOR).toBe('#0B1220');
   });
 });

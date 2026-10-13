@@ -1,6 +1,6 @@
 const SUPPORTED_SPORTS = ['Run', 'Bike', 'Swim'];
 const CALENDAR_SPORTS = [...SUPPORTED_SPORTS, 'Other'];
-const EMPTY_DAY_COLOR = 'rgba(241,245,249,0.5)';
+const EMPTY_DAY_COLOR = '#0B1220';
 const PALETTES = Object.freeze({
   green: Object.freeze(['#DCFCE7', '#86EFAC', '#22C55E', '#16A34A', '#166534']),
   blue: Object.freeze(['#DBEAFE', '#93C5FD', '#3B82F6', '#2563EB', '#1D4ED8']),

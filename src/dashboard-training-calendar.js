@@ -1,7 +1,6 @@
 let selectedTrainingCalendarSport = 'All';
 let selectedTrainingCalendarPalette = 'green';
 let trainingCalendarModel = null;
-const TRAINING_CALENDAR_EMPTY_DAY_COLOR = 'rgba(241,245,249,0.5)';
 
 function formatTrainingCalendarDuration(seconds) {
   if (!Number.isFinite(seconds)) return null;
@@ -47,7 +46,7 @@ function renderTrainingCalendarSportFilters() {
   }
   container.innerHTML = options.map(sport => {
     const label = sport === 'All' ? 'All Sports' : sport;
-    return `<button type="button" data-sport="${sport}" aria-pressed="${sport === selectedTrainingCalendarSport ? 'true' : 'false'}" onclick="setTrainingCalendarSportFilter('${sport}')">${label}</button>`;
+    return `<button type="button" id="trainingCalendarSportBtn${sport}" data-sport="${sport}" aria-pressed="${sport === selectedTrainingCalendarSport ? 'true' : 'false'}" onclick="setTrainingCalendarSportFilter('${sport}')">${label}</button>`;
   }).join('');
   setTrainingCalendarSportButtonActive(selectedTrainingCalendarSport);
 }
@@ -91,24 +90,23 @@ function createTrainingCalendarCell(day, palette) {
     ? `${formatTrainingCalendarDay(day)}, ${day.activityCount} activities, intensity ${day.intensityLevel} of 5`
     : `${formatTrainingCalendarDay(day)}, no activity`;
   const color = day.intensityLevel === 0
-    ? TRAINING_CALENDAR_EMPTY_DAY_COLOR
+    ? window.trainingCalendarUtils.EMPTY_DAY_COLOR
     : window.trainingCalendarUtils.PALETTES[palette][day.intensityLevel - 1];
-  const borderClass = day.activityCount ? 'border border-slate-300' : 'border-0';
-  return `<button type="button" class="h-3.5 w-3.5 rounded-sm ${borderClass} focus:outline-none focus:ring-2 focus:ring-indigo-400" style="background-color:${color}" aria-label="${label}" data-date-key="${day.dateKey}" onmouseenter="showTrainingCalendarDayTooltipByKey('${day.dateKey}', this)" onmouseleave="closeTrainingCalendarTooltip()" onfocus="showTrainingCalendarDayTooltipByKey('${day.dateKey}', this)" onblur="closeTrainingCalendarTooltip()"></button>`;
+  return `<button type="button" class="h-3.5 w-3.5 rounded-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" style="background-color:${color}" aria-label="${label}" data-date-key="${day.dateKey}" onmouseenter="showTrainingCalendarDayTooltipByKey('${day.dateKey}', this)" onmouseleave="closeTrainingCalendarTooltip()" onfocus="showTrainingCalendarDayTooltipByKey('${day.dateKey}', this)" onblur="closeTrainingCalendarTooltip()"></button>`;
 }
 
-function renderTrainingCalendarGrid(yearModel, grid) {
-  if (!grid || !yearModel) return;
+function renderTrainingCalendarGrid(yearModel, monthHeader, grid) {
+  if (!grid || !monthHeader || !yearModel) return;
+  monthHeader.innerHTML = '';
   grid.innerHTML = '';
   yearModel.weeks.forEach(week => {
-    const firstDay = week.days.find(Boolean);
-    const monthLabel = firstDay && (firstDay.date.getDate() <= 7 || week === yearModel.weeks[0])
-      ? firstDay.date.toLocaleDateString(undefined, { month: 'short' })
-      : '';
+    const monthStart = week.days.find(day => day && day.date.getDate() === 1);
     const monthCell = document.createElement('span');
-    monthCell.className = 'text-[10px] leading-3 text-slate-500';
-    monthCell.textContent = monthLabel;
-    grid.appendChild(monthCell);
+    monthCell.className = 'whitespace-nowrap text-[10px] leading-3 text-slate-500';
+    monthCell.textContent = monthStart
+      ? monthStart.date.toLocaleDateString(undefined, { month: 'short' })
+      : '';
+    monthHeader.appendChild(monthCell);
     week.days.forEach(day => {
       const wrapper = document.createElement('span');
       wrapper.innerHTML = createTrainingCalendarCell(day, selectedTrainingCalendarPalette);
@@ -117,11 +115,10 @@ function renderTrainingCalendarGrid(yearModel, grid) {
   });
 }
 
-function renderTrainingCalendarLegend() {
-  const legend = document.getElementById('trainingCalendarLegend');
+function renderTrainingCalendarLegend(legend) {
   if (!legend) return;
   const colors = [window.trainingCalendarUtils.EMPTY_DAY_COLOR, ...window.trainingCalendarUtils.PALETTES[selectedTrainingCalendarPalette]];
-  legend.innerHTML = `<span>Less</span>${colors.map((color, index) => `<span class="h-3 w-3 rounded-sm border border-slate-300" style="background-color:${color}" title="${index === 0 ? 'No activity' : `Intensity ${index}`}"></span>`).join('')}<span>More</span>`;
+  legend.innerHTML = `<span>Less</span>${colors.map((color, index) => `<span class="h-3 w-3 rounded-sm" style="background-color:${color}" title="${index === 0 ? 'No activity' : `Intensity ${index}`}" aria-label="${index === 0 ? 'No activity' : `Intensity ${index}`}"></span>`).join('')}<span>More</span>`;
 }
 
 function renderTrainingCalendar() {
@@ -134,20 +131,26 @@ function renderTrainingCalendar() {
   if (count) count.textContent = `${trainingCalendarModel.years.reduce((total, year) => total + year.activityCount, 0)} activities`;
   const emptyState = document.getElementById('trainingCalendarEmptyState');
   if (emptyState) emptyState.classList.toggle('hidden', trainingCalendarModel.years.some(year => year.activityCount > 0));
-  renderTrainingCalendarLegend();
   const yearsContainer = document.getElementById('trainingCalendarYears');
   if (!yearsContainer) return;
   yearsContainer.innerHTML = '';
   trainingCalendarModel.years.forEach(yearModel => {
     const section = document.createElement('section');
     section.className = 'space-y-2';
-    section.innerHTML = `<h3 class="text-sm font-semibold text-slate-200">${yearModel.year}</h3><div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950 p-4"><div class="min-w-max" data-calendar-grid-wrapper></div></div>`;
+    section.innerHTML = `<h3 class="text-sm font-semibold text-slate-200">${yearModel.year}</h3><div class="overflow-x-auto pb-2" role="region" aria-label="${yearModel.year} training calendar" tabindex="0"><div class="min-w-max space-y-1"><div class="grid min-w-max auto-cols-[14px] grid-flow-col gap-1" data-calendar-months></div><div class="grid min-w-max auto-cols-[14px] grid-flow-col grid-rows-[repeat(7,14px)] gap-1" data-calendar-days></div></div></div>`;
     yearsContainer.appendChild(section);
-    const grid = document.createElement('div');
-    grid.className = 'grid min-w-max auto-cols-[14px] grid-flow-col grid-rows-[16px_repeat(7,14px)] gap-1';
-    section.querySelector('[data-calendar-grid-wrapper]').appendChild(grid);
-    renderTrainingCalendarGrid(yearModel, grid);
+    renderTrainingCalendarGrid(
+      yearModel,
+      section.querySelector('[data-calendar-months]'),
+      section.querySelector('[data-calendar-days]')
+    );
   });
+  const legend = document.createElement('div');
+  legend.id = 'trainingCalendarLegend';
+  legend.className = 'flex flex-wrap items-center justify-end gap-2 pt-1 text-xs text-slate-400';
+  legend.setAttribute('aria-label', 'Training intensity legend');
+  yearsContainer.appendChild(legend);
+  renderTrainingCalendarLegend(legend);
   closeTrainingCalendarTooltip();
 }
 

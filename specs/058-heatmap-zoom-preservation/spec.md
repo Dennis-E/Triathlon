@@ -23,6 +23,7 @@ As an athlete exploring the heatmap, I want the map to keep its current zoom and
 1. **Given** the map is panned and zoomed away from its initial world view, **When** the athlete changes from All Sports to Run, Bike, or Swim, **Then** the map remains at the same geographic center and zoom level while the routes update to the selected sport.
 2. **Given** the athlete has selected an individual sport, **When** they switch to another sport or back to All Sports, **Then** the map retains the same geographic center and zoom through each successive filter change.
 3. **Given** the map is at a city or street-level view, **When** the athlete changes the sport filter, **Then** the view does not reset to the world view or jump to the filtered routes' overall extent.
+4. **Given** the athlete has panned or zoomed the map and the imported dataset has not changed, **When** they leave the Heatmap tab and open it again, **Then** the same geographic center and zoom are retained while the selected sport's routes are shown.
 
 ### User Story 2 - Preserve the view when a filter has no routes (Priority: P2)
 
@@ -56,6 +57,7 @@ As an athlete exploring a particular area, I want an empty sport-filter result t
 - **FR-005**: The retained map view MUST continue to apply across successive filter changes, including switching directly between individual sports and returning to All Sports.
 - **FR-006**: The existing filter choices, route filtering, map navigation, and empty-state behavior MUST remain available and function as before, except that changing a filter no longer resets the viewport.
 - **FR-007**: The current map-view preservation requirement MUST apply while the imported dataset remains unchanged; behavior when a different dataset is imported remains governed by the existing initial-view behavior.
+- **FR-008**: When the Heatmap view is rendered again for the same imported dataset, including after the athlete leaves and reopens its tab, the system MUST retain the current geographic center and zoom rather than fitting route bounds again.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -72,6 +74,7 @@ As an athlete exploring a particular area, I want an empty sport-filter result t
 - **SC-003**: After every tested filter change, the displayed routes match the selected sport, with no routes left visible from the previous filter.
 - **SC-004**: When a selected sport has no GPS-backed routes, the existing empty state is shown and the map retains the same center and zoom; selecting a sport with routes afterward restores matching routes within that retained view.
 - **SC-005**: Athletes can compare multiple sports in the same geographic area without manually re-panning or re-zooming after each filter change.
+- **SC-006**: In 100% of tested Heatmap tab close/reopen cycles while the imported dataset is unchanged, the map retains its pre-navigation geographic center and zoom.
 
 ## Assumptions
 

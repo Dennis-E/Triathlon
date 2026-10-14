@@ -2,6 +2,8 @@
      let heatmapMapInstance = null;
      let routeCanvasLayerInstance = null;
      let leafletLoadPromise = null;
+    let heatmapViewportDataset = null;
+    let heatmapInitialFitPending = false;
 
     // Lazy-load Leaflet only when the heatmap tab is first opened. Route lines are
     // drawn with vanilla Leaflet polylines, so no heat-plugin dependency is needed.
@@ -332,6 +334,11 @@
       const emptyState = document.getElementById('heatmapEmptyState');
       if (!container) return;
 
+      if (heatmapViewportDataset !== importedDataset) {
+        heatmapViewportDataset = importedDataset;
+        heatmapInitialFitPending = importedDataset !== null;
+      }
+
       const hasData = window.heatmapUtils.hasGpsData(gpsTracksByActivityId);
 
       if (!hasData) {
@@ -391,12 +398,13 @@
       renderHeatmapFrequencyLegend(frequencyScale);
 
       const bounds = window.heatmapUtils.computeRouteSegmentBounds(segments);
-      if (bounds) {
+      if (bounds && heatmapInitialFitPending) {
         heatmapMapInstance.fitBounds(bounds, { padding: [20, 20] });
+        heatmapInitialFitPending = false;
       }
 
       // Leaflet needs a resize nudge after becoming visible inside a previously hidden tab panel
-      setTimeout(() => heatmapMapInstance.invalidateSize(), 0);
+      setTimeout(() => heatmapMapInstance.invalidateSize({ pan: false }), 0);
     }
 
     // Synthetic demo route segments around cities with typical training activity, used only

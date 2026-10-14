@@ -26,8 +26,9 @@ existing heatmap utility tests, inline-script syntax guard, and manual browser v
 
 **Project Type**: Static browser application with classic-script dashboard orchestration
 
-**Performance Goals**: No additional route computation or perceptible delay during sport
-filter changes; retain existing route and legend refresh responsiveness
+**Performance Goals**: No new quantitative performance target is introduced. Sport-filter
+changes retain the existing route and legend refresh work and do not trigger an additional
+bounds fit after the initial fit for the current dataset.
 
 **Constraints**: No bundler/build step or new runtime dependency; keep route data, map view,
 and imported personal data local; maintain map view for filter changes on an unchanged dataset;

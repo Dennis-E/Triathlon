@@ -200,6 +200,33 @@ describe('index.html inline script syntax', () => {
     expect(html).toContain("onkeydown=\"handleVisualizationTabKeydown(event, 'trainingCalendar')\"");
   });
 
+  it('provides an active-filter summary above the visualization panels', () => {
+    const tablistEnd = html.indexOf('</div>', html.indexOf('role="tablist" aria-label="Visualization tabs"'));
+    const summaryIndex = html.indexOf('id="activeVisualizationFilterSummary"');
+    const firstPanelIndex = html.indexOf('id="vizPanelTotalDistance"');
+
+    expect(summaryIndex).toBeGreaterThan(tablistEnd);
+    expect(summaryIndex).toBeLessThan(firstPanelIndex);
+    expect(html).toContain('aria-label="Active visualization filters"');
+    expect(inlineCode).toContain('updateActiveVisualizationFilterSummary');
+    expect(inlineCode).toContain("document.addEventListener('input', updateActiveVisualizationFilterSummary)");
+    expect(inlineCode).toContain("document.addEventListener('change', updateActiveVisualizationFilterSummary)");
+    expect(inlineCode).toContain("document.addEventListener('keydown', handleDashboardFilterKeydown)");
+  });
+
+  it('provides four decorative direction cues with reduced-motion support and timed feedback', () => {
+    ['up', 'down', 'left', 'right'].forEach(direction => {
+      expect(html).toContain(`data-navigation-cue="${direction}"`);
+    });
+    expect(html).toContain('aria-hidden="true"');
+    expect(html).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)/);
+    expect(inlineCode).toContain('NAVIGATION_CUE_DURATION_MS');
+    expect(inlineCode).toContain('const NAVIGATION_CUE_DURATION_MS = 900');
+    expect(inlineCode).toContain('flashNavigationCue');
+    expect(inlineCode).toContain('updateNavigationCueAvailability');
+    expect(html).toContain('.navigation-cue.is-available');
+  });
+
   it('wires the Pace vs Metrics tab and renderer', () => {
     expect(html).toContain('id="vizTabPaceMetrics"');
     expect(html).toContain('id="vizPanelPaceMetrics"');
@@ -536,7 +563,7 @@ describe('index.html inline script syntax', () => {
     expect((inlineCode.match(/^\s*appendPbDetailButton\((?:header|profileHeader),/gm) || [])).toHaveLength(4);
     expect(inlineCode).toContain("title: 'Bike power all-time profile'");
     expect(inlineCode).toContain('border border-slate-600 bg-slate-900 text-slate-200');
-    expect(inlineCode).toContain('container.appendChild(section);\n          if (window.lucide) window.lucide.createIcons();');
+    expect(inlineCode).toMatch(/container\.appendChild\(section\);\s+if \(window\.lucide\) window\.lucide\.createIcons\(\);/);
     expect(inlineCode).toContain('window.lucide.createIcons()');
     expect(inlineCode).toContain("if (event.target.id === 'pbDetailOverlay') closePbDetail()");
   });

@@ -40,6 +40,16 @@ function getNextVisualizationTab(currentTab, direction) {
   return TAB_ORDER[nextIndex];
 }
 
+function getNextFilterChoiceIndex(choiceCount, currentIndex, direction, controlType = 'single-choice') {
+  if (controlType !== 'single-choice' || !Number.isInteger(choiceCount) || choiceCount < 2 ||
+      !Number.isInteger(currentIndex) || currentIndex < 0 || currentIndex >= choiceCount ||
+      (direction !== -1 && direction !== 1)) {
+    return null;
+  }
+
+  return (currentIndex + direction + choiceCount) % choiceCount;
+}
+
 function getNextClippedTabScrollOffset(tabBounds, viewportBounds, currentScrollOffset, maxScrollOffset, direction) {
   const tolerance = 0.5;
   const numericValues = [
@@ -226,7 +236,9 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     TAB_ORDER,
     TAB_BUTTON_IDS,
+    TAB_PANEL_IDS,
     getNextVisualizationTab,
+    getNextFilterChoiceIndex,
     getNextClippedTabScrollOffset,
     setVisualizationTab,
     handleVisualizationTabKeydown
@@ -237,7 +249,9 @@ if (typeof window !== 'undefined') {
   window.dashboardTabNavigation = {
     TAB_ORDER,
     TAB_BUTTON_IDS,
+    TAB_PANEL_IDS,
     getNextVisualizationTab,
+    getNextFilterChoiceIndex,
     getNextClippedTabScrollOffset,
     setVisualizationTab,
     handleVisualizationTabKeydown

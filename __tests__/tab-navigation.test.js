@@ -1,5 +1,6 @@
 const {
   getNextVisualizationTab,
+  getNextFilterChoiceIndex,
   getNextClippedTabScrollOffset,
   setVisualizationTab,
   handleVisualizationTabKeydown
@@ -132,6 +133,29 @@ describe('tab navigation helpers', () => {
     expect(getNextVisualizationTab('totalDistance', -1)).toBe('lifetimeStatistics');
     expect(getNextVisualizationTab('workoutTime', -1)).toBe('distributions');
     expect(getNextVisualizationTab('unknown', 1)).toBe('totalDistance');
+  });
+
+  describe('getNextFilterChoiceIndex', () => {
+    it('moves through choices and wraps in either direction', () => {
+      expect(getNextFilterChoiceIndex(4, 0, 1)).toBe(1);
+      expect(getNextFilterChoiceIndex(4, 3, 1)).toBe(0);
+      expect(getNextFilterChoiceIndex(4, 0, -1)).toBe(3);
+      expect(getNextFilterChoiceIndex(4, 2, -1)).toBe(1);
+    });
+
+    it('does not move when fewer than two choices or an invalid index is supplied', () => {
+      expect(getNextFilterChoiceIndex(1, 0, 1)).toBeNull();
+      expect(getNextFilterChoiceIndex(0, 0, 1)).toBeNull();
+      expect(getNextFilterChoiceIndex(3, -1, 1)).toBeNull();
+      expect(getNextFilterChoiceIndex(3, 3, 1)).toBeNull();
+      expect(getNextFilterChoiceIndex(3, 1, 0)).toBeNull();
+    });
+
+    it('leaves native and multi-select controls to their established keyboard behavior', () => {
+      expect(getNextFilterChoiceIndex(4, 1, 1, 'checkbox')).toBeNull();
+      expect(getNextFilterChoiceIndex(4, 1, 1, 'select')).toBeNull();
+      expect(getNextFilterChoiceIndex(4, 1, 1, 'range')).toBeNull();
+    });
   });
 
   it('sets active tab classes, aria state, and panel visibility', () => {

@@ -402,16 +402,66 @@
       exportRequestState = 'idle';
     }
 
-    function downloadExportedImage() {
-      if (!lastExportedImage) return;
-      const filename = window.exportUtils.generateExportFilename(lastExportedImage.target, new Date())
-        || 'trianalytica-export.png';
+    function downloadExportedImageWithAnchor(filename) {
       const link = document.createElement('a');
       link.href = lastExportedImage.dataUrl;
       link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+    }
+
+    function exportDataUrlToBlob(dataUrl) {
+      const match = String(dataUrl || '').match(/^data:([^;,]+);base64,([\s\S]+)$/);
+      if (!match) throw new Error('Could not prepare the export image for saving. Please try again.');
+
+      const binary = atob(match[2]);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index++) {
+        bytes[index] = binary.charCodeAt(index);
+      }
+      return new Blob([bytes], { type: match[1] });
+    }
+
+    async function downloadExportedImage() {
+      if (!lastExportedImage) return;
+      const filename = window.exportUtils.generateExportFilename(lastExportedImage.target, new Date())
+        || 'trianalytica-export.png';
+      const saveFilePicker = window.showSaveFilePicker;
+
+      if (typeof saveFilePicker !== 'function') {
+        showExportToast('Your browser cannot choose a download location. The file will use the browser’s default download behavior.');
+        downloadExportedImageWithAnchor(filename);
+        return;
+      }
+
+      let fileHandle;
+      try {
+        // Invoke the picker before any asynchronous work so the browser's user activation
+        // from the Download click is still active.
+        fileHandle = await saveFilePicker.call(window, {
+          suggestedName: filename,
+          types: [{
+            description: 'PNG image',
+            accept: { 'image/png': ['.png'] }
+          }]
+        });
+      } catch (error) {
+        if (error && error.name === 'AbortError') return;
+        showExportToast('Your browser could not open a location picker. The file will use the browser’s default download behavior.');
+        downloadExportedImageWithAnchor(filename);
+        return;
+      }
+
+      try {
+        const imageBlob = exportDataUrlToBlob(lastExportedImage.dataUrl);
+        const writable = await fileHandle.createWritable();
+        await writable.write(imageBlob);
+        await writable.close();
+      } catch (error) {
+        console.error('Could not save exported image', error);
+        showExportToast(`Could not save export image. ${error.message || 'Please try again.'}`);
+      }
     }
 
     async function exportVisualizationTarget(target) {

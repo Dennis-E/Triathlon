@@ -66,6 +66,182 @@
       updateVisualizationTabScrollControls();
     }
 
+    const NAVIGATION_CUE_DURATION_MS = 900;
+    const navigationCueTimeouts = new Map();
+    let pendingNativeFilterKey = null;
+
+    function flashNavigationCue(direction) {
+      const cue = document.querySelector(`[data-navigation-cue="${direction}"]`);
+      if (!cue) return;
+
+      const existingTimeout = navigationCueTimeouts.get(direction);
+      if (existingTimeout) window.clearTimeout(existingTimeout);
+      cue.classList.remove('is-active');
+      void cue.offsetWidth;
+      cue.classList.add('is-active');
+      navigationCueTimeouts.set(direction, window.setTimeout(() => {
+        cue.classList.remove('is-active');
+        navigationCueTimeouts.delete(direction);
+      }, NAVIGATION_CUE_DURATION_MS));
+    }
+
+    function updateNavigationCueAvailability(target = document.activeElement) {
+      const focusedTab = target && target.closest && target.closest('[role="tab"]');
+      const focusedFilter = target && target.closest && target.closest('[data-keyboard-filter-group]');
+      const activePanelId = window.dashboardTabNavigation.TAB_PANEL_IDS[selectedVisualizationTab];
+      const activePanel = activePanelId && document.getElementById(activePanelId);
+      const focusedNativeFilter = target && target.matches && target.matches('select, input[type="range"]') &&
+        activePanel && activePanel.contains(target) && !target.disabled;
+      document.querySelectorAll('[data-navigation-cue]').forEach(cue => {
+        const direction = cue.dataset.navigationCue;
+        let available = direction === 'left' || direction === 'right' ? !!focusedTab : false;
+        if ((direction === 'up' || direction === 'down') && focusedFilter && activePanel &&
+            activePanel.contains(focusedFilter) && !focusedFilter.closest('.hidden')) {
+          available = focusedFilter.querySelectorAll('button:not(:disabled)').length > 1;
+        } else if ((direction === 'up' || direction === 'down') && focusedNativeFilter) {
+          if (target.tagName === 'SELECT') {
+            available = target.options.length > 1 &&
+              (direction === 'down' ? target.selectedIndex < target.options.length - 1 : target.selectedIndex > 0);
+          } else {
+            const value = Number(target.value);
+            const bound = Number(direction === 'down' ? target.max : target.min);
+            available = Number.isFinite(value) && Number.isFinite(bound) &&
+              (direction === 'down' ? value < bound : value > bound);
+          }
+        }
+        cue.classList.toggle('is-available', available);
+      });
+    }
+
+    function getFilterSummaryValue(group) {
+      const explicitValue = group.dataset.filterValueId && document.getElementById(group.dataset.filterValueId);
+      if (explicitValue) return explicitValue.textContent.trim();
+
+      const select = group.querySelector('select');
+      if (select) {
+        const selectedOption = select.options[select.selectedIndex];
+        return selectedOption ? selectedOption.textContent.trim() : '';
+      }
+
+      const checkboxes = Array.from(group.querySelectorAll('input[type="checkbox"]'));
+      if (checkboxes.length > 0) {
+        const checked = checkboxes.filter(checkbox => checkbox.checked);
+        if (group.dataset.filterMode === 'checked-count') return `${checked.length} selected`;
+        const values = checked.map(checkbox => {
+          const label = checkbox.closest('label');
+          return label ? label.textContent.trim().replace(/\s+/g, ' ') : checkbox.value;
+        });
+        if (values.length > 3) return `${values.length} selected`;
+        return values.length > 0 ? values.join(', ') : 'None';
+      }
+
+      const buttons = Array.from(group.querySelectorAll('button'));
+      const selectedButton = buttons.find(button => button.getAttribute('aria-pressed') === 'true' ||
+        button.getAttribute('aria-selected') === 'true' || button.getAttribute('aria-checked') === 'true' ||
+        button.classList.contains('bg-indigo-600'));
+      if (selectedButton) return selectedButton.textContent.trim().replace(/\s+/g, ' ');
+      if (buttons.length === 0) return '';
+      return 'None';
+    }
+
+    function updateActiveVisualizationFilterSummary() {
+      const summary = document.getElementById('activeVisualizationFilterSummary');
+      const panelId = window.dashboardTabNavigation.TAB_PANEL_IDS[selectedVisualizationTab];
+      const panel = panelId && document.getElementById(panelId);
+      if (!summary || !panel) return;
+
+      summary.replaceChildren();
+      const groups = Array.from(panel.querySelectorAll('[data-filter-summary]'))
+        .filter(group => !group.closest('.hidden'));
+      groups.forEach(group => {
+        const value = getFilterSummaryValue(group);
+        if (!value) return;
+        const item = document.createElement('span');
+        item.className = 'rounded-full border border-slate-700 bg-slate-950/80 px-2.5 py-1';
+        item.textContent = `${group.dataset.filterLabel || 'Filter'}: ${value}`;
+        summary.append(item);
+      });
+      summary.classList.toggle('hidden', summary.childElementCount === 0);
+    }
+
+    function isActiveFilterChoice(button) {
+      return button.getAttribute('aria-pressed') === 'true' || button.getAttribute('aria-selected') === 'true' ||
+        button.getAttribute('aria-checked') === 'true' || button.classList.contains('bg-indigo-600');
+    }
+
+    function handleDashboardFilterKeydown(event) {
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+      const button = event.target.closest && event.target.closest('button');
+      const group = button && button.closest('[data-keyboard-filter-group]');
+      const activePanelId = window.dashboardTabNavigation.TAB_PANEL_IDS[selectedVisualizationTab];
+      const activePanel = activePanelId && document.getElementById(activePanelId);
+      if (!group || !activePanel || !activePanel.contains(button) || button.disabled || group.closest('.hidden')) return;
+
+      const choices = Array.from(group.querySelectorAll('button:not(:disabled)'));
+      const currentIndex = choices.findIndex(choice => isActiveFilterChoice(choice));
+      const direction = event.key === 'ArrowDown' ? 1 : -1;
+      const nextIndex = window.dashboardTabNavigation.getNextFilterChoiceIndex(
+        choices.length,
+        currentIndex,
+        direction
+      );
+      if (nextIndex === null || choices[nextIndex] === button) return;
+
+      event.preventDefault();
+      const nextChoice = choices[nextIndex];
+      nextChoice.click();
+      const refreshedChoices = Array.from(group.querySelectorAll('button:not(:disabled)'));
+      const focusedChoice = refreshedChoices.find(choice => isActiveFilterChoice(choice)) || refreshedChoices[nextIndex];
+      refreshedChoices.forEach(choice => choice.setAttribute('aria-pressed', choice === focusedChoice ? 'true' : 'false'));
+      if (focusedChoice) focusedChoice.focus();
+      updateActiveVisualizationFilterSummary();
+      flashNavigationCue(direction > 0 ? 'down' : 'up');
+    }
+
+    function readNativeFilterValue(control) {
+      if (control.type === 'checkbox' || control.type === 'radio') return `${control.checked}:${control.value}`;
+      return control.value;
+    }
+
+    function trackNativeFilterKeydown(event) {
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+      const control = event.target;
+      if (!control || !control.matches || !control.matches('select, input[type="range"]')) return;
+      const activePanelId = window.dashboardTabNavigation.TAB_PANEL_IDS[selectedVisualizationTab];
+      const activePanel = activePanelId && document.getElementById(activePanelId);
+      if (!activePanel || !activePanel.contains(control)) return;
+      pendingNativeFilterKey = { control, value: readNativeFilterValue(control), key: event.key };
+    }
+
+    function finishNativeFilterKey(event) {
+      if (!pendingNativeFilterKey || event.target !== pendingNativeFilterKey.control) return;
+      const { control, value, key } = pendingNativeFilterKey;
+      pendingNativeFilterKey = null;
+      if (readNativeFilterValue(control) !== value) {
+        updateActiveVisualizationFilterSummary();
+        flashNavigationCue(key === 'ArrowDown' ? 'down' : 'up');
+      }
+    }
+
+    document.addEventListener('keydown', trackNativeFilterKeydown, true);
+    document.addEventListener('keyup', finishNativeFilterKey, true);
+    document.addEventListener('keydown', handleDashboardFilterKeydown);
+    document.addEventListener('focusin', event => updateNavigationCueAvailability(event.target));
+    document.addEventListener('focusout', () => window.setTimeout(() => updateNavigationCueAvailability(), 0));
+    document.addEventListener('click', event => {
+      const target = event.target;
+      const group = target && target.closest && target.closest('[data-filter-summary]');
+      if (group) {
+        const choices = group.querySelectorAll('button');
+        if (choices.length > 0) {
+          choices.forEach(choice => choice.setAttribute('aria-pressed', isActiveFilterChoice(choice) ? 'true' : 'false'));
+        }
+      }
+      updateActiveVisualizationFilterSummary();
+    });
+    document.addEventListener('input', updateActiveVisualizationFilterSummary);
+    document.addEventListener('change', updateActiveVisualizationFilterSummary);
+
     function initializeVisualizationTabScroller() {
       const viewport = document.getElementById('visualizationTabsViewport');
       const tablist = viewport && viewport.querySelector('[role="tablist"]');
@@ -113,6 +289,7 @@
           window.lifetimeStatisticsDashboard.render();
         }
         ensureVisualizationTabVisible(nextTab);
+        updateActiveVisualizationFilterSummary();
       }
     }
 
@@ -123,6 +300,11 @@
 
       if (nextTab) {
         selectedVisualizationTab = nextTab;
+        const nextTabButtonId = window.dashboardTabNavigation.TAB_BUTTON_IDS[nextTab];
+        const nextTabButton = nextTabButtonId && document.getElementById(nextTabButtonId);
+        if (nextTabButton && nextTabButton.getAttribute('aria-selected') === 'true') {
+          flashNavigationCue(event.key === 'ArrowRight' ? 'right' : 'left');
+        }
       }
     }
 

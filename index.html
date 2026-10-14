@@ -101,6 +101,43 @@
       display: none;
     }
 
+    .navigation-cue {
+      display: inline-flex;
+      width: 1.75rem;
+      height: 1.75rem;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(129, 140, 248, 0.45);
+      border-radius: 9999px;
+      background: rgba(15, 23, 42, 0.82);
+      color: rgba(199, 210, 254, 0.72);
+      font-size: 1rem;
+      opacity: 0.12;
+      transition: opacity 120ms ease, color 120ms ease, box-shadow 120ms ease;
+    }
+
+    .navigation-cue.is-available { opacity: 0.48; }
+
+    .navigation-cue.is-active {
+      color: #fff;
+      opacity: 1;
+      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2), 0 0 18px rgba(129, 140, 248, 0.7);
+      animation: navigation-cue-blink 900ms ease-out;
+    }
+
+    @keyframes navigation-cue-blink {
+      0%, 100% { opacity: 0.35; }
+      20%, 55% { opacity: 1; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .navigation-cue,
+      .navigation-cue.is-active {
+        animation: none;
+        transition: none;
+      }
+    }
+
     #wordcloudListPanel.is-collapsed #wordcloudListContent { display: none; }
     #wordcloudListPanel.is-collapsed { padding: 0.5rem; }
     @media (min-width: 1024px) {
@@ -767,7 +804,7 @@
   <main id="dashboardMain" class="hidden flex-1 overflow-y-auto p-6 space-y-6">
 
     <!-- Main Chart Card -->
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-md flex flex-col space-y-6">
+    <div class="relative bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-md flex flex-col space-y-6">
 
       <!-- Visualization Tabs -->
       <div class="border-b border-slate-800 pb-4">
@@ -949,6 +986,22 @@
         </div>
       </div>
 
+      <div id="activeVisualizationFilterSummary" aria-label="Active visualization filters" class="hidden flex flex-wrap gap-2 text-xs text-slate-300"></div>
+
+      <div id="visualizationPanelStage" class="relative">
+      <div class="pointer-events-none absolute -top-8 left-1/2 z-20 flex -translate-x-1/2 justify-center" aria-hidden="true">
+        <span data-navigation-cue="up" class="navigation-cue">↑</span>
+      </div>
+      <div class="pointer-events-none absolute -bottom-8 left-1/2 z-20 flex -translate-x-1/2 justify-center" aria-hidden="true">
+        <span data-navigation-cue="down" class="navigation-cue">↓</span>
+      </div>
+      <div class="pointer-events-none absolute inset-y-0 -left-10 z-20 flex items-center" aria-hidden="true">
+        <span data-navigation-cue="left" class="navigation-cue">←</span>
+      </div>
+      <div class="pointer-events-none absolute inset-y-0 -right-10 z-20 flex items-center" aria-hidden="true">
+        <span data-navigation-cue="right" class="navigation-cue">→</span>
+      </div>
+
       <div id="vizPanelTotalDistance" role="tabpanel" aria-labelledby="vizTabTotalDistance">
         <!-- Chart Controls Header -->
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
@@ -958,7 +1011,7 @@
 
           <div class="flex flex-wrap items-center gap-4">
             <!-- Aggregation Level Selector -->
-            <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+            <div data-keyboard-filter-group data-filter-summary data-filter-label="Aggregation" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
               <button onclick="setAggregationLevel('daily')" id="aggBtnDaily" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
                 Daily
               </button>
@@ -974,7 +1027,7 @@
             </div>
 
             <!-- Sport Filter Selector -->
-            <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+            <div data-keyboard-filter-group data-filter-summary data-filter-label="Sport" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
               <button onclick="setSportFilter('All')" id="sportBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">
                 All Sports
               </button>
@@ -990,7 +1043,7 @@
             </div>
 
             <!-- Timeframe Selector -->
-            <div id="timeframeSelector" class="flex flex-wrap bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+            <div id="timeframeSelector" data-keyboard-filter-group data-filter-summary data-filter-label="Time period" class="flex flex-wrap bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
             </div>
 
             <button type="button" onclick="exportVisualizationTab('totalDistance')" aria-label="Export for Insta / Strava: Total distance" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
@@ -1080,8 +1133,8 @@
               <p id="paceMetricsPointCount" class="text-xs text-slate-400">0 sessions</p>
             </div>
             <div class="flex flex-wrap gap-3">
-              <div id="paceMetricsSportFilters" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner" aria-label="Pace metrics sport filter"></div>
-              <div id="paceMetricsMetricFilters" class="flex flex-wrap bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner" aria-label="Pace metrics filter"></div>
+              <div id="paceMetricsSportFilters" data-keyboard-filter-group data-filter-summary data-filter-label="Sport" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner" aria-label="Pace metrics sport filter"></div>
+              <div id="paceMetricsMetricFilters" data-keyboard-filter-group data-filter-summary data-filter-label="Metric" class="flex flex-wrap bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner" aria-label="Pace metrics filter"></div>
             </div>
             <button type="button" onclick="exportVisualizationTab('paceMetrics')" aria-label="Export for Insta / Strava: Pace vs metrics" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
               <img src="assets/Strava_Logo.svg" alt="Strava" class="h-5 w-8 object-contain">
@@ -1090,7 +1143,7 @@
             </button>
           </div>
 
-          <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
+            <div data-filter-summary data-filter-label="Date range" data-filter-value-id="scatterRangeLabel" class="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
             <div class="flex items-center justify-between text-xs text-slate-400">
               <span>Date range</span>
               <span id="scatterRangeLabel">All</span>
@@ -1110,7 +1163,7 @@
                 No sessions with a valid pace or speed and the selected measurement are available in this export.
               </div>
             </div>
-            <fieldset id="paceMetricsTrendControls" class="hidden w-full lg:w-32 shrink-0 space-y-2 pt-2 text-xs text-white">
+            <fieldset id="paceMetricsTrendControls" data-filter-summary data-filter-label="Years and trend lines" class="hidden w-full lg:w-32 shrink-0 space-y-2 pt-2 text-xs text-white">
               <legend class="mb-2 font-medium text-white">Years</legend>
             </fieldset>
           </div>
@@ -1126,14 +1179,14 @@
             </div>
 
             <div class="flex gap-3 flex-wrap">
-<div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+                <div data-keyboard-filter-group data-filter-summary data-filter-label="Metric" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
                   <button onclick="setEquipmentMetric('distance')" id="equipmentMetricDistance" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">Distance</button>
                   <button onclick="setEquipmentMetric('pace')" id="equipmentMetricPace" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Pace</button>
                   <button onclick="setEquipmentMetric('count')" id="equipmentMetricCount" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Activity Count</button>
                   <button onclick="setEquipmentMetric('avgLength')" id="equipmentMetricAvgLength" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Avg Length</button>
                 </div>
 
-              <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+              <div data-keyboard-filter-group data-filter-summary data-filter-label="Equipment type" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
                 <button onclick="setEquipmentFilter('All')" id="equipmentBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">All</button>
                 <button onclick="setEquipmentFilter('Shoes')" id="equipmentBtnShoes" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Shoes</button>
                 <button onclick="setEquipmentFilter('Bikes')" id="equipmentBtnBikes" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Bikes</button>
@@ -1169,12 +1222,12 @@
             </div>
             <div class="flex flex-wrap gap-3">
               <!-- View mode toggle -->
-              <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+              <div data-keyboard-filter-group data-filter-summary data-filter-label="Display mode" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
                 <button onclick="setEquipmentTimelineMode('continuous')" id="equipmentTimelineModeContinuous" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">Continuous</button>
                 <button onclick="setEquipmentTimelineMode('activities')" id="equipmentTimelineModeActivities" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Activities</button>
               </div>
               <!-- Equipment type filter -->
-              <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+              <div data-keyboard-filter-group data-filter-summary data-filter-label="Equipment type" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
                 <button onclick="setEquipmentTimelineFilter('All')" id="equipmentTimelineBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">All</button>
                 <button onclick="setEquipmentTimelineFilter('Shoes')" id="equipmentTimelineBtnShoes" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Shoes</button>
                 <button onclick="setEquipmentTimelineFilter('Bikes')" id="equipmentTimelineBtnBikes" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Bikes</button>
@@ -1309,7 +1362,7 @@
               <p class="text-xs text-slate-400">Where you trained — built from the GPS tracks in your Strava export</p>
             </div>
 
-            <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+            <div data-keyboard-filter-group data-filter-summary data-filter-label="Sport" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
               <button onclick="setHeatmapSportFilter('All')" id="heatmapSportBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">All Sports</button>
               <button onclick="setHeatmapSportFilter('Run')" id="heatmapSportBtnRun" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Run</button>
               <button onclick="setHeatmapSportFilter('Bike')" id="heatmapSportBtnBike" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Bike</button>
@@ -1368,7 +1421,7 @@
           </div>
 
           <div class="flex flex-wrap items-center gap-3">
-            <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+            <div data-keyboard-filter-group data-filter-summary data-filter-label="Metric" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
               <button onclick="setDistributionsMetric('length')" id="distributionsMetricBtnLength" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">Length</button>
               <button onclick="setDistributionsMetric('duration')" id="distributionsMetricBtnDuration" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Duration</button>
               <button onclick="setDistributionsMetric('pace')" id="distributionsMetricBtnPace" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Pace</button>
@@ -1376,19 +1429,19 @@
               <button onclick="setDistributionsMetric('power')" id="distributionsMetricBtnPower" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Power (Watt)</button>
             </div>
 
-            <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+            <div data-keyboard-filter-group data-filter-summary data-filter-label="Sport" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
               <button onclick="setDistributionsSportFilter('All')" id="distributionsSportBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">All Sports</button>
               <button onclick="setDistributionsSportFilter('Run')" id="distributionsSportBtnRun" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Run</button>
               <button onclick="setDistributionsSportFilter('Bike')" id="distributionsSportBtnBike" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Bike</button>
               <button onclick="setDistributionsSportFilter('Swim')" id="distributionsSportBtnSwim" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Swim</button>
             </div>
 
-            <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+            <div data-keyboard-filter-group data-filter-summary data-filter-label="Display mode" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
               <button onclick="setDistributionsDisplayMode('histogram')" id="distributionsModeBtnHistogram" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Histogram</button>
               <button onclick="setDistributionsDisplayMode('line')" id="distributionsModeBtnLine" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">Line</button>
             </div>
 
-            <label class="flex items-center gap-2 text-xs text-slate-400">
+            <label data-filter-summary data-filter-label="Colour scheme" class="flex items-center gap-2 text-xs text-slate-400">
               <span>Color scheme</span>
               <select id="distributionsColorScheme" onchange="setDistributionsColorScheme(this.value)" class="rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-300">
                 <option value="fire" selected>On fire</option>
@@ -1397,7 +1450,7 @@
             </label>
           </div>
 
-          <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
+          <div data-filter-summary data-filter-label="Date range" data-filter-value-id="distributionsRangeLabel" class="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
             <div class="flex items-center justify-between text-xs text-slate-400">
               <span>Date range</span>
               <span id="distributionsRangeLabel">All</span>
@@ -1435,14 +1488,14 @@
           </div>
 
           <div class="flex flex-wrap items-center gap-3">
-            <div id="workoutTimeGranularity" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+            <div id="workoutTimeGranularity" data-keyboard-filter-group data-filter-summary data-filter-label="Time unit" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
               <button type="button" onclick="setWorkoutTimeGranularity('day')" id="workoutTimeGranularityBtnDay" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">Day</button>
               <button type="button" onclick="setWorkoutTimeGranularity('week')" id="workoutTimeGranularityBtnWeek" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Week</button>
               <button type="button" onclick="setWorkoutTimeGranularity('month')" id="workoutTimeGranularityBtnMonth" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Month</button>
               <button type="button" onclick="setWorkoutTimeGranularity('year')" id="workoutTimeGranularityBtnYear" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Year</button>
             </div>
 
-            <div id="workoutTimeSportFilter" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+            <div id="workoutTimeSportFilter" data-keyboard-filter-group data-filter-summary data-filter-label="Sport" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
               <button type="button" onclick="setWorkoutTimeSportFilter('All')" id="workoutTimeSportBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">All Sports</button>
               <button type="button" onclick="setWorkoutTimeSportFilter('Run')" id="workoutTimeSportBtnRun" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Run</button>
               <button type="button" onclick="setWorkoutTimeSportFilter('Bike')" id="workoutTimeSportBtnBike" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Bike</button>
@@ -1450,7 +1503,7 @@
             </div>
           </div>
 
-          <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
+          <div data-filter-summary data-filter-label="Date range" data-filter-value-id="workoutTimeRangeLabel" class="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
             <div class="flex items-center justify-between text-xs text-slate-400">
               <span>Date range</span>
               <span id="workoutTimeRangeLabel">All</span>
@@ -1484,14 +1537,14 @@
               Export for Insta / Strava
               <img src="assets/Instagram_logo_2016.svg" alt="Instagram" class="h-5 w-5 object-contain">
             </button>
-            <div id="trainingCalendarPaletteFilters" class="flex flex-wrap gap-2" aria-label="Calendar colour scheme">
+            <div id="trainingCalendarPaletteFilters" data-keyboard-filter-group data-filter-summary data-filter-label="Colour scheme" class="flex flex-wrap gap-2" aria-label="Calendar colour scheme">
               <button type="button" id="trainingCalendarPaletteGreen" data-palette="green" aria-pressed="true">Green</button>
               <button type="button" id="trainingCalendarPaletteBlue" data-palette="blue" aria-pressed="false">Blue</button>
               <button type="button" id="trainingCalendarPaletteFire" data-palette="fire" aria-pressed="false">Fire</button>
             </div>
           </div>
 
-          <div id="trainingCalendarSportFilters" class="flex flex-wrap gap-2" aria-label="Training sport filter"></div>
+          <div id="trainingCalendarSportFilters" data-keyboard-filter-group data-filter-summary data-filter-label="Sport" class="flex flex-wrap gap-2" aria-label="Training sport filter"></div>
 
           <div id="trainingCalendarYears" class="space-y-5"></div>
           <div id="trainingCalendarDayTooltip" class="pointer-events-none absolute z-20 hidden max-h-64 w-[min(22rem,calc(100%-1rem))] overflow-y-auto rounded-lg border border-slate-700 bg-slate-900/95 p-3 text-xs leading-relaxed text-slate-300 shadow-xl" role="status" aria-live="polite" aria-hidden="true"></div>
@@ -1513,7 +1566,7 @@
             Export for Insta / Strava
             <img src="assets/Instagram_logo_2016.svg" alt="Instagram" class="h-5 w-5 object-contain">
           </button>
-          <label for="wordcloudCountSlider" class="flex min-w-56 flex-col gap-2 text-sm text-slate-300">
+          <label for="wordcloudCountSlider" data-filter-summary data-filter-label="Number of words" data-filter-value-id="wordcloudCountValue" class="flex min-w-56 flex-col gap-2 text-sm text-slate-300">
             <span class="flex items-center justify-between gap-4"><span>Number of words</span><output id="wordcloudCountValue" for="wordcloudCountSlider" class="tabular-nums text-slate-100">50 words</output></span>
             <input id="wordcloudCountSlider" type="range" min="10" max="100" step="1" value="50" class="w-full accent-indigo-500">
           </label>
@@ -1534,7 +1587,7 @@
             <div id="wordcloudListContent">
               <h3 id="wordcloudListHeading" class="font-semibold text-sm text-slate-100">Ranked words</h3>
               <p class="mt-1 text-xs text-slate-400">Uncheck words to remove them from the cloud.</p>
-              <ul id="wordcloudWordList" class="mt-3 max-h-[450px] overflow-y-auto pr-1" aria-label="Choose words shown in the cloud"></ul>
+              <ul id="wordcloudWordList" data-filter-summary data-filter-label="Included words" data-filter-mode="checked-count" class="mt-3 max-h-[450px] overflow-y-auto pr-1" aria-label="Choose words shown in the cloud"></ul>
               <p id="wordcloudUnplacedNotice" class="hidden mt-3 rounded-lg border border-amber-800/70 bg-amber-950/40 p-2 text-xs text-amber-200" role="status" aria-live="polite"></p>
             </div>
           </section>
@@ -1555,7 +1608,7 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-3">
-          <div class="flex flex-wrap bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner" role="group" aria-label="Group slices by">
+          <div data-keyboard-filter-group data-filter-summary data-filter-label="Group by" class="flex flex-wrap bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner" role="group" aria-label="Group slices by">
             <button onclick="setPieDimension('sport')" id="pieDimensionBtnSport" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">Sport</button>
             <button onclick="setPieDimension('duration')" id="pieDimensionBtnDuration" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Duration</button>
             <button onclick="setPieDimension('pace')" id="pieDimensionBtnPace" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Pace</button>
@@ -1564,20 +1617,20 @@
             <button onclick="setPieDimension('power')" id="pieDimensionBtnPower" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Power (Watt)</button>
           </div>
 
-          <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner" role="group" aria-label="Slice size">
+          <div data-keyboard-filter-group data-filter-summary data-filter-label="Measure" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner" role="group" aria-label="Slice size">
             <button onclick="setPieMeasure('count')" id="pieMeasureBtnCount" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">Activities</button>
             <button onclick="setPieMeasure('time')" id="pieMeasureBtnTime" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Time</button>
             <button onclick="setPieMeasure('distance')" id="pieMeasureBtnDistance" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Distance</button>
           </div>
 
-          <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner" role="group" aria-label="Sport filter">
+          <div data-keyboard-filter-group data-filter-summary data-filter-label="Sport" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner" role="group" aria-label="Sport filter">
             <button onclick="setPieSportFilter('All')" id="pieSportBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">All Sports</button>
             <button onclick="setPieSportFilter('Run')" id="pieSportBtnRun" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Run</button>
             <button onclick="setPieSportFilter('Bike')" id="pieSportBtnBike" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Bike</button>
             <button onclick="setPieSportFilter('Swim')" id="pieSportBtnSwim" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Swim</button>
           </div>
 
-          <label class="flex items-center gap-2 text-xs text-slate-400">
+          <label data-filter-summary data-filter-label="Colour scheme" class="flex items-center gap-2 text-xs text-slate-400">
             <span>Color scheme</span>
             <select id="pieChartsColorScheme" onchange="setPieColorScheme(this.value)" class="rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-300">
               <option value="fire" selected>On fire</option>
@@ -1617,6 +1670,7 @@
         </div>
         <div id="lifetimeStatisticsCaptureArea" class="hidden min-w-0 space-y-5"></div>
         <div id="lifetimeStatisticsExportArea" aria-hidden="true" style="position:fixed;left:-12000px;top:0;width:960px;background:#020617;color:#f8fafc;padding:32px;"></div>
+      </div>
       </div>
 
     </div>

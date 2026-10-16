@@ -214,6 +214,55 @@ describe('index.html inline script syntax', () => {
     expect(inlineCode).toContain("document.addEventListener('keydown', handleDashboardFilterKeydown)");
   });
 
+  it('limits Up/Down stepping to the focused choice in the active visible panel', () => {
+    expect(inlineCode).toContain("const button = event.target.closest && event.target.closest('button')");
+    expect(inlineCode).toContain("const targetGroup = button && button.closest('[data-keyboard-filter-group]')");
+    expect(inlineCode).toContain('activePanel.contains(button)');
+    expect(inlineCode).toContain("group.closest('.hidden')");
+    expect(inlineCode).toContain('if (nextIndex === null || choices[nextIndex] === button) return;');
+    expect(inlineCode).toContain('event.preventDefault();');
+    expect(inlineCode).toContain('nextChoice.click();');
+    expect(inlineCode).toContain('const focusedChoice = refreshedChoices.includes(nextChoice) ? nextChoice : refreshedChoices[nextIndex];');
+    expect(inlineCode).toContain('updateActiveVisualizationFilterSummary();');
+    expect(inlineCode).toContain("flashNavigationCue(direction > 0 ? 'down' : 'up')");
+    expect(inlineCode).toContain("const clickedChoice = target && target.closest && target.closest('button')");
+    expect(inlineCode).toContain('group.contains(clickedChoice)');
+    expect(inlineCode).toContain("choice === clickedChoice ? 'true' : 'false'");
+  });
+
+  it('uses the active visualization filter fallback outside modal and native-control contexts', () => {
+    expect(inlineCode).toContain("const dashboardMain = document.getElementById('dashboardMain')");
+    expect(inlineCode).toContain("if (!dashboardMain || dashboardMain.classList.contains('hidden')) return;");
+    expect(inlineCode).toContain("target.closest('select, input[type=\"range\"], input[type=\"checkbox\"]')");
+    expect(inlineCode).toContain("target.closest('[role=\"dialog\"][aria-modal=\"true\"]')");
+    expect(inlineCode).toContain('function getKeyboardFilterGroup(target, activePanel)');
+    expect(inlineCode).toContain("activePanel.querySelectorAll('[data-keyboard-filter-group]')");
+    expect(inlineCode).toContain('const filterGroup = getKeyboardFilterGroup(event.target, activePanel);');
+    expect(inlineCode).toContain('focusedChoice.focus({ preventScroll: true });');
+    expect(inlineCode).toContain('if (focusedGroup) return focusedGroup;');
+    expect(inlineCode).toContain('if (targetGroup && activePanel.contains(button)) return null;');
+    expect(inlineCode).toContain('return eligibleGroups[0] || null;');
+
+    const handlerStart = inlineCode.indexOf('function handleDashboardFilterKeydown');
+    const handledDefault = inlineCode.indexOf('event.preventDefault();', handlerStart);
+    const noFilter = inlineCode.indexOf('if (!filterGroup) return;', handlerStart);
+    const cueActivation = inlineCode.indexOf("flashNavigationCue(direction > 0 ? 'down' : 'up')", handlerStart);
+    expect(handledDefault).toBeGreaterThan(handlerStart);
+    expect(noFilter).toBeGreaterThan(handledDefault);
+    expect(cueActivation).toBeGreaterThan(noFilter);
+  });
+
+  it('shows vertical cue availability for the selected navigation filter only', () => {
+    expect(inlineCode).toContain("const modalOwnsFocus = target && target.closest && target.closest('[role=\"dialog\"][aria-modal=\"true\"]')");
+    expect(inlineCode).toContain("const nativeControl = target && target.closest && target.closest('select, input[type=\"range\"], input[type=\"checkbox\"]')");
+    expect(inlineCode).toContain('const activePanelVisible = dashboardVisible && activePanel && !activePanel.closest(\'.hidden\')');
+    expect(inlineCode).toContain('const navigationFilterGroup = activePanelVisible && !modalOwnsFocus && !nativeControl');
+    expect(inlineCode).toContain('getKeyboardFilterGroup(target, activePanel)');
+    expect(inlineCode).toContain('direction === \'up\' || direction === \'down\'');
+    expect(inlineCode).toContain('navigationFilterGroup.querySelectorAll(\'button:not(:disabled)\').length > 1');
+    expect(inlineCode).toContain('focusedNativeFilter');
+  });
+
   it('provides four decorative direction cues with reduced-motion support and timed feedback', () => {
     ['up', 'down', 'left', 'right'].forEach(direction => {
       expect(html).toContain(`data-navigation-cue="${direction}"`);
@@ -225,6 +274,36 @@ describe('index.html inline script syntax', () => {
     expect(inlineCode).toContain('flashNavigationCue');
     expect(inlineCode).toContain('updateNavigationCueAvailability');
     expect(html).toContain('.navigation-cue.is-available');
+  });
+
+  it('keeps navigation cues fixed to the viewport and centers the side cues', () => {
+    expect(html).toContain('id="navigationCueLayer"');
+    expect(html).toMatch(/#navigationCueLayer\s*\{[^}]*position:\s*fixed[^}]*inset:\s*0/);
+    expect(html).toMatch(/\.navigation-cue-left\s*\{[^}]*top:\s*50%[^}]*transform:\s*translateY\(-50%\)/);
+    expect(html).toMatch(/\.navigation-cue-right\s*\{[^}]*top:\s*50%[^}]*transform:\s*translateY\(-50%\)/);
+    expect(html).toMatch(/\.navigation-cue-up\s*\{[^}]*top:/);
+    expect(html).toMatch(/\.navigation-cue-down\s*\{[^}]*bottom:/);
+    expect(html.indexOf('id="navigationCueLayer"')).toBeLessThan(html.indexOf('id="visualizationPanelStage"'));
+  });
+
+  it('activates cues only after successful changes and retriggers them immediately', () => {
+    const filterHandlerStart = inlineCode.indexOf('function handleDashboardFilterKeydown');
+    const noOpReturn = inlineCode.indexOf('if (nextIndex === null || choices[nextIndex] === button) return;', filterHandlerStart);
+    const filterCueCall = inlineCode.indexOf("flashNavigationCue(direction > 0 ? 'down' : 'up')", filterHandlerStart);
+    const cueFunctionStart = inlineCode.indexOf('function flashNavigationCue(direction)');
+    const cueActivation = inlineCode.indexOf("cue.classList.add('is-active')", cueFunctionStart);
+    const cueTimeout = inlineCode.indexOf('window.setTimeout(() => {', cueFunctionStart);
+
+    expect(noOpReturn).toBeGreaterThan(filterHandlerStart);
+    expect(filterCueCall).toBeGreaterThan(noOpReturn);
+    expect(cueActivation).toBeGreaterThan(cueFunctionStart);
+    expect(cueActivation).toBeLessThan(cueTimeout);
+    expect(inlineCode).toContain('const NAVIGATION_CUE_DURATION_MS = 900');
+    expect(inlineCode).toContain('window.clearTimeout(existingTimeout)');
+  });
+
+  it('maps Tab and Shift+Tab feedback to the right and left navigation cues', () => {
+    expect(inlineCode).toContain("event.key === 'ArrowRight' || (event.key === 'Tab' && !event.shiftKey) ? 'right' : 'left'");
   });
 
   it('wires the Pace vs Metrics tab and renderer', () => {

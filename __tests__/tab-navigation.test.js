@@ -196,7 +196,22 @@ describe('tab navigation helpers', () => {
     expect(onTabChange).toHaveBeenCalledWith('wordcloud', { focusTab: true });
   });
 
-  it('allows Shift+Tab to leave the tablist through normal focus order', () => {
+  it('handles Tab by activating and focusing the next visualization', () => {
+    const event = {
+      key: 'Tab',
+      shiftKey: false,
+      preventDefault: jest.fn()
+    };
+    const onTabChange = jest.fn();
+
+    const nextTab = handleVisualizationTabKeydown(event, 'totalDistance', { onTabChange });
+
+    expect(nextTab).toBe('paceMetrics');
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(onTabChange).toHaveBeenCalledWith('paceMetrics', { focusTab: true });
+  });
+
+  it('handles Shift+Tab by activating and focusing the previous visualization with wraparound', () => {
     const event = {
       key: 'Tab',
       shiftKey: true,
@@ -204,19 +219,15 @@ describe('tab navigation helpers', () => {
     };
     const onTabChange = jest.fn();
 
-    const nextTab = handleVisualizationTabKeydown(event, 'totalDistance', { onTabChange });
+    const previousTab = handleVisualizationTabKeydown(event, 'totalDistance', { onTabChange });
 
-    expect(nextTab).toBeNull();
-    expect(event.preventDefault).not.toHaveBeenCalled();
-    expect(onTabChange).not.toHaveBeenCalled();
+    expect(previousTab).toBe('lifetimeStatistics');
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(onTabChange).toHaveBeenCalledWith('lifetimeStatistics', { focusTab: true });
   });
 
-  it('allows Tab to reach the directional controls after the tablist', () => {
-    const event = {
-      key: 'Tab',
-      shiftKey: false,
-      preventDefault: jest.fn()
-    };
+  it('leaves unrelated keys unhandled', () => {
+    const event = { key: 'Escape', preventDefault: jest.fn() };
     const onTabChange = jest.fn();
 
     expect(handleVisualizationTabKeydown(event, 'totalDistance', { onTabChange })).toBeNull();

@@ -87,17 +87,23 @@
 
     function updateNavigationCueAvailability(target = document.activeElement) {
       const focusedTab = target && target.closest && target.closest('[role="tab"]');
-      const focusedFilter = target && target.closest && target.closest('[data-keyboard-filter-group]');
       const activePanelId = window.dashboardTabNavigation.TAB_PANEL_IDS[selectedVisualizationTab];
       const activePanel = activePanelId && document.getElementById(activePanelId);
+      const dashboardMain = document.getElementById('dashboardMain');
+      const dashboardVisible = dashboardMain && !dashboardMain.classList.contains('hidden');
+      const activePanelVisible = dashboardVisible && activePanel && !activePanel.closest('.hidden');
+      const modalOwnsFocus = target && target.closest && target.closest('[role="dialog"][aria-modal="true"]');
+      const nativeControl = target && target.closest && target.closest('select, input[type="range"], input[type="checkbox"]');
       const focusedNativeFilter = target && target.matches && target.matches('select, input[type="range"]') &&
-        activePanel && activePanel.contains(target) && !target.disabled;
+        activePanelVisible && activePanel.contains(target) && !target.disabled;
+      const navigationFilterGroup = activePanelVisible && !modalOwnsFocus && !nativeControl
+        ? getKeyboardFilterGroup(target, activePanel)
+        : null;
       document.querySelectorAll('[data-navigation-cue]').forEach(cue => {
         const direction = cue.dataset.navigationCue;
-        let available = direction === 'left' || direction === 'right' ? !!focusedTab : false;
-        if ((direction === 'up' || direction === 'down') && focusedFilter && activePanel &&
-            activePanel.contains(focusedFilter) && !focusedFilter.closest('.hidden')) {
-          available = focusedFilter.querySelectorAll('button:not(:disabled)').length > 1;
+        let available = dashboardVisible && (direction === 'left' || direction === 'right') ? !!focusedTab : false;
+        if ((direction === 'up' || direction === 'down') && navigationFilterGroup) {
+          available = navigationFilterGroup.querySelectorAll('button:not(:disabled)').length > 1;
         } else if ((direction === 'up' || direction === 'down') && focusedNativeFilter) {
           if (target.tagName === 'SELECT') {
             available = target.options.length > 1 &&
@@ -169,15 +175,42 @@
         button.getAttribute('aria-checked') === 'true' || button.classList.contains('bg-indigo-600');
     }
 
+    function getKeyboardFilterGroup(target, activePanel) {
+      if (!activePanel) return null;
+
+      const button = target && target.closest && target.closest('button');
+      const targetGroup = button && button.closest('[data-keyboard-filter-group]');
+      const eligibleGroups = Array.from(activePanel.querySelectorAll('[data-keyboard-filter-group]'))
+        .filter(group => !group.closest('.hidden') && group.querySelectorAll('button:not(:disabled)').length > 1);
+      const focusedGroup = targetGroup && activePanel.contains(button) && eligibleGroups.includes(targetGroup)
+        ? targetGroup : null;
+
+      if (focusedGroup) return focusedGroup;
+      if (targetGroup && activePanel.contains(button)) return null;
+      return eligibleGroups[0] || null;
+    }
+
     function handleDashboardFilterKeydown(event) {
       if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
-      const button = event.target.closest && event.target.closest('button');
-      const group = button && button.closest('[data-keyboard-filter-group]');
+      const target = event.target;
+      if (target && target.closest && (
+        target.closest('select, input[type="range"], input[type="checkbox"]') ||
+        target.closest('[role="dialog"][aria-modal="true"]')
+      )) return;
+
+      const dashboardMain = document.getElementById('dashboardMain');
+      if (!dashboardMain || dashboardMain.classList.contains('hidden')) return;
+
       const activePanelId = window.dashboardTabNavigation.TAB_PANEL_IDS[selectedVisualizationTab];
       const activePanel = activePanelId && document.getElementById(activePanelId);
-      if (!group || !activePanel || !activePanel.contains(button) || button.disabled || group.closest('.hidden')) return;
+      if (!activePanel || activePanel.closest('.hidden')) return;
 
-      const choices = Array.from(group.querySelectorAll('button:not(:disabled)'));
+      event.preventDefault();
+      const filterGroup = getKeyboardFilterGroup(event.target, activePanel);
+      if (!filterGroup) return;
+
+      const button = event.target.closest && event.target.closest('button');
+      const choices = Array.from(filterGroup.querySelectorAll('button:not(:disabled)'));
       const currentIndex = choices.findIndex(choice => isActiveFilterChoice(choice));
       const direction = event.key === 'ArrowDown' ? 1 : -1;
       const nextIndex = window.dashboardTabNavigation.getNextFilterChoiceIndex(
@@ -187,13 +220,12 @@
       );
       if (nextIndex === null || choices[nextIndex] === button) return;
 
-      event.preventDefault();
       const nextChoice = choices[nextIndex];
       nextChoice.click();
-      const refreshedChoices = Array.from(group.querySelectorAll('button:not(:disabled)'));
-      const focusedChoice = refreshedChoices.find(choice => isActiveFilterChoice(choice)) || refreshedChoices[nextIndex];
+      const refreshedChoices = Array.from(filterGroup.querySelectorAll('button:not(:disabled)'));
+      const focusedChoice = refreshedChoices.includes(nextChoice) ? nextChoice : refreshedChoices[nextIndex];
       refreshedChoices.forEach(choice => choice.setAttribute('aria-pressed', choice === focusedChoice ? 'true' : 'false'));
-      if (focusedChoice) focusedChoice.focus();
+      if (focusedChoice) focusedChoice.focus({ preventScroll: true });
       updateActiveVisualizationFilterSummary();
       flashNavigationCue(direction > 0 ? 'down' : 'up');
     }
@@ -231,10 +263,15 @@
     document.addEventListener('click', event => {
       const target = event.target;
       const group = target && target.closest && target.closest('[data-filter-summary]');
+      const clickedChoice = target && target.closest && target.closest('button');
       if (group) {
         const choices = group.querySelectorAll('button');
         if (choices.length > 0) {
-          choices.forEach(choice => choice.setAttribute('aria-pressed', isActiveFilterChoice(choice) ? 'true' : 'false'));
+          if (clickedChoice && group.contains(clickedChoice) && group.hasAttribute('data-keyboard-filter-group')) {
+            choices.forEach(choice => choice.setAttribute('aria-pressed', choice === clickedChoice ? 'true' : 'false'));
+          } else {
+            choices.forEach(choice => choice.setAttribute('aria-pressed', isActiveFilterChoice(choice) ? 'true' : 'false'));
+          }
         }
       }
       updateActiveVisualizationFilterSummary();
@@ -303,7 +340,8 @@
         const nextTabButtonId = window.dashboardTabNavigation.TAB_BUTTON_IDS[nextTab];
         const nextTabButton = nextTabButtonId && document.getElementById(nextTabButtonId);
         if (nextTabButton && nextTabButton.getAttribute('aria-selected') === 'true') {
-          flashNavigationCue(event.key === 'ArrowRight' ? 'right' : 'left');
+          const cueDirection = event.key === 'ArrowRight' || (event.key === 'Tab' && !event.shiftKey) ? 'right' : 'left';
+          flashNavigationCue(cueDirection);
         }
       }
     }

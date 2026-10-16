@@ -215,8 +215,8 @@ function setVisualizationTab(tabName, options = {}) {
 
 function handleVisualizationTabKeydown(event, currentTab, options = {}) {
   let direction = 0;
-  if (event.key === 'ArrowRight') direction = 1;
-  if (event.key === 'ArrowLeft') direction = -1;
+  if (event.key === 'ArrowRight' || (event.key === 'Tab' && !event.shiftKey)) direction = 1;
+  if (event.key === 'ArrowLeft' || (event.key === 'Tab' && event.shiftKey)) direction = -1;
 
   if (direction === 0) return null;
 

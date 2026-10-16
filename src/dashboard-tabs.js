@@ -152,9 +152,14 @@
 
     function updateActiveVisualizationFilterSummary() {
       const summary = document.getElementById('activeVisualizationFilterSummary');
+      if (!summary) return;
       const panelId = window.dashboardTabNavigation.TAB_PANEL_IDS[selectedVisualizationTab];
       const panel = panelId && document.getElementById(panelId);
-      if (!summary || !panel) return;
+      if (!panel) {
+        summary.replaceChildren();
+        summary.classList.add('hidden');
+        return;
+      }
 
       summary.replaceChildren();
       const groups = Array.from(panel.querySelectorAll('[data-filter-summary]'))
@@ -298,8 +303,36 @@
       updateVisualizationTabScrollControls();
     }
 
+    function refreshVisualizationTabs() {
+      visualizationAvailabilityByTab = window.visualizationAvailability.getVisualizationAvailability(processedActivities, {
+        fitBestEffortsByActivityId,
+        gpsTracksByActivityId
+      });
+      availableVisualizationTabs = window.dashboardTabNavigation.getAvailableVisualizationTabs(visualizationAvailabilityByTab);
+      window.dashboardTabNavigation.setAvailableVisualizationTabs(availableVisualizationTabs);
+
+      if (availableVisualizationTabs.length === 0) {
+        selectedVisualizationTab = null;
+        updateActiveVisualizationFilterSummary();
+        return null;
+      }
+
+      selectedVisualizationTab = window.dashboardTabNavigation.getAvailableVisualizationTab(
+        selectedVisualizationTab,
+        availableVisualizationTabs
+      );
+      window.dashboardTabNavigation.setVisualizationTab(selectedVisualizationTab, {
+        availableTabs: availableVisualizationTabs
+      });
+      updateActiveVisualizationFilterSummary();
+      return selectedVisualizationTab;
+    }
+
     function setVisualizationTab(tabName, options = {}) {
-      const nextTab = window.dashboardTabNavigation.setVisualizationTab(tabName, options);
+      const nextTab = window.dashboardTabNavigation.setVisualizationTab(tabName, {
+        ...options,
+        availableTabs: availableVisualizationTabs
+      });
       if (nextTab) {
         selectedVisualizationTab = nextTab;
         if (nextTab === 'paceMetrics') {
@@ -332,7 +365,8 @@
 
     function handleVisualizationTabKeydown(event, currentTab) {
       const nextTab = window.dashboardTabNavigation.handleVisualizationTabKeydown(event, currentTab, {
-        onTabChange: setVisualizationTab
+        onTabChange: setVisualizationTab,
+        availableTabs: availableVisualizationTabs
       });
 
       if (nextTab) {
@@ -367,21 +401,11 @@
       }
       document.getElementById('landingPage').classList.add('hidden');
       document.getElementById('dashboardMain').classList.remove('hidden');
-      setVisualizationTab(tabName);
-      const tabButton = document.getElementById(
-        tabName === 'totalDistance' ? 'vizTabTotalDistance' :
-        tabName === 'paceMetrics' ? 'vizTabPaceMetrics' :
-        tabName === 'equipment' ? 'vizTabEquipment' :
-        tabName === 'equipmentTimeline' ? 'vizTabEquipmentTimeline' :
-        tabName === 'heatmap' ? 'vizTabHeatmap' :
-        tabName === 'distributions' ? 'vizTabDistributions' :
-        tabName === 'workoutTime' ? 'vizTabWorkoutTime' :
-        tabName === 'trainingCalendar' ? 'vizTabTrainingCalendar' :
-        tabName === 'wordcloud' ? 'vizTabWordcloud' :
-        tabName === 'pieCharts' ? 'vizTabPieCharts' :
-        tabName === 'lifetimeStatistics' ? 'vizTabLifetimeStatistics' :
-        'vizTabPersonalBests'
-      );
+      const selectedTab = availableVisualizationTabs.includes(tabName) ? tabName : availableVisualizationTabs[0];
+      if (!selectedTab) return;
+      setVisualizationTab(selectedTab);
+      const tabButtonId = window.dashboardTabNavigation.TAB_BUTTON_IDS[selectedTab];
+      const tabButton = tabButtonId && document.getElementById(tabButtonId);
       if (tabButton) tabButton.focus();
     }
 

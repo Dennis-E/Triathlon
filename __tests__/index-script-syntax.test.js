@@ -208,7 +208,10 @@ describe('index.html inline script syntax', () => {
     expect(summaryIndex).toBeGreaterThan(tablistEnd);
     expect(summaryIndex).toBeLessThan(firstPanelIndex);
     expect(html).toContain('aria-label="Active visualization filters"');
+    expect(html).toContain('id="noVisualizationsAvailable" role="status"');
+    expect(html).toContain('No visualizations are available for this import.');
     expect(inlineCode).toContain('updateActiveVisualizationFilterSummary');
+    expect(inlineCode).toContain('refreshVisualizationTabs');
     expect(inlineCode).toContain("document.addEventListener('input', updateActiveVisualizationFilterSummary)");
     expect(inlineCode).toContain("document.addEventListener('change', updateActiveVisualizationFilterSummary)");
     expect(inlineCode).toContain("document.addEventListener('keydown', handleDashboardFilterKeydown)");

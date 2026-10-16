@@ -1,7 +1,10 @@
 const {
+  getAvailableVisualizationTabs,
+  getAvailableVisualizationTab,
   getNextVisualizationTab,
   getNextFilterChoiceIndex,
   getNextClippedTabScrollOffset,
+  setAvailableVisualizationTabs,
   setVisualizationTab,
   handleVisualizationTabKeydown
 } = require('../src/tab-navigation');
@@ -11,7 +14,13 @@ function createMockElement() {
   const classes = new Set();
 
   return {
-    className: '',
+    get className() {
+      return Array.from(classes).join(' ');
+    },
+    set className(value) {
+      classes.clear();
+      String(value || '').split(/\s+/).filter(Boolean).forEach(className => classes.add(className));
+    },
     focused: false,
     setAttribute(name, value) {
       attributes[name] = value;
@@ -62,7 +71,8 @@ function createMockDocument() {
     vizPanelTrainingCalendar: createMockElement(),
     vizPanelWordcloud: createMockElement(),
     vizPanelPieCharts: createMockElement(),
-    vizPanelLifetimeStatistics: createMockElement()
+    vizPanelLifetimeStatistics: createMockElement(),
+    noVisualizationsAvailable: createMockElement()
   };
 
   return {
@@ -133,6 +143,70 @@ describe('tab navigation helpers', () => {
     expect(getNextVisualizationTab('totalDistance', -1)).toBe('lifetimeStatistics');
     expect(getNextVisualizationTab('workoutTime', -1)).toBe('distributions');
     expect(getNextVisualizationTab('unknown', 1)).toBe('totalDistance');
+  });
+
+  it('filters available tabs in the canonical order', () => {
+    expect(getAvailableVisualizationTabs({
+      equipment: true,
+      pieCharts: true,
+      totalDistance: false
+    })).toEqual(['equipment', 'pieCharts']);
+    expect(getAvailableVisualizationTabs({})).toEqual([]);
+  });
+
+  it('preserves an available selection or falls back to the first available tab', () => {
+    expect(getAvailableVisualizationTab('equipment', ['totalDistance', 'equipment'])).toBe('equipment');
+    expect(getAvailableVisualizationTab('equipment', ['totalDistance', 'paceMetrics'])).toBe('totalDistance');
+    expect(getAvailableVisualizationTab('equipment', [])).toBeNull();
+  });
+
+  it('cycles only through available tabs and wraps in that subset', () => {
+    const availableTabs = ['totalDistance', 'equipment', 'lifetimeStatistics'];
+
+    expect(getNextVisualizationTab('totalDistance', 1, availableTabs)).toBe('equipment');
+    expect(getNextVisualizationTab('equipment', -1, availableTabs)).toBe('totalDistance');
+    expect(getNextVisualizationTab('lifetimeStatistics', 1, availableTabs)).toBe('totalDistance');
+    expect(getNextVisualizationTab('unavailable', 1, availableTabs)).toBe('totalDistance');
+    expect(getNextVisualizationTab('totalDistance', 1, [])).toBeNull();
+  });
+
+  it('does not activate a tab outside the available set', () => {
+    const mockDocument = createMockDocument();
+
+    expect(setVisualizationTab('equipment', {
+      availableTabs: ['totalDistance'],
+      document: mockDocument
+    })).toBeNull();
+    expect(setVisualizationTab('totalDistance', {
+      availableTabs: [],
+      document: mockDocument
+    })).toBeNull();
+    expect(mockDocument.elements.vizTabEquipment.getAttribute('aria-selected')).toBeUndefined();
+  });
+
+  it('hides unavailable tabs and shows a stable message when no views are available', () => {
+    const mockDocument = createMockDocument();
+
+    setAvailableVisualizationTabs(['equipment'], { document: mockDocument });
+    expect(mockDocument.elements.vizTabEquipment.classList.contains('hidden')).toBe(false);
+    expect(mockDocument.elements.vizTabTotalDistance.classList.contains('hidden')).toBe(true);
+    expect(mockDocument.elements.noVisualizationsAvailable.classList.contains('hidden')).toBe(true);
+
+    setAvailableVisualizationTabs([], { document: mockDocument });
+    expect(mockDocument.elements.vizTabEquipment.classList.contains('hidden')).toBe(true);
+    expect(mockDocument.elements.vizPanelEquipment.classList.contains('hidden')).toBe(true);
+    expect(mockDocument.elements.noVisualizationsAvailable.classList.contains('hidden')).toBe(false);
+  });
+
+  it('preserves hidden tabs when active-tab classes are updated', () => {
+    const mockDocument = createMockDocument();
+    const availableTabs = ['totalDistance'];
+
+    setAvailableVisualizationTabs(availableTabs, { document: mockDocument });
+    setVisualizationTab('totalDistance', { availableTabs, document: mockDocument });
+
+    expect(mockDocument.elements.vizTabTotalDistance.classList.contains('hidden')).toBe(false);
+    expect(mockDocument.elements.vizTabEquipment.classList.contains('hidden')).toBe(true);
   });
 
   describe('getNextFilterChoiceIndex', () => {

@@ -94,7 +94,6 @@ describe('runtime dashboard-import metric availability', () => {
       activityRow('Positive values', '3600', '10', '10000'),
       activityRow('Recorded zeroes', '0', '0', '0')
     ]);
-
     expect(result.map(activity => activity.distance)).toEqual([10, 0]);
     expect(result.map(activity => activity.duration)).toEqual([3600, 0]);
     expect(result.map(activity => activity.distanceAvailable)).toEqual([true, true]);
@@ -128,6 +127,76 @@ describe('runtime dashboard-import metric availability', () => {
     expect(result[0].durationAvailable).toBe(false);
     expect(result[0].distance).toBe(0);
     expect(result[0].duration).toBe(0);
+  });
+});
+
+function loadRuntimeDatasetApplicator() {
+  const nodes = Object.fromEntries([
+    'previewCardsContainer', 'enterDashboardContainer', 'emptyStateMessage'
+  ].map(id => [id, { classList: { add() {}, remove() {} } }]));
+  const context = {
+    rawCsvData: [],
+    processedActivities: [],
+    fitBestEffortsByActivityId: {},
+    gpsTracksByActivityId: {},
+    window: { heatmapUtils: { buildActivitySummaryIndex: () => new Map() } },
+    document: { getElementById: id => nodes[id] || null },
+    updateStatusBadge: jest.fn(),
+    hideHeatmapActivityTooltip: jest.fn(),
+    closePreviewGateModal: jest.fn(),
+    setBtnActive: jest.fn(),
+    initPaceMetricsControls: jest.fn(),
+    renderTimeframeButtons: jest.fn(),
+    initScatterDateSlider: jest.fn(),
+    initDistributionsDateSlider: jest.fn(),
+    initTrainingCalendarControls: jest.fn(),
+    refreshVisualizationTabs: jest.fn(),
+    renderDashboard: jest.fn(),
+    renderPaceMetricsChart: jest.fn(),
+    renderEquipmentChart: jest.fn(),
+    renderPbChart: jest.fn(),
+    renderTrainingCalendar: jest.fn()
+  };
+  vm.createContext(context);
+  vm.runInContext(`${dashboardImportSource}\nthis.__applyDataset = applyImportedDataset;`, context, {
+    filename: 'src/dashboard-import.js'
+  });
+  return { applyDataset: context.__applyDataset, context, refreshVisualizationTabs: context.refreshVisualizationTabs };
+}
+
+describe('runtime imported dataset availability refresh', () => {
+  it('refreshes view visibility without modifying imported activity records', () => {
+    const runtime = loadRuntimeDatasetApplicator();
+    const firstActivities = [{
+      id: 'run-1', sport: 'Run', date: new Date('2026-07-19T14:52:02Z'),
+      distance: 10, duration: 3600, equipment: 'Road shoe'
+    }];
+    const secondActivities = [{
+      id: 'run-2', sport: 'Run', date: new Date('2026-07-20T14:52:02Z'),
+      distance: 8, duration: 3000, equipment: ''
+    }];
+    const originalFirstActivities = structuredClone(firstActivities);
+    const originalSecondActivities = structuredClone(secondActivities);
+    const firstDataset = {
+      rawCsvData: [],
+      activities: firstActivities,
+      fitBestEffortsByActivityId: {},
+      gpsTracksByActivityId: {},
+      sourceLabel: 'Imported Strava history'
+    };
+    const secondDataset = {
+      ...firstDataset,
+      activities: secondActivities,
+      sourceLabel: 'TrainingPeaks ZIP import'
+    };
+
+    runtime.applyDataset(firstDataset);
+    runtime.applyDataset(secondDataset);
+
+    expect(runtime.refreshVisualizationTabs).toHaveBeenCalledTimes(2);
+    expect(runtime.context.processedActivities).toEqual(originalSecondActivities);
+    expect(firstDataset.activities).toEqual(originalFirstActivities);
+    expect(secondDataset.activities).toEqual(originalSecondActivities);
   });
 });
 

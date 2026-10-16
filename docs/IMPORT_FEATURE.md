@@ -4,6 +4,10 @@
 
 TriAnalytica supports Strava and TrainingPeaks exports through separate import options on the landing page. Both import paths normalize supported activities into the same dashboard model.
 
+## Visualization availability
+
+After each import, the dashboard shows only visualization tabs that can produce meaningful output from the imported activities and associated route or power data. Strava and TrainingPeaks imports use the same data-based rules; when a field is missing, only views that require that field are hidden. This changes dashboard visibility and selection only: imported files, activity records, and values are not modified or removed.
+
 ## Strava
 
 Select a Strava export ZIP. The importer reads its `activities.csv`, retains the supported activity fields, and enriches activities with available FIT/GPX GPS tracks and bike power best efforts.

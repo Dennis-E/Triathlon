@@ -33,11 +33,56 @@ const TAB_PANEL_IDS = {
 const TAB_ACTIVE_CLASS = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25';
 const TAB_INACTIVE_CLASS = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200';
 
-function getNextVisualizationTab(currentTab, direction) {
-  const currentIndex = TAB_ORDER.indexOf(currentTab);
-  if (currentIndex === -1) return TAB_ORDER[0];
-  const nextIndex = (currentIndex + direction + TAB_ORDER.length) % TAB_ORDER.length;
-  return TAB_ORDER[nextIndex];
+function setVisualizationTabButtonClass(button, isActive) {
+  const hiddenClass = button.classList.contains('hidden') ? ' hidden' : '';
+  button.className = `${isActive ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS}${hiddenClass}`;
+}
+
+function getAvailableVisualizationTabs(availabilityByTab = {}) {
+  return TAB_ORDER.filter(tabName => availabilityByTab[tabName] === true);
+}
+
+function setAvailableVisualizationTabs(availableTabs, options = {}) {
+  const doc = options.document || (typeof document !== 'undefined' ? document : null);
+  const orderedAvailableTabs = TAB_ORDER.filter(tabName => Array.isArray(availableTabs) && availableTabs.includes(tabName));
+  if (!doc) return orderedAvailableTabs;
+
+  const availableSet = new Set(orderedAvailableTabs);
+  TAB_ORDER.forEach(tabName => {
+    const button = doc.getElementById(TAB_BUTTON_IDS[tabName]);
+    const panel = doc.getElementById(TAB_PANEL_IDS[tabName]);
+    const isAvailable = availableSet.has(tabName);
+    if (button) {
+      button.classList.toggle('hidden', !isAvailable);
+      button.setAttribute('aria-hidden', isAvailable ? 'false' : 'true');
+      if (!isAvailable) {
+        button.setAttribute('aria-selected', 'false');
+        button.setAttribute('tabindex', '-1');
+      }
+    }
+    if (panel && (!isAvailable || orderedAvailableTabs.length === 0)) {
+      panel.classList.add ? panel.classList.add('hidden') : panel.classList.toggle('hidden', true);
+    }
+  });
+
+  const emptyState = doc.getElementById('noVisualizationsAvailable');
+  if (emptyState) emptyState.classList.toggle('hidden', orderedAvailableTabs.length > 0);
+  return orderedAvailableTabs;
+}
+
+function getAvailableVisualizationTab(currentTab, availableTabs = TAB_ORDER) {
+  const orderedAvailableTabs = TAB_ORDER.filter(tabName => Array.isArray(availableTabs) && availableTabs.includes(tabName));
+  return orderedAvailableTabs.includes(currentTab) ? currentTab : (orderedAvailableTabs[0] || null);
+}
+
+function getNextVisualizationTab(currentTab, direction, availableTabs = TAB_ORDER) {
+  const orderedAvailableTabs = TAB_ORDER.filter(tabName => Array.isArray(availableTabs) && availableTabs.includes(tabName));
+  if (orderedAvailableTabs.length === 0) return null;
+
+  const currentIndex = orderedAvailableTabs.indexOf(currentTab);
+  if (currentIndex === -1) return orderedAvailableTabs[0];
+  const nextIndex = (currentIndex + direction + orderedAvailableTabs.length) % orderedAvailableTabs.length;
+  return orderedAvailableTabs[nextIndex];
 }
 
 function getNextFilterChoiceIndex(choiceCount, currentIndex, direction, controlType = 'single-choice') {
@@ -91,6 +136,7 @@ function getNextClippedTabScrollOffset(tabBounds, viewportBounds, currentScrollO
 
 function setVisualizationTab(tabName, options = {}) {
   if (!TAB_ORDER.includes(tabName)) return null;
+  if (Array.isArray(options.availableTabs) && !options.availableTabs.includes(tabName)) return null;
 
   const doc = options.document || (typeof document !== 'undefined' ? document : null);
   if (!doc) return tabName;
@@ -140,48 +186,48 @@ function setVisualizationTab(tabName, options = {}) {
 
   totalDistanceBtn.setAttribute('aria-selected', isTotalDistance ? 'true' : 'false');
   totalDistanceBtn.setAttribute('tabindex', isTotalDistance ? '0' : '-1');
-  totalDistanceBtn.className = isTotalDistance ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
+  setVisualizationTabButtonClass(totalDistanceBtn, isTotalDistance);
 
   paceMetricsBtn.setAttribute('aria-selected', isPaceMetrics ? 'true' : 'false');
   paceMetricsBtn.setAttribute('tabindex', isPaceMetrics ? '0' : '-1');
-  paceMetricsBtn.className = isPaceMetrics ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
+  setVisualizationTabButtonClass(paceMetricsBtn, isPaceMetrics);
 
   equipmentBtn.setAttribute('aria-selected', isEquipment ? 'true' : 'false');
   equipmentBtn.setAttribute('tabindex', isEquipment ? '0' : '-1');
-  equipmentBtn.className = isEquipment ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
+  setVisualizationTabButtonClass(equipmentBtn, isEquipment);
 
   equipmentTimelineBtn.setAttribute('aria-selected', isEquipmentTimeline ? 'true' : 'false');
   equipmentTimelineBtn.setAttribute('tabindex', isEquipmentTimeline ? '0' : '-1');
-  equipmentTimelineBtn.className = isEquipmentTimeline ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
+  setVisualizationTabButtonClass(equipmentTimelineBtn, isEquipmentTimeline);
 
   personalBestsBtn.setAttribute('aria-selected', isPersonalBests ? 'true' : 'false');
   personalBestsBtn.setAttribute('tabindex', isPersonalBests ? '0' : '-1');
-  personalBestsBtn.className = isPersonalBests ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
+  setVisualizationTabButtonClass(personalBestsBtn, isPersonalBests);
 
   heatmapBtn.setAttribute('aria-selected', isHeatmap ? 'true' : 'false');
   heatmapBtn.setAttribute('tabindex', isHeatmap ? '0' : '-1');
-  heatmapBtn.className = isHeatmap ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
+  setVisualizationTabButtonClass(heatmapBtn, isHeatmap);
 
   distributionsBtn.setAttribute('aria-selected', isDistributions ? 'true' : 'false');
   distributionsBtn.setAttribute('tabindex', isDistributions ? '0' : '-1');
-  distributionsBtn.className = isDistributions ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
+  setVisualizationTabButtonClass(distributionsBtn, isDistributions);
 
   workoutTimeBtn.setAttribute('aria-selected', isWorkoutTime ? 'true' : 'false');
   workoutTimeBtn.setAttribute('tabindex', isWorkoutTime ? '0' : '-1');
-  workoutTimeBtn.className = isWorkoutTime ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
+  setVisualizationTabButtonClass(workoutTimeBtn, isWorkoutTime);
 
   trainingCalendarBtn.setAttribute('aria-selected', isTrainingCalendar ? 'true' : 'false');
   trainingCalendarBtn.setAttribute('tabindex', isTrainingCalendar ? '0' : '-1');
-  trainingCalendarBtn.className = isTrainingCalendar ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
+  setVisualizationTabButtonClass(trainingCalendarBtn, isTrainingCalendar);
   wordcloudBtn.setAttribute('aria-selected', isWordcloud ? 'true' : 'false');
   wordcloudBtn.setAttribute('tabindex', isWordcloud ? '0' : '-1');
-  wordcloudBtn.className = isWordcloud ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
+  setVisualizationTabButtonClass(wordcloudBtn, isWordcloud);
   pieChartsBtn.setAttribute('aria-selected', isPieCharts ? 'true' : 'false');
   pieChartsBtn.setAttribute('tabindex', isPieCharts ? '0' : '-1');
-  pieChartsBtn.className = isPieCharts ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
+  setVisualizationTabButtonClass(pieChartsBtn, isPieCharts);
   lifetimeStatisticsBtn.setAttribute('aria-selected', isLifetimeStatistics ? 'true' : 'false');
   lifetimeStatisticsBtn.setAttribute('tabindex', isLifetimeStatistics ? '0' : '-1');
-  lifetimeStatisticsBtn.className = isLifetimeStatistics ? TAB_ACTIVE_CLASS : TAB_INACTIVE_CLASS;
+  setVisualizationTabButtonClass(lifetimeStatisticsBtn, isLifetimeStatistics);
 
   totalDistancePanel.classList.toggle('hidden', !isTotalDistance);
   paceMetricsPanel.classList.toggle('hidden', !isPaceMetrics);
@@ -220,8 +266,10 @@ function handleVisualizationTabKeydown(event, currentTab, options = {}) {
 
   if (direction === 0) return null;
 
+  const nextTab = getNextVisualizationTab(currentTab, direction, options.availableTabs);
+  if (!nextTab) return null;
+
   event.preventDefault();
-  const nextTab = getNextVisualizationTab(currentTab, direction);
 
   if (typeof options.onTabChange === 'function') {
     options.onTabChange(nextTab, { focusTab: true });
@@ -237,6 +285,9 @@ if (typeof module !== 'undefined' && module.exports) {
     TAB_ORDER,
     TAB_BUTTON_IDS,
     TAB_PANEL_IDS,
+    getAvailableVisualizationTabs,
+    setAvailableVisualizationTabs,
+    getAvailableVisualizationTab,
     getNextVisualizationTab,
     getNextFilterChoiceIndex,
     getNextClippedTabScrollOffset,
@@ -250,6 +301,9 @@ if (typeof window !== 'undefined') {
     TAB_ORDER,
     TAB_BUTTON_IDS,
     TAB_PANEL_IDS,
+    getAvailableVisualizationTabs,
+    setAvailableVisualizationTabs,
+    getAvailableVisualizationTab,
     getNextVisualizationTab,
     getNextFilterChoiceIndex,
     getNextClippedTabScrollOffset,

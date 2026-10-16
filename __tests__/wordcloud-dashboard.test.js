@@ -37,7 +37,7 @@ describe('Wordcloud dashboard contract', () => {
   it('dispatches Wordcloud rendering when its tab is selected', () => {
     expect(dashboardTabs).toContain("nextTab === 'wordcloud'");
     expect(dashboardTabs).toContain('renderWordcloud();');
-    expect(dashboardTabs).toContain('vizTabWordcloud');
+    expect(dashboardTabs).toContain('window.dashboardTabNavigation.TAB_BUTTON_IDS[selectedTab]');
   });
 
   it('provides a working branded Share/Export action targeting only the rendered canvas', () => {

@@ -253,6 +253,14 @@
       }
     }
 
+    function hasRenderableDistanceData(activities) {
+      return Array.isArray(activities) && activities.some(activity => {
+        if (!activity || !['Run', 'Bike', 'Swim'].includes(activity.sport)) return false;
+        if (!Number.isFinite(new Date(activity.date).getTime())) return false;
+        return Number.isFinite(activity.distance) && activity.distance > 0;
+      });
+    }
+
     // Aggregate by day (respecting timeframe)
     function aggregateActivitiesByDay() {
       const { minDate, maxDate } = getTimeframeRange();

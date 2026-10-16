@@ -120,6 +120,7 @@
       initScatterDateSlider();
       initDistributionsDateSlider();
       initTrainingCalendarControls();
+      refreshVisualizationTabs();
 
       renderDashboard();
       renderPaceMetricsChart();
@@ -128,7 +129,7 @@
       renderTrainingCalendar();
 
       if (options.openDashboard) {
-        openDashboardTab('totalDistance');
+        openDashboardTab(availableVisualizationTabs[0]);
       }
     }
 

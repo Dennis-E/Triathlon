@@ -56,6 +56,7 @@
   <script src="./src/heatmap-utils.js"></script>
   <script src="./src/training-calendar-utils.js"></script>
   <script src="./src/wordcloud-utils.js"></script>
+  <script src="./src/visualization-availability.js"></script>
   <script src="./src/analysis-counter.js"></script>
   <style>
     #importProgressPreview {
@@ -983,6 +984,9 @@
             aria-controls="visualizationTabsViewport"
             class="invisible pointer-events-none shrink-0 rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >&gt;&gt;</button>
+        </div>
+        <div id="noVisualizationsAvailable" role="status" class="hidden mt-3 text-center text-sm text-slate-400">
+          No visualizations are available for this import.
         </div>
       </div>
 

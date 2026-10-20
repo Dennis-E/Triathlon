@@ -30,6 +30,8 @@ describe('News page contract', () => {
   });
 
   it('publishes the latest customer-facing updates first', () => {
+    expect(newsHtml).toMatch(/<article\b[\s\S]*?<h2[^>]*>A smoother way through your training data[\s\S]*?<time datetime="2026-10-19">October 19, 2026<\/time>[\s\S]*?arrow keys[\s\S]*?hidden[\s\S]*?keeps its current zoom[\s\S]*?choice of where to save[\s\S]*?newsletter signup[\s\S]*?activity illustrations[\s\S]*?<\/article>/i);
+    expect(newsHtml.indexOf('A smoother way through your training data')).toBeLessThan(newsHtml.indexOf('More ways to explore your training—and a new way to import it'));
     expect(newsHtml).toMatch(/<article\b[\s\S]*?<h2[^>]*>More ways to explore your training—and a new way to import it[\s\S]*?<time datetime="2026-10-12">October 12, 2026<\/time>[\s\S]*?TrainingPeaks import[\s\S]*?Pie Charts[\s\S]*?Lifetime Statistics[\s\S]*?activity-aware messages[\s\S]*?<\/article>/i);
     expect(newsHtml.indexOf('More ways to explore your training—and a new way to import it')).toBeLessThan(newsHtml.indexOf('Wordcloud, clearer Personal Bests, and more control'));
     expect(newsHtml).toMatch(/<article\b[\s\S]*?<h2[^>]*>Wordcloud, clearer Personal Bests, and more control[\s\S]*?<time datetime="2026-10-05">October 5, 2026<\/time>[\s\S]*?frequency-ranked cloud[\s\S]*?Equipment and Personal Bests[\s\S]*?navigation arrows[\s\S]*?<\/article>/i);
@@ -40,7 +42,7 @@ describe('News page contract', () => {
 
   it('keeps the published content in one ordered collection', () => {
     expect(newsHtml).toMatch(/<main\b[\s\S]*?(?:id="newsArticles"|aria-label="Published news")[\s\S]*?<article\b[\s\S]*?<\/article>[\s\S]*?<\/main>/i);
-    expect((newsHtml.match(/<article\b/gi) || []).length).toBe(4);
+    expect((newsHtml.match(/<article\b/gi) || []).length).toBe(5);
     expect(newsHtml).not.toMatch(/coming soon|more news soon|unpublished/i);
   });
 
@@ -54,6 +56,7 @@ describe('News page contract', () => {
     expect(newsHtml).toMatch(/<header[^>]*class="[^"]*\bw-full\b[^"]*"/i);
     expect(newsHtml).toMatch(/<div[^>]*class="[^"]*\bnews-shell\b[^"]*\bflex\b[^"]*\bitems-center\b[^"]*"/i);
     expect(newsHtml).toMatch(/TriAnalytica is now in alpha/);
+    expect(newsHtml).toMatch(/A smoother way through your training data/);
     expect(newsHtml).toMatch(/Wordcloud, clearer Personal Bests, and more control/);
     expect(newsHtml).toMatch(/More ways to explore your training—and a new way to import it/);
     expect(newsHtml).toMatch(/Your training has a calendar now/);

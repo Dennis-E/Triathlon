@@ -616,7 +616,7 @@
     // ─── End Personal Bests Visualization ────────────────────────────────────────
 
     // UI Interactive helpers for filters
-    function setSportFilter(sport) {
+    function setSportFilter(sport, render = true) {
       selectedSportFilter = sport;
       
       // Update Buttons State
@@ -625,7 +625,7 @@
       });
       setBtnActive(`sportBtn${sport}`);
       
-      renderDashboard();
+      if (render) renderDashboard();
     }
 
     function setTimeframeFilter(timeframeKey) {
@@ -662,7 +662,7 @@
     }
 
     // Aggregation level toggle
-    function setAggregationLevel(level) {
+    function setAggregationLevel(level, render = true) {
       selectedAggregationLevel = level;
 
       // Update Buttons State
@@ -674,7 +674,25 @@
 
       renderTimeframeButtons();
 
-      renderDashboard();
+      if (render) renderDashboard();
+    }
+
+    function getTotalDistanceKeyboardAdapter() {
+      return window.dashboardTabNavigation.createDashboardFilterAdapter(
+        () => ({ values: { aggregation: selectedAggregationLevel, sport: selectedSportFilter, timeframe: selectedTimeframeByAggregation[selectedAggregationLevel] } }),
+        prefix => {
+          if (prefix.length === 0) return { id: 'aggregation', values: ['daily', 'weekly', 'monthly', 'yearly'] };
+          if (prefix.length === 1) return { id: 'sport', values: ['All', 'Run', 'Bike', 'Swim'] };
+          if (prefix.length === 2) return { id: 'timeframe', values: TIMEFRAME_OPTIONS[prefix[0].value].map(option => option.key) };
+          return null;
+        },
+        values => {
+          selectedTimeframeByAggregation[values.aggregation] = values.timeframe;
+          setAggregationLevel(values.aggregation, false);
+          setSportFilter(values.sport, false);
+          renderDashboard();
+        }
+      );
     }
 
     function setBtnActive(btnId) {

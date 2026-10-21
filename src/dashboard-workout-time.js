@@ -112,6 +112,34 @@
       }
     }
 
+    function getWorkoutTimeKeyboardAdapter() {
+      return window.dashboardTabNavigation.createDashboardFilterAdapter(
+        () => ({ values: { granularity: selectedWorkoutTimeGranularity, sport: selectedWorkoutTimeSport,
+          start: workoutTimeDateRange.start, end: workoutTimeDateRange.end }, maxIndex: Math.max(0, workoutTimeDateCandidates.length - 1) }),
+        (prefix, snapshot) => {
+          if (prefix.length === 0) return { id: 'granularity', values: ['day', 'week', 'month', 'year'] };
+          if (prefix.length === 1) return { id: 'sport', values: ['All', 'Run', 'Bike', 'Swim'] };
+          if (prefix.length === 2) return { id: 'start', kind: 'stepped', min: 0, max: snapshot.maxIndex, step: 1 };
+          if (prefix.length === 3) return { id: 'end', kind: 'stepped', min: prefix[2].value, max: snapshot.maxIndex, step: 1 };
+          return null;
+        },
+        values => {
+          selectedWorkoutTimeGranularity = values.granularity;
+          selectedWorkoutTimeSport = values.sport;
+          workoutTimeDateRange = { start: values.start, end: values.end };
+          setWorkoutTimeButtonActive('workoutTimeGranularityBtn', `workoutTimeGranularityBtn${values.granularity.charAt(0).toUpperCase()}${values.granularity.slice(1)}`);
+          setWorkoutTimeButtonActive('workoutTimeSportBtn', `workoutTimeSportBtn${values.sport}`);
+          ['start', 'end'].forEach(boundary => {
+            const input = document.getElementById(boundary === 'start' ? 'workoutTimeDateStart' : 'workoutTimeDateEnd');
+            if (input) input.value = String(values[boundary]);
+          });
+          updateWorkoutTimeDateRangeLabel();
+          updateWorkoutTimeDateRangeTrack();
+          renderWorkoutTimeChart();
+        }
+      );
+    }
+
     function renderWorkoutTimeChart() {
       const canvas = document.getElementById('workoutTimeChart');
       if (!canvas || !window.workoutTimeUtils) return;

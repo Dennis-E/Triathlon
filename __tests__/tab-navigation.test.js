@@ -4,6 +4,11 @@ const {
   getNextVisualizationTab,
   getNextFilterChoiceIndex,
   getNextClippedTabScrollOffset,
+  createFilterDomain,
+  getFilterSelectionKey,
+  resolveDashboardArrowAction,
+  getAdjacentFilterCombination,
+  createDashboardFilterAdapter,
   setAvailableVisualizationTabs,
   setVisualizationTab,
   handleVisualizationTabKeydown
@@ -84,6 +89,141 @@ function createMockDocument() {
 }
 
 describe('tab navigation helpers', () => {
+  describe('complete filter combination traversal', () => {
+    const dimensions = [{ id: 'sport', values: ['All', 'Run'] }, { id: 'period', values: ['Year', 'Month', 'Week'] }];
+    const provider = prefix => dimensions[prefix.length] || null;
+    const selection = (sport, period) => [{ id: 'sport', value: sport }, { id: 'period', value: period }];
+    const cycle = [selection('All', 'Year'), selection('All', 'Month'), selection('All', 'Week'), selection('Run', 'Year'), selection('Run', 'Month'), selection('Run', 'Week')];
+
+    it.each([0, 1, 2, 3, 4, 5])('visits all six views exactly once in both directions from %i', start => {
+      [1, -1].forEach(direction => {
+        let current = cycle[start];
+        for (let offset = 1; offset <= cycle.length; offset += 1) {
+          const next = getAdjacentFilterCombination({ selection: current }, direction, provider);
+          expect(next).toEqual(cycle[(start + offset * direction + 12) % cycle.length]);
+          expect(getAdjacentFilterCombination({ selection: next }, -direction, provider)).toEqual(current);
+          current = next;
+        }
+      });
+    });
+
+    it('completes dependent suffixes canonically rather than retaining old values', () => {
+      const dependent = prefix => prefix.length === 0 ? { id: 'mode', values: ['daily', 'yearly'] }
+        : prefix.length === 1 ? { id: 'period', values: prefix[0].value === 'daily' ? ['7d', '1m', 'all'] : ['3y', 'all'] } : null;
+      const current = [{ id: 'mode', value: 'daily' }, { id: 'period', value: 'all' }];
+      const next = getAdjacentFilterCombination({ selection: current }, 1, dependent);
+      expect(next).toEqual([{ id: 'mode', value: 'yearly' }, { id: 'period', value: '3y' }]);
+      expect(getAdjacentFilterCombination({ selection: next }, -1, dependent)).toEqual(current);
+    });
+
+    it('supports changing dimension counts and valid empty-result selections', () => {
+      const dependent = prefix => prefix.length === 0 ? { id: 'count', values: [1, 2] }
+        : prefix.length <= prefix[0].value ? { id: `word:${prefix.length}`, kind: 'boolean' } : null;
+      const current = [{ id: 'count', value: 1 }, { id: 'word:1', value: true }];
+      const next = getAdjacentFilterCombination({ selection: current }, 1, dependent);
+      expect(next).toEqual([{ id: 'count', value: 2 }, { id: 'word:1', value: false }, { id: 'word:2', value: false }]);
+      expect(getAdjacentFilterCombination({ selection: next }, -1, dependent)).toEqual(current);
+    });
+
+    it('uses constrained stepped domains to keep date start no later than end', () => {
+      const dates = prefix => prefix.length === 0 ? { id: 'start', kind: 'stepped', min: 0, max: 2, step: 1 }
+        : prefix.length === 1 ? { id: 'end', kind: 'stepped', min: prefix[0].value, max: 2, step: 1 } : null;
+      const current = [{ id: 'start', value: 1 }, { id: 'end', value: 2 }];
+      expect(getAdjacentFilterCombination({ selection: current }, 1, dates)).toEqual([{ id: 'start', value: 2 }, { id: 'end', value: 2 }]);
+    });
+
+    it('carries over 100 Boolean choices without bit masks or product allocation', () => {
+      const large = jest.fn(prefix => prefix.length < 100 ? { id: `word:${prefix.length}`, kind: 'boolean' } : null);
+      const current = Array.from({ length: 100 }, (_, index) => ({ id: `word:${index}`, value: true }));
+      const next = getAdjacentFilterCombination({ selection: current }, 1, large);
+      expect(next).toHaveLength(100);
+      expect(next.every(choice => choice.value === false)).toBe(true);
+      expect(large.mock.calls.length).toBeLessThan(1000);
+      expect(getAdjacentFilterCombination({ selection: next }, -1, large)).toEqual(current);
+    });
+
+    it('returns no alternative for fixed/no dimensions and invalid inputs', () => {
+      expect(getAdjacentFilterCombination({ selection: [] }, 1, () => null)).toBeNull();
+      expect(getAdjacentFilterCombination({ selection: [{ id: 'fixed', value: 'only' }] }, 1, prefix => prefix.length ? null : { id: 'fixed', values: ['only'] })).toBeNull();
+      expect(getAdjacentFilterCombination({ selection: cycle[0] }, 0, provider)).toBeNull();
+      expect(getAdjacentFilterCombination({ selection: selection('missing', 'Year') }, 1, provider)).toBeNull();
+    });
+
+    it('resolves a complete vertical action without changing the active dashboard', () => {
+      const action = resolveDashboardArrowAction('ArrowDown', { workspaceOwnsInput: true, inputOwner: 'workspace', activeTabId: 'totalDistance', snapshot: { selection: cycle[0] }, domainProvider: provider });
+      expect(action).toMatchObject({ axis: 'view', outcome: 'changed', cue: 'down', target: cycle[1] });
+    });
+  });
+
+  describe('workspace arrow actions', () => {
+    const context = { workspaceOwnsInput: true, inputOwner: 'workspace', activeTabId: 'totalDistance', availableTabs: ['totalDistance', 'equipment'] };
+
+    it('switches horizontally without any tab-focus condition', () => {
+      expect(resolveDashboardArrowAction('ArrowRight', context)).toMatchObject({ axis: 'dashboard', direction: 1, outcome: 'changed', target: 'equipment', preventDefault: true, cue: 'right' });
+      expect(resolveDashboardArrowAction('ArrowLeft', context).target).toBe('equipment');
+    });
+
+    it.each(['text', 'dialog', 'nativePopup', 'continuousNumeric', 'outside'])('preserves %s input ownership', inputOwner => {
+      expect(resolveDashboardArrowAction('ArrowRight', { ...context, inputOwner })).toMatchObject({ outcome: 'ignored', preventDefault: false });
+    });
+
+    it('does not report success for one or zero dashboards', () => {
+      expect(resolveDashboardArrowAction('ArrowRight', { ...context, availableTabs: ['totalDistance'] })).toMatchObject({ outcome: 'noop', cue: null });
+      expect(resolveDashboardArrowAction('ArrowLeft', { ...context, availableTabs: [] }).outcome).toBe('noop');
+    });
+
+    it('ignores shortcuts outside the workspace and leaves Tab alone', () => {
+      expect(resolveDashboardArrowAction('ArrowRight', { ...context, workspaceOwnsInput: false }).preventDefault).toBe(false);
+      expect(resolveDashboardArrowAction('Tab', context).outcome).toBe('ignored');
+    });
+  });
+
+  describe('finite filter contracts', () => {
+    it('reads live owner selections and commits one complete candidate', () => {
+      let values = { sport: 'Run' };
+      const commit = jest.fn(next => { values = next; });
+      const adapter = createDashboardFilterAdapter(() => ({ values }), prefix => prefix.length ? null : { id: 'sport', values: ['All', 'Run'] }, commit);
+      expect(adapter.readSnapshot().selection).toEqual([{ id: 'sport', value: 'Run' }]);
+      expect(adapter.applySelection([{ id: 'sport', value: 'All' }])).toBe(true);
+      expect(commit).toHaveBeenCalledTimes(1);
+      expect(adapter.readSnapshot().selection).toEqual([{ id: 'sport', value: 'All' }]);
+    });
+
+    it('keeps displayed single-choice order and Boolean order', () => {
+      const choices = createFilterDomain({ id: 'sport', kind: 'single', values: ['Run', 'All'] });
+      expect(choices.count).toBe(2);
+      expect(choices.at(0)).toBe('Run');
+      expect(choices.indexOf('All')).toBe(1);
+      const binary = createFilterDomain({ id: 'year:2026', kind: 'boolean' });
+      expect([binary.at(0), binary.at(1)]).toEqual([false, true]);
+    });
+
+    it('represents finite stepped domains without materializing their values', () => {
+      const domain = createFilterDomain({ id: 'date', kind: 'stepped', min: 2, max: 1000002, step: 2 });
+      expect(domain.count).toBe(500001);
+      expect(domain.at(2)).toBe(6);
+      expect(domain.indexOf(8)).toBe(3);
+      expect(domain.indexOf(7)).toBe(-1);
+      expect(domain.at(-1)).toBeUndefined();
+    });
+
+    it.each([
+      { id: 'date', kind: 'stepped', min: 0, max: Infinity, step: 1 },
+      { id: 'date', kind: 'stepped', min: 0, max: 2, step: 0 },
+      { id: 'date', kind: 'stepped', min: 0, max: 2.5, step: 1 },
+      { id: '', kind: 'boolean' },
+      { id: 'date', kind: 'continuous' }
+    ])('rejects invalid finite dimensions: %j', descriptor => {
+      expect(createFilterDomain(descriptor)).toBeNull();
+    });
+
+    it('uses typed ordered dimension identities rather than a numeric mask', () => {
+      const selection = [{ id: 'sport', value: 'All' }, { id: 'year:2026', value: false }];
+      expect(getFilterSelectionKey(selection)).toBe(JSON.stringify(selection.map(choice => [choice.id, choice.value])));
+      expect(getFilterSelectionKey(selection)).not.toBe(getFilterSelectionKey([{ id: 'sport', value: 'All' }, { id: 'year:2026', value: 'false' }]));
+    });
+  });
+
   describe('getNextClippedTabScrollOffset', () => {
     it('reveals the nearest partially clipped tab on the right without skipping', () => {
       const nextOffset = getNextClippedTabScrollOffset(

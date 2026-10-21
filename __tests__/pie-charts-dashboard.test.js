@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -8,6 +9,17 @@ const dashboardExport = fs.readFileSync(path.join(ROOT, 'src', 'dashboard-export
 const { getTabDisplayTitle, generateExportFilename } = require('../src/export-utils');
 
 describe('Pie Charts dashboard contract', () => {
+  it('applies grouping, measure, sport and palette as one keyboard view', () => {
+    const owner = vm.createContext({ window: { dashboardTabNavigation: require('../src/tab-navigation') }, document: { getElementById: () => null }, processedActivities: [] });
+    vm.runInContext(pieDashboard, owner);
+    owner.renderPieCharts = jest.fn();
+    const adapter = owner.getPieChartsKeyboardAdapter();
+    expect(adapter.readSnapshot().selection.map(choice => choice.value)).toEqual(['sport', 'count', 'All', 'fire']);
+    adapter.applySelection([{ id: 'dimension', value: 'pace' }, { id: 'measure', value: 'distance' }, { id: 'sport', value: 'Run' }, { id: 'palette', value: 'monochrome-blue' }]);
+    expect(owner.renderPieCharts).toHaveBeenCalledTimes(1);
+    expect(adapter.readSnapshot().selection.map(choice => choice.value)).toEqual(['pace', 'distance', 'Run', 'monochrome-blue']);
+  });
+
   it('provides all dimension, measure, sport and colour scheme controls', () => {
     ['Sport', 'Duration', 'Pace', 'Equipment', 'Length', 'Power'].forEach(name => {
       expect(html).toContain(`id="pieDimensionBtn${name}"`);

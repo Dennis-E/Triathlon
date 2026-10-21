@@ -73,7 +73,7 @@ function harness() {
   vm.createContext(sandbox);
   const stateSource = fs.readFileSync(path.join(__dirname, '../src/dashboard-state.js'), 'utf8');
   const heatmapSource = fs.readFileSync(path.join(__dirname, '../src/dashboard-heatmap.js'), 'utf8');
-  vm.runInContext(`${stateSource}\n${heatmapSource}\nthis.heatmapTestApi = { renderHeatmap, setHeatmapSportFilter };`, sandbox);
+  vm.runInContext(`${stateSource}\n${heatmapSource}\nselectedVisualizationTab = 'heatmap'; this.heatmapTestApi = { renderHeatmap, setHeatmapSportFilter };`, sandbox);
   const api = sandbox.heatmapTestApi;
 
   function setDataset(dataset, tracks) {
@@ -92,10 +92,36 @@ function harness() {
     await Promise.resolve();
   }
 
-  return { map, elements, renders, boundsFits, sizeInvalidations, setDataset, render, filter };
+  return { sandbox, map, elements, renders, boundsFits, sizeInvalidations, setDataset, render, filter };
 }
 
 describe('heatmap viewport lifecycle', () => {
+  it('exposes only sport as a keyboard dimension and renders one final selection', async () => {
+    const h = harness();
+    h.sandbox.window.dashboardTabNavigation = require('../src/tab-navigation');
+    h.setDataset({ id: 'keyboard' }, { run1: 'Run', bike1: 'Bike' });
+    const adapter = h.sandbox.getHeatmapKeyboardAdapter();
+    expect(adapter.readSnapshot().selection).toEqual([{ id: 'sport', value: 'All' }]);
+    adapter.applySelection([{ id: 'sport', value: 'Bike' }]);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(h.renders).toHaveLength(1);
+    expect(Object.keys(h.renders[0].segments)).toEqual(['bike1']);
+  });
+
+  it('discards a delayed map load after an explicitly simulated tab revision', async () => {
+    const h = harness();
+    h.setDataset({ id: 'delayed' }, { run1: 'Run' });
+    let finishLoad;
+    h.sandbox.ensureLeafletLoaded = () => new Promise(resolve => { finishLoad = resolve; });
+    const pending = h.render();
+    vm.runInContext("selectedVisualizationTab = 'equipment'; advanceDashboardRevision();", h.sandbox);
+    finishLoad();
+    await pending;
+    expect(h.renders).toHaveLength(0);
+    expect(h.boundsFits).toHaveLength(0);
+  });
+
   it('fits a dataset once, then preserves center and zoom through sport filters and Heatmap tab renders', async () => {
     const h = harness();
     h.setDataset({ id: 'first' }, { run1: 'Run', bike1: 'Bike' });

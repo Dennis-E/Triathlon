@@ -142,6 +142,12 @@
     if (!elements.canvas) return;
     const included = topWords.filter(entry => selectedWords.get(entry.word) !== false);
     const version = beginCloudRender();
+    const source = processedActivities;
+    const viewKey = () => JSON.stringify([Number(elements.slider && elements.slider.value),
+      topWords.map(entry => [entry.word, selectedWords.get(entry.word) !== false])]);
+    const token = typeof captureDashboardRenderToken === 'function' ? captureDashboardRenderToken('wordcloud', viewKey()) : null;
+    const isCurrent = () => version === renderVersion && source === processedActivities &&
+      (token === null || isDashboardRenderTokenCurrent(token, viewKey()));
     const unavailable = !window.WordCloud || typeof window.WordCloud !== 'function' || !window.WordCloud.isSupported;
     setVisible(elements.unavailableState, unavailable && included.length > 0);
     setVisible(elements.emptyState, !unavailable && included.length === 0 && rankedWords.length > 0);
@@ -170,20 +176,20 @@
     };
 
     const onWordDrawn = event => {
-      if (version !== renderVersion || !event.detail) return;
+      if (!isCurrent() || !event.detail) return;
       const item = event.detail.item;
       const word = Array.isArray(item) ? item[0] : item && item.word;
       if (event.detail.drawn && word) drawnWords.add(word);
     };
     const onWordcloudStop = () => {
       cleanupListeners();
-      if (version !== renderVersion) return;
+      if (!isCurrent()) { finishCloudRender(version, false, false); return; }
       renderUnplacedNotice(elements, included.filter(entry => !drawnWords.has(entry.word)).map(entry => entry.word));
       finishCloudRender(version, true, drawnWords.size > 0);
     };
     const onWordcloudAbort = () => {
       cleanupListeners();
-      if (version !== renderVersion) return;
+      if (!isCurrent()) { finishCloudRender(version, false, false); return; }
       renderUnplacedNotice(elements, included.filter(entry => !drawnWords.has(entry.word)).map(entry => entry.word));
       finishCloudRender(version, false, false);
     };
@@ -254,6 +260,38 @@
     });
   }
 
+  function synchronizeWordcloudSource() {
+    if (activitySource !== processedActivities) {
+      activitySource = processedActivities;
+      rankedWords = window.wordcloudUtils.getWordFrequencies(processedActivities);
+      selectedWords = new Map();
+    }
+  }
+
+  function getWordcloudKeyboardAdapter() {
+    return window.dashboardTabNavigation.createDashboardFilterAdapter(
+      () => {
+        synchronizeWordcloudSource();
+        const slider = getElements().slider;
+        return { values: { count: Number(slider && slider.value) || 50,
+          ...Object.fromEntries(rankedWords.map(entry => [`word:${entry.word}`, selectedWords.get(entry.word) !== false])) },
+          words: rankedWords.slice(), includeWords: rankedListExpanded };
+      },
+      (prefix, snapshot) => {
+        if (prefix.length === 0) return { id: 'count', kind: 'stepped', min: 10, max: 100, step: 1 };
+        const words = snapshot.includeWords ? window.wordcloudUtils.getTopWords(snapshot.words, prefix[0].value) : [];
+        const word = words[prefix.length - 1];
+        return word ? { id: `word:${word.word}`, kind: 'boolean' } : null;
+      },
+      values => {
+        const elements = getElements();
+        if (elements.slider) elements.slider.value = String(values.count);
+        Object.entries(values).filter(([id]) => id.startsWith('word:')).forEach(([id, enabled]) => selectedWords.set(id.slice(5), enabled));
+        updateWordCount(elements);
+      }
+    );
+  }
+
   function renderWordcloud() {
     const elements = getElements();
     initializeControls(elements);
@@ -264,11 +302,7 @@
       return;
     }
 
-    if (activitySource !== processedActivities) {
-      activitySource = processedActivities;
-      rankedWords = window.wordcloudUtils.getWordFrequencies(processedActivities);
-      selectedWords = new Map();
-    }
+    synchronizeWordcloudSource();
 
     setVisible(elements.emptyState, rankedWords.length === 0);
     setVisible(elements.unavailableState, false);
@@ -285,6 +319,13 @@
   window.renderWordcloud = renderWordcloud;
   window.toggleWordcloudList = toggleWordcloudList;
   window.wordcloudDashboard = {
+    getKeyboardAdapter: getWordcloudKeyboardAdapter,
+    cancelPendingRender() {
+      if (!resolveCurrentRender) return;
+      const version = beginCloudRender();
+      if (window.WordCloud && typeof window.WordCloud.stop === 'function') window.WordCloud.stop();
+      finishCloudRender(version, false, false);
+    },
     hasExportableCloud() {
       return currentRenderComplete && currentRenderHasContent;
     },

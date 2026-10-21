@@ -68,7 +68,142 @@
 
     const NAVIGATION_CUE_DURATION_MS = 900;
     const navigationCueTimeouts = new Map();
-    let pendingNativeFilterKey = null;
+    let nativeSelectSession = null;
+
+    function registerDashboardFilterAdapter(tabId, adapter) {
+      if (!window.dashboardTabNavigation.TAB_ORDER.includes(tabId) || !adapter || typeof adapter.readSnapshot !== 'function') return;
+      dashboardFilterAdapters.set(tabId, adapter);
+    }
+
+    function readDashboardFilterSnapshot(tabId = selectedVisualizationTab) {
+      const adapter = dashboardFilterAdapters.get(tabId);
+      const snapshot = adapter ? adapter.readSnapshot() : { selection: [] };
+      return {
+        ...snapshot,
+        tabId,
+        dataRevision: dashboardDataRevision,
+        canonicalKey: window.dashboardTabNavigation.getFilterSelectionKey(snapshot.selection)
+      };
+    }
+
+    function initializeDashboardFilterAdapters() {
+      const factories = {
+        totalDistance: () => getTotalDistanceKeyboardAdapter(),
+        paceMetrics: () => getPaceMetricsKeyboardAdapter(),
+        equipment: () => getEquipmentKeyboardAdapter(),
+        equipmentTimeline: () => getEquipmentTimelineKeyboardAdapter(),
+        heatmap: () => getHeatmapKeyboardAdapter(),
+        distributions: () => getDistributionsKeyboardAdapter(),
+        workoutTime: () => getWorkoutTimeKeyboardAdapter(),
+        trainingCalendar: () => getTrainingCalendarKeyboardAdapter(),
+        wordcloud: () => window.wordcloudDashboard.getKeyboardAdapter(),
+        pieCharts: () => getPieChartsKeyboardAdapter()
+      };
+      window.dashboardTabNavigation.TAB_ORDER.forEach(tabId => {
+        if (dashboardFilterAdapters.has(tabId)) return;
+        registerDashboardFilterAdapter(tabId, factories[tabId] ? factories[tabId]() : {
+          readSnapshot: () => ({ selection: [] }), getDomainProvider: () => () => null, applySelection: () => false
+        });
+      });
+    }
+
+    function getDashboardNavigationContext(target = document.activeElement) {
+      const workspace = document.getElementById('dashboardMain');
+      const panelId = window.dashboardTabNavigation.TAB_PANEL_IDS[selectedVisualizationTab];
+      const panel = panelId && document.getElementById(panelId);
+      const workspaceOwnsInput = !!(workspace && !workspace.classList.contains('hidden') &&
+        panel && !panel.closest('.hidden') && target && workspace.contains(target));
+      let inputOwner = workspaceOwnsInput ? 'workspace' : 'outside';
+      const visibleModal = Array.from(document.querySelectorAll('[aria-modal="true"]'))
+        .some(dialog => !dialog.closest('.hidden, [hidden]'));
+      if (visibleModal ||
+          (target && target.closest && target.closest('[role="dialog"][aria-modal="true"]'))) {
+        inputOwner = 'dialog';
+      } else if (target && target.closest && target.closest('textarea, [contenteditable]:not([contenteditable="false"]), input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"])')) {
+        inputOwner = 'text';
+      } else if (target && target.tagName === 'SELECT') {
+        let open;
+        try { open = target.matches(':open'); } catch (_) { open = nativeSelectSession && nativeSelectSession.control === target; }
+        if (open) inputOwner = 'nativePopup';
+      } else if (target && target.type === 'range' && !window.dashboardTabNavigation.createFilterDomain({
+        id: 'native-range', kind: 'stepped', min: Number(target.min), max: Number(target.max), step: Number(target.step || 1)
+      })) {
+        inputOwner = 'continuousNumeric';
+      }
+      return { workspaceOwnsInput, inputOwner, activeTabId: selectedVisualizationTab, availableTabs: availableVisualizationTabs };
+    }
+
+    function trackNativeSelectInteraction(event) {
+      const control = event.target;
+      if (!control || control.tagName !== 'SELECT') return;
+      if (event.type === 'pointerdown') {
+        nativeSelectSession = { control, openingClick: true };
+      } else if (event.type === 'click' && nativeSelectSession && nativeSelectSession.control === control) {
+        if (nativeSelectSession.openingClick) nativeSelectSession.openingClick = false;
+        else nativeSelectSession = null;
+      } else if (event.type === 'change' || event.type === 'focusout' || event.key === 'Escape' || event.key === 'Tab') {
+        nativeSelectSession = null;
+      } else if (event.type === 'keydown' && (event.key === 'Enter' || event.key === ' ' || (event.altKey && event.key === 'ArrowDown'))) {
+        nativeSelectSession = nativeSelectSession && nativeSelectSession.control === control ? null : { control, openingClick: false };
+      }
+    }
+
+    function handleDashboardArrowKeydown(event) {
+      if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey ||
+          !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+      const context = getDashboardNavigationContext(event.target);
+      if (!context.workspaceOwnsInput || context.inputOwner !== 'workspace') return;
+      event.preventDefault();
+      let action;
+      let chartDefaults = null;
+      let chartAnimation;
+      try {
+        if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+          const adapter = dashboardFilterAdapters.get(selectedVisualizationTab);
+          context.snapshot = readDashboardFilterSnapshot();
+          context.domainProvider = adapter ? adapter.getDomainProvider(context.snapshot) : () => null;
+        }
+        action = window.dashboardTabNavigation.resolveDashboardArrowAction(event.key, context);
+        if (action.outcome !== 'changed') return;
+        chartDefaults = typeof Chart !== 'undefined' ? Chart.defaults : null;
+        if (chartDefaults) {
+          chartAnimation = chartDefaults.animation;
+          chartDefaults.animation = false;
+        }
+        if (action.axis === 'dashboard') {
+          setVisualizationTab(action.target);
+        } else {
+          if (context.snapshot.dataRevision !== dashboardDataRevision || context.activeTabId !== selectedVisualizationTab) return;
+          advanceDashboardRevision();
+          if (!dashboardFilterAdapters.get(selectedVisualizationTab).applySelection(action.target)) return;
+        }
+      } catch (error) {
+        console.warn('Could not change dashboard view', error);
+        return;
+      } finally {
+        if (chartDefaults) chartDefaults.animation = chartAnimation;
+      }
+      flashNavigationCue(action.cue);
+      const workspace = document.getElementById('dashboardMain');
+      if (!workspace.contains(document.activeElement) || (document.activeElement.closest && document.activeElement.closest('.hidden'))) {
+        workspace.setAttribute('tabindex', '-1');
+        workspace.focus({ preventScroll: true });
+      }
+      updateNavigationCueAvailability();
+    }
+
+    function invalidateDashboardFilterEvent(event) {
+      const target = event.target;
+      const context = getDashboardNavigationContext(target);
+      const panelId = window.dashboardTabNavigation.TAB_PANEL_IDS[selectedVisualizationTab];
+      const panel = panelId && document.getElementById(panelId);
+      if (!context.workspaceOwnsInput || !panel || !panel.contains(target)) return;
+      const nativeInput = event.type === 'input' && target.matches && target.matches('select, input[type="range"], input[type="checkbox"], input[type="radio"]');
+      const filterClick = event.type === 'click' && target.closest && target.closest('button') && target.closest('[data-keyboard-filter-group]');
+      if (!nativeInput && !filterClick) return;
+      advanceDashboardRevision();
+      window.setTimeout(() => updateNavigationCueAvailability(), 0);
+    }
 
     function flashNavigationCue(direction) {
       const cue = document.querySelector(`[data-navigation-cue="${direction}"]`);
@@ -86,35 +221,20 @@
     }
 
     function updateNavigationCueAvailability(target = document.activeElement) {
-      const focusedTab = target && target.closest && target.closest('[role="tab"]');
-      const activePanelId = window.dashboardTabNavigation.TAB_PANEL_IDS[selectedVisualizationTab];
-      const activePanel = activePanelId && document.getElementById(activePanelId);
-      const dashboardMain = document.getElementById('dashboardMain');
-      const dashboardVisible = dashboardMain && !dashboardMain.classList.contains('hidden');
-      const activePanelVisible = dashboardVisible && activePanel && !activePanel.closest('.hidden');
-      const modalOwnsFocus = target && target.closest && target.closest('[role="dialog"][aria-modal="true"]');
-      const nativeControl = target && target.closest && target.closest('select, input[type="range"], input[type="checkbox"]');
-      const focusedNativeFilter = target && target.matches && target.matches('select, input[type="range"]') &&
-        activePanelVisible && activePanel.contains(target) && !target.disabled;
-      const navigationFilterGroup = activePanelVisible && !modalOwnsFocus && !nativeControl
-        ? getKeyboardFilterGroup(target, activePanel)
-        : null;
+      const context = getDashboardNavigationContext(target);
+      try {
+        const adapter = dashboardFilterAdapters.get(selectedVisualizationTab);
+        context.snapshot = readDashboardFilterSnapshot();
+        context.domainProvider = adapter ? adapter.getDomainProvider(context.snapshot) : () => null;
+      } catch (_) {
+        context.snapshot = { selection: [] };
+        context.domainProvider = () => null;
+      }
       document.querySelectorAll('[data-navigation-cue]').forEach(cue => {
         const direction = cue.dataset.navigationCue;
-        let available = dashboardVisible && (direction === 'left' || direction === 'right') ? !!focusedTab : false;
-        if ((direction === 'up' || direction === 'down') && navigationFilterGroup) {
-          available = navigationFilterGroup.querySelectorAll('button:not(:disabled)').length > 1;
-        } else if ((direction === 'up' || direction === 'down') && focusedNativeFilter) {
-          if (target.tagName === 'SELECT') {
-            available = target.options.length > 1 &&
-              (direction === 'down' ? target.selectedIndex < target.options.length - 1 : target.selectedIndex > 0);
-          } else {
-            const value = Number(target.value);
-            const bound = Number(direction === 'down' ? target.max : target.min);
-            available = Number.isFinite(value) && Number.isFinite(bound) &&
-              (direction === 'down' ? value < bound : value > bound);
-          }
-        }
+        const key = `Arrow${direction.charAt(0).toUpperCase()}${direction.slice(1)}`;
+        let available = false;
+        try { available = window.dashboardTabNavigation.resolveDashboardArrowAction(key, context).outcome === 'changed'; } catch (_) { available = false; }
         cue.classList.toggle('is-available', available);
       });
     }
@@ -124,87 +244,10 @@
         button.getAttribute('aria-checked') === 'true' || button.classList.contains('bg-indigo-600');
     }
 
-    function getKeyboardFilterGroup(target, activePanel) {
-      if (!activePanel) return null;
-
-      const button = target && target.closest && target.closest('button');
-      const targetGroup = button && button.closest('[data-keyboard-filter-group]');
-      const eligibleGroups = Array.from(activePanel.querySelectorAll('[data-keyboard-filter-group]'))
-        .filter(group => !group.closest('.hidden') && group.querySelectorAll('button:not(:disabled)').length > 1);
-      const focusedGroup = targetGroup && activePanel.contains(button) && eligibleGroups.includes(targetGroup)
-        ? targetGroup : null;
-
-      if (focusedGroup) return focusedGroup;
-      if (targetGroup && activePanel.contains(button)) return null;
-      return eligibleGroups[0] || null;
-    }
-
-    function handleDashboardFilterKeydown(event) {
-      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
-      const target = event.target;
-      if (target && target.closest && (
-        target.closest('select, input[type="range"], input[type="checkbox"]') ||
-        target.closest('[role="dialog"][aria-modal="true"]')
-      )) return;
-
-      const dashboardMain = document.getElementById('dashboardMain');
-      if (!dashboardMain || dashboardMain.classList.contains('hidden')) return;
-
-      const activePanelId = window.dashboardTabNavigation.TAB_PANEL_IDS[selectedVisualizationTab];
-      const activePanel = activePanelId && document.getElementById(activePanelId);
-      if (!activePanel || activePanel.closest('.hidden')) return;
-
-      event.preventDefault();
-      const filterGroup = getKeyboardFilterGroup(event.target, activePanel);
-      if (!filterGroup) return;
-
-      const button = event.target.closest && event.target.closest('button');
-      const choices = Array.from(filterGroup.querySelectorAll('button:not(:disabled)'));
-      const currentIndex = choices.findIndex(choice => isActiveFilterChoice(choice));
-      const direction = event.key === 'ArrowDown' ? 1 : -1;
-      const nextIndex = window.dashboardTabNavigation.getNextFilterChoiceIndex(
-        choices.length,
-        currentIndex,
-        direction
-      );
-      if (nextIndex === null || choices[nextIndex] === button) return;
-
-      const nextChoice = choices[nextIndex];
-      nextChoice.click();
-      const refreshedChoices = Array.from(filterGroup.querySelectorAll('button:not(:disabled)'));
-      const focusedChoice = refreshedChoices.includes(nextChoice) ? nextChoice : refreshedChoices[nextIndex];
-      refreshedChoices.forEach(choice => choice.setAttribute('aria-pressed', choice === focusedChoice ? 'true' : 'false'));
-      if (focusedChoice) focusedChoice.focus({ preventScroll: true });
-      flashNavigationCue(direction > 0 ? 'down' : 'up');
-    }
-
-    function readNativeFilterValue(control) {
-      if (control.type === 'checkbox' || control.type === 'radio') return `${control.checked}:${control.value}`;
-      return control.value;
-    }
-
-    function trackNativeFilterKeydown(event) {
-      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
-      const control = event.target;
-      if (!control || !control.matches || !control.matches('select, input[type="range"]')) return;
-      const activePanelId = window.dashboardTabNavigation.TAB_PANEL_IDS[selectedVisualizationTab];
-      const activePanel = activePanelId && document.getElementById(activePanelId);
-      if (!activePanel || !activePanel.contains(control)) return;
-      pendingNativeFilterKey = { control, value: readNativeFilterValue(control), key: event.key };
-    }
-
-    function finishNativeFilterKey(event) {
-      if (!pendingNativeFilterKey || event.target !== pendingNativeFilterKey.control) return;
-      const { control, value, key } = pendingNativeFilterKey;
-      pendingNativeFilterKey = null;
-      if (readNativeFilterValue(control) !== value) {
-        flashNavigationCue(key === 'ArrowDown' ? 'down' : 'up');
-      }
-    }
-
-    document.addEventListener('keydown', trackNativeFilterKeydown, true);
-    document.addEventListener('keyup', finishNativeFilterKey, true);
-    document.addEventListener('keydown', handleDashboardFilterKeydown);
+    document.addEventListener('keydown', handleDashboardArrowKeydown, true);
+    document.addEventListener('input', invalidateDashboardFilterEvent, true);
+    document.addEventListener('click', invalidateDashboardFilterEvent, true);
+    ['pointerdown', 'click', 'change', 'focusout', 'keydown'].forEach(type => document.addEventListener(type, trackNativeSelectInteraction, true));
     document.addEventListener('focusin', event => updateNavigationCueAvailability(event.target));
     document.addEventListener('focusout', () => window.setTimeout(() => updateNavigationCueAvailability(), 0));
     document.addEventListener('click', event => {
@@ -224,6 +267,7 @@
     });
 
     function initializeVisualizationTabScroller() {
+      initializeDashboardFilterAdapters();
       const viewport = document.getElementById('visualizationTabsViewport');
       const tablist = viewport && viewport.querySelector('[role="tablist"]');
       const leftButton = document.getElementById('visualizationTabsScrollLeft');
@@ -243,6 +287,7 @@
     }
 
     function refreshVisualizationTabs() {
+      advanceDashboardRevision(true);
       visualizationAvailabilityByTab = window.visualizationAvailability.getVisualizationAvailability(processedActivities, {
         fitBestEffortsByActivityId,
         gpsTracksByActivityId
@@ -271,6 +316,10 @@
         availableTabs: availableVisualizationTabs
       });
       if (nextTab) {
+        if (selectedVisualizationTab === 'wordcloud' && nextTab !== 'wordcloud' && window.wordcloudDashboard) {
+          window.wordcloudDashboard.cancelPendingRender();
+        }
+        advanceDashboardRevision();
         selectedVisualizationTab = nextTab;
         if (nextTab === 'paceMetrics') {
           renderPaceMetricsChart();
@@ -296,10 +345,12 @@
           window.lifetimeStatisticsDashboard.render();
         }
         ensureVisualizationTabVisible(nextTab);
+        updateNavigationCueAvailability();
       }
     }
 
     function handleVisualizationTabKeydown(event, currentTab) {
+      if (event.key !== 'Tab') return;
       const nextTab = window.dashboardTabNavigation.handleVisualizationTabKeydown(event, currentTab, {
         onTabChange: setVisualizationTab,
         availableTabs: availableVisualizationTabs
@@ -326,6 +377,9 @@
 
     // Landing page navigation
     function goToLanding() {
+      if (window.wordcloudDashboard) window.wordcloudDashboard.cancelPendingRender();
+      advanceDashboardRevision();
+      nativeSelectSession = null;
       document.getElementById('landingPage').classList.remove('hidden');
       document.getElementById('dashboardMain').classList.add('hidden');
     }

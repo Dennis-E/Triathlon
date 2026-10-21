@@ -2,6 +2,22 @@ let selectedTrainingCalendarSport = 'All';
 let selectedTrainingCalendarPalette = 'green';
 let trainingCalendarModel = null;
 
+function getTrainingCalendarKeyboardAdapter() {
+  return window.dashboardTabNavigation.createDashboardFilterAdapter(
+    () => ({ values: { palette: selectedTrainingCalendarPalette, sport: selectedTrainingCalendarSport },
+      sports: ['All', ...window.trainingCalendarUtils.getAvailableSports(processedActivities)] }),
+    (prefix, snapshot) => prefix.length === 0 ? { id: 'palette', values: ['green', 'blue', 'fire'] }
+      : prefix.length === 1 ? { id: 'sport', values: snapshot.sports } : null,
+    values => {
+      selectedTrainingCalendarPalette = values.palette;
+      selectedTrainingCalendarSport = values.sport;
+      setTrainingCalendarPaletteButtonActive(values.palette);
+      setTrainingCalendarSportButtonActive(values.sport);
+      renderTrainingCalendar();
+    }
+  );
+}
+
 function formatTrainingCalendarDuration(seconds) {
   if (!Number.isFinite(seconds)) return null;
   const minutes = Math.round(seconds / 60);

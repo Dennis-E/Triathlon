@@ -19,3 +19,27 @@
       yearly: '5y'
     };
     let chartInstance = null;
+    let dashboardNavigationRevision = 0;
+    let dashboardDataRevision = 0;
+    const dashboardFilterAdapters = new Map();
+
+    function advanceDashboardRevision(dataChanged = false) {
+      dashboardNavigationRevision += 1;
+      if (dataChanged) dashboardDataRevision += 1;
+    }
+
+    function captureDashboardRenderToken(tabId, canonicalKey) {
+      return {
+        tabId,
+        canonicalKey,
+        navigationRevision: dashboardNavigationRevision,
+        dataRevision: dashboardDataRevision,
+        activities: processedActivities
+      };
+    }
+
+    function isDashboardRenderTokenCurrent(token, canonicalKey) {
+      return token.tabId === selectedVisualizationTab && token.canonicalKey === canonicalKey &&
+        token.navigationRevision === dashboardNavigationRevision && token.dataRevision === dashboardDataRevision &&
+        token.activities === processedActivities;
+    }

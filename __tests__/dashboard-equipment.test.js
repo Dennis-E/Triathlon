@@ -81,6 +81,21 @@ function harness(width = 768) {
 }
 
 describe('equipment chart', () => {
+  it('applies mileage and timeline combinations independently with one render each', () => {
+    const h = harness();
+    h.sandbox.window.dashboardTabNavigation = require('../src/tab-navigation');
+    h.sandbox.renderEquipmentChart = jest.fn();
+    h.sandbox.renderEquipmentTimeline = jest.fn();
+    const mileage = h.sandbox.getEquipmentKeyboardAdapter();
+    const timeline = h.sandbox.getEquipmentTimelineKeyboardAdapter();
+    mileage.applySelection([{ id: 'metric', value: 'pace' }, { id: 'category', value: 'Shoes' }]);
+    expect(mileage.readSnapshot().selection.map(choice => choice.value)).toEqual(['pace', 'Shoes']);
+    expect(timeline.readSnapshot().selection.map(choice => choice.value)).toEqual(['continuous', 'All']);
+    expect(h.sandbox.renderEquipmentChart).toHaveBeenCalledTimes(1);
+    timeline.applySelection([{ id: 'mode', value: 'activities' }, { id: 'category', value: 'Bikes' }]);
+    expect(h.sandbox.renderEquipmentTimeline).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps wrapper, fallback and explanation inside the export capture element', () => {
     const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
     const wrapper = html.match(/<div id="equipmentChartWrapper"[^>]*>([\s\S]*?)\n          <\/div>/)[1];

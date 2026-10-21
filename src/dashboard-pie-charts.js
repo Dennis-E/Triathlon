@@ -132,6 +132,28 @@
       }
     }
 
+    function getPieChartsKeyboardAdapter() {
+      return window.dashboardTabNavigation.createDashboardFilterAdapter(
+        () => ({ values: { dimension: selectedPieDimension, measure: selectedPieMeasure, sport: selectedPieSport, palette: selectedPieColorScheme } }),
+        prefix => prefix.length === 0 ? { id: 'dimension', values: Object.keys(PIE_DIMENSION_BUTTON_IDS) }
+          : prefix.length === 1 ? { id: 'measure', values: Object.keys(PIE_MEASURE_BUTTON_IDS) }
+            : prefix.length === 2 ? { id: 'sport', values: Object.keys(PIE_SPORT_BUTTON_IDS) }
+              : prefix.length === 3 ? { id: 'palette', values: ['fire', 'monochrome-blue'] } : null,
+        values => {
+          selectedPieDimension = values.dimension;
+          selectedPieMeasure = values.measure;
+          selectedPieSport = values.sport;
+          selectedPieColorScheme = values.palette;
+          setPieButtonGroupActive(PIE_DIMENSION_BUTTON_IDS, values.dimension);
+          setPieButtonGroupActive(PIE_MEASURE_BUTTON_IDS, values.measure);
+          setPieButtonGroupActive(PIE_SPORT_BUTTON_IDS, values.sport);
+          const palette = document.getElementById('pieChartsColorScheme');
+          if (palette) palette.value = values.palette;
+          renderPieCharts();
+        }
+      );
+    }
+
     function renderPieCharts() {
       const canvas = document.getElementById('pieChartsCanvas');
       const captureArea = document.getElementById('pieChartsCaptureArea');

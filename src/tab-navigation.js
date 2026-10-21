@@ -85,6 +85,141 @@ function getNextVisualizationTab(currentTab, direction, availableTabs = TAB_ORDE
   return orderedAvailableTabs[nextIndex];
 }
 
+function createFilterDomain(descriptor) {
+  if (!descriptor || typeof descriptor.id !== 'string' || !descriptor.id) return null;
+  const kind = descriptor.kind || 'single';
+  if (!['single', 'boolean', 'stepped'].includes(kind)) return null;
+  if (kind === 'stepped') {
+    const { min, max, step } = descriptor;
+    const intervals = (max - min) / step;
+    if (![min, max, step].every(Number.isFinite) || step <= 0 || max < min ||
+        !Number.isSafeInteger(intervals) || intervals >= Number.MAX_SAFE_INTEGER) return null;
+    const count = intervals + 1;
+    return {
+      id: descriptor.id,
+      count,
+      at: index => Number.isInteger(index) && index >= 0 && index < count ? min + index * step : undefined,
+      indexOf: value => {
+        const index = (value - min) / step;
+        return Number.isFinite(value) && Number.isInteger(index) && index >= 0 && index < count ? index : -1;
+      }
+    };
+  }
+  const values = kind === 'boolean' ? [false, true] : descriptor.values;
+  if (!Array.isArray(values) || new Set(values).size !== values.length ||
+      values.some(value => !['string', 'number', 'boolean'].includes(typeof value) ||
+        (typeof value === 'number' && !Number.isFinite(value)))) return null;
+  return {
+    id: descriptor.id,
+    count: values.length,
+    at: index => Number.isInteger(index) && index >= 0 && index < values.length ? values[index] : undefined,
+    indexOf: value => values.indexOf(value)
+  };
+}
+
+function getFilterSelectionKey(selection) {
+  return JSON.stringify(selection.map(choice => [choice.id, choice.value]));
+}
+
+function createDashboardFilterAdapter(readState, describeDimension, commit) {
+  return {
+    readSnapshot() {
+      const state = readState();
+      const selection = [];
+      let descriptor = describeDimension(selection, state);
+      while (descriptor !== null) {
+        const domain = createFilterDomain(descriptor);
+        if (!domain || domain.count === 0 || selection.some(choice => choice.id === domain.id)) throw new Error('Invalid dashboard filter domain');
+        const value = state.values[domain.id];
+        selection.push({ id: domain.id, value: domain.indexOf(value) >= 0 ? value : domain.at(0) });
+        descriptor = describeDimension(selection, state);
+      }
+      return { ...state, selection };
+    },
+    getDomainProvider(snapshot) {
+      return prefix => describeDimension(prefix, snapshot);
+    },
+    applySelection(candidate) {
+      const snapshot = this.readSnapshot();
+      const provider = this.getDomainProvider(snapshot);
+      const prefix = [];
+      if (!Array.isArray(candidate)) return false;
+      for (const choice of candidate) {
+        const domain = createFilterDomain(provider(prefix));
+        if (!choice || !domain || domain.id !== choice.id || domain.indexOf(choice.value) < 0) return false;
+        prefix.push(choice);
+      }
+      if (provider(prefix) !== null || getFilterSelectionKey(candidate) === getFilterSelectionKey(snapshot.selection)) return false;
+      commit(Object.fromEntries(candidate.map(choice => [choice.id, choice.value])), snapshot);
+      return true;
+    }
+  };
+}
+
+function getAdjacentFilterCombination(snapshot, direction, domainProvider) {
+  if (!snapshot || !Array.isArray(snapshot.selection) || ![-1, 1].includes(direction) || typeof domainProvider !== 'function') return null;
+  const current = snapshot.selection;
+  const prefix = [];
+  for (const choice of current) {
+    const domain = createFilterDomain(domainProvider(prefix));
+    if (!choice || !domain || domain.id !== choice.id || domain.indexOf(choice.value) < 0 || prefix.some(item => item.id === choice.id)) return null;
+    prefix.push(choice);
+  }
+  if (domainProvider(prefix) !== null) return null;
+
+  function complete(candidate) {
+    const descriptor = domainProvider(candidate);
+    if (descriptor === null) return candidate.slice();
+    const domain = createFilterDomain(descriptor);
+    if (!domain || candidate.some(choice => choice.id === domain.id)) return null;
+    for (let index = direction > 0 ? 0 : domain.count - 1; index >= 0 && index < domain.count; index += direction) {
+      candidate.push({ id: domain.id, value: domain.at(index) });
+      const leaf = complete(candidate);
+      candidate.pop();
+      if (leaf) return leaf;
+    }
+    return null;
+  }
+
+  for (let depth = current.length - 1; depth >= 0; depth -= 1) {
+    const candidate = current.slice(0, depth);
+    const domain = createFilterDomain(domainProvider(candidate));
+    for (let index = domain.indexOf(current[depth].value) + direction; index >= 0 && index < domain.count; index += direction) {
+      candidate.push({ id: domain.id, value: domain.at(index) });
+      const leaf = complete(candidate);
+      candidate.pop();
+      if (leaf) return leaf;
+    }
+  }
+  const wrapped = complete([]);
+  return wrapped && getFilterSelectionKey(wrapped) !== getFilterSelectionKey(current) ? wrapped : null;
+}
+
+function resolveDashboardArrowAction(key, context = {}) {
+  const direction = key === 'ArrowLeft' || key === 'ArrowUp' ? -1 : 1;
+  const horizontal = key === 'ArrowLeft' || key === 'ArrowRight';
+  const ignored = { outcome: 'ignored', preventDefault: false, target: null, cue: null };
+  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(key) ||
+      !context.workspaceOwnsInput || context.inputOwner !== 'workspace') return ignored;
+  const action = { axis: horizontal ? 'dashboard' : 'view', direction, outcome: 'noop', preventDefault: true, target: null, cue: null };
+  if (horizontal) {
+    const next = getNextVisualizationTab(context.activeTabId, direction, context.availableTabs || []);
+    if (next && next !== context.activeTabId) {
+      action.target = next;
+      action.outcome = 'changed';
+      action.cue = direction > 0 ? 'right' : 'left';
+    }
+  } else {
+    const next = getAdjacentFilterCombination(context.snapshot, direction, context.domainProvider);
+    if (next) {
+      action.target = next;
+      action.outcome = 'changed';
+      action.cue = direction > 0 ? 'down' : 'up';
+    }
+  }
+  return action;
+}
+
 function getNextFilterChoiceIndex(choiceCount, currentIndex, direction, controlType = 'single-choice') {
   if (controlType !== 'single-choice' || !Number.isInteger(choiceCount) || choiceCount < 2 ||
       !Number.isInteger(currentIndex) || currentIndex < 0 || currentIndex >= choiceCount ||
@@ -289,6 +424,11 @@ if (typeof module !== 'undefined' && module.exports) {
     setAvailableVisualizationTabs,
     getAvailableVisualizationTab,
     getNextVisualizationTab,
+    createFilterDomain,
+    getFilterSelectionKey,
+    getAdjacentFilterCombination,
+    createDashboardFilterAdapter,
+    resolveDashboardArrowAction,
     getNextFilterChoiceIndex,
     getNextClippedTabScrollOffset,
     setVisualizationTab,
@@ -305,6 +445,11 @@ if (typeof window !== 'undefined') {
     setAvailableVisualizationTabs,
     getAvailableVisualizationTab,
     getNextVisualizationTab,
+    createFilterDomain,
+    getFilterSelectionKey,
+    getAdjacentFilterCombination,
+    createDashboardFilterAdapter,
+    resolveDashboardArrowAction,
     getNextFilterChoiceIndex,
     getNextClippedTabScrollOffset,
     setVisualizationTab,

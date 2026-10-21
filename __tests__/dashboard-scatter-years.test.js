@@ -89,6 +89,22 @@ function harness(years = [2020, 2021, 2022, 2023, 2024, 2025]) {
 }
 
 describe('Pace vs years controls', () => {
+  it('applies date/year/trend selections atomically and derives years from the candidate prefix', () => {
+    const h = harness([2025, 2026]);
+    h.sandbox.window.dashboardTabNavigation = require('../src/tab-navigation');
+    const adapter = h.sandbox.getPaceMetricsKeyboardAdapter();
+    const snapshot = adapter.readSnapshot();
+    expect(snapshot.selection.map(choice => choice.id)).toEqual(['sport', 'metric', 'start', 'end', 'year:2025', 'year:2026', 'trendline']);
+    const provider = adapter.getDomainProvider(snapshot);
+    expect(provider([{ id: 'sport', value: 'Swim' }, { id: 'metric', value: 'heartRate' }, { id: 'start', value: 0 }, { id: 'end', value: 3 }])).toBeNull();
+    const before = h.charts.length;
+    const candidate = snapshot.selection.map(choice => choice.id.startsWith('year:') || choice.id === 'trendline' ? { ...choice, value: false } : choice);
+    expect(adapter.applySelection(candidate)).toBe(true);
+    expect(h.charts).toHaveLength(before + 1);
+    expect([...h.boxes().values()].every(({ checkbox }) => !checkbox.checked)).toBe(true);
+    expect(adapter.readSnapshot().selection.at(-1).value).toBe(false);
+  });
+
   it('toggles exactly one year on normal click, including label clicks and keyboard-style activation', () => {
     const h = harness();
     const chart = h.charts.at(-1);

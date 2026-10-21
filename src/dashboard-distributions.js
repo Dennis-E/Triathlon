@@ -152,6 +152,41 @@
       renderDistributionsChart();
     }
 
+    function getDistributionsKeyboardAdapter() {
+      return window.dashboardTabNavigation.createDashboardFilterAdapter(
+        () => ({ values: { metric: selectedDistributionsMetric, sport: selectedDistributionsSportFilter,
+          mode: selectedDistributionsDisplayMode, palette: selectedDistributionsColorScheme,
+          start: distributionsDateRange.start, end: distributionsDateRange.end }, maxIndex: Math.max(0, distributionsDateCandidates.length - 1) }),
+        (prefix, snapshot) => {
+          if (prefix.length === 0) return { id: 'metric', values: Object.keys(DISTRIBUTIONS_METRIC_CONFIG) };
+          if (prefix.length === 1) return { id: 'sport', values: prefix[0].value === 'elevation' ? ['All', 'Run', 'Bike'] : ['All', 'Run', 'Bike', 'Swim'] };
+          if (prefix.length === 2) return { id: 'mode', values: prefix[1].value === 'All' ? ['line'] : ['histogram', 'line'] };
+          if (prefix.length === 3) return { id: 'palette', values: ['fire', 'monochrome-blue'] };
+          if (prefix.length === 4) return { id: 'start', kind: 'stepped', min: 0, max: snapshot.maxIndex, step: 1 };
+          if (prefix.length === 5) return { id: 'end', kind: 'stepped', min: prefix[4].value, max: snapshot.maxIndex, step: 1 };
+          return null;
+        },
+        values => {
+          selectedDistributionsMetric = values.metric;
+          selectedDistributionsSportFilter = values.sport;
+          selectedDistributionsDisplayMode = values.mode;
+          selectedDistributionsColorScheme = values.palette;
+          distributionsDateRange = { start: values.start, end: values.end };
+          setDistributionsBtnActive('distributionsMetricBtn', `distributionsMetricBtn${values.metric.charAt(0).toUpperCase()}${values.metric.slice(1)}`);
+          setDistributionsBtnActive('distributionsSportBtn', `distributionsSportBtn${values.sport}`);
+          setDistributionsBtnActive('distributionsModeBtn', `distributionsModeBtn${values.mode.charAt(0).toUpperCase()}${values.mode.slice(1)}`);
+          document.querySelectorAll('#vizPanelDistributions select').forEach(control => { control.value = values.palette; });
+          ['start', 'end'].forEach(boundary => {
+            const input = document.getElementById(boundary === 'start' ? 'distributionsDateStart' : 'distributionsDateEnd');
+            if (input) input.value = String(values[boundary]);
+          });
+          updateDistributionsDateRangeLabel();
+          updateDistributionsDateRangeTrack();
+          renderDistributionsChart();
+        }
+      );
+    }
+
     function renderDistributionsChart() {
       const canvas = document.getElementById('distributionsChart');
       const emptyState = document.getElementById('distributionsEmptyState');

@@ -247,6 +247,50 @@ function renderPaceMetricsTrendControls(points, trendDatasets) {
   controls.appendChild(trendLabel);
 }
 
+function getPaceMetricsKeyboardAdapter() {
+  return window.dashboardTabNavigation.createDashboardFilterAdapter(
+    () => ({ values: { sport: selectedPaceMetricsSport, metric: selectedPaceMetric,
+      start: scatterDateRange.start, end: scatterDateRange.end, trendline: paceMetricsShowTrendLines,
+      ...Object.fromEntries(processedActivities.filter(activity => activity.date instanceof Date && !Number.isNaN(activity.date.getTime()))
+        .map(activity => [`year:${activity.date.getFullYear()}`, !disabledPaceMetricsYears.has(activity.date.getFullYear())])) },
+      dates: scatterDateCandidates.slice(), activities: processedActivities.slice() }),
+    (prefix, snapshot) => {
+      const maxIndex = Math.max(0, snapshot.dates.length - 1);
+      if (prefix.length === 0) return { id: 'sport', values: ['Run', 'Bike', 'Swim'] };
+      if (prefix.length === 1) return { id: 'metric', values: ['heartRate', 'cadence', 'elevationGain', 'distance'] };
+      if (prefix.length === 2) return { id: 'start', kind: 'stepped', min: 0, max: maxIndex, step: 1 };
+      if (prefix.length === 3) return { id: 'end', kind: 'stepped', min: prefix[2].value, max: maxIndex, step: 1 };
+      const minDate = snapshot.dates[prefix[2].value] || null;
+      const maxDate = snapshot.dates[prefix[3].value] ? new Date(snapshot.dates[prefix[3].value]) : null;
+      if (maxDate) maxDate.setHours(23, 59, 59, 999);
+      const points = window.scatterUtils.getPaceMetricPoints(snapshot.activities, { sport: prefix[0].value, metric: prefix[1].value, minDate, maxDate });
+      const years = Array.from(new Set(points.map(point => point.year))).sort((first, second) => first - second);
+      const index = prefix.length - 4;
+      if (index < years.length) return { id: `year:${years[index]}`, kind: 'boolean' };
+      if (years.length && index === years.length) return { id: 'trendline', kind: 'boolean' };
+      return null;
+    },
+    values => {
+      selectedPaceMetricsSport = values.sport;
+      selectedPaceMetric = values.metric;
+      scatterDateRange = { start: values.start, end: values.end };
+      Object.entries(values).filter(([id]) => id.startsWith('year:')).forEach(([id, enabled]) => {
+        const year = Number(id.slice(5));
+        if (enabled) disabledPaceMetricsYears.delete(year);
+        else disabledPaceMetricsYears.add(year);
+      });
+      if (typeof values.trendline === 'boolean') paceMetricsShowTrendLines = values.trendline;
+      ['start', 'end'].forEach(boundary => {
+        const input = document.getElementById(boundary === 'start' ? 'scatterDateStart' : 'scatterDateEnd');
+        if (input) input.value = String(values[boundary]);
+      });
+      updateScatterDateRangeLabel();
+      updateScatterDateRangeTrack();
+      renderPaceMetricsChart();
+    }
+  );
+}
+
 function renderPaceMetricsChart() {
   const canvas = document.getElementById('paceMetricsChart');
   const emptyState = document.getElementById('paceMetricsEmptyState');

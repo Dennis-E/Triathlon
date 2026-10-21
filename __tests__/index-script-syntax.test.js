@@ -15,7 +15,268 @@
 
 const fs   = require('fs');
 const path = require('path');
+const vm = require('vm');
 const importExperienceCatalog = require('../src/import-experience-catalog');
+
+describe('dashboard render revisions', () => {
+  function stateContext() {
+    const context = vm.createContext({ Map });
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/dashboard-state.js'), 'utf8'), context);
+    return context;
+  }
+
+  it('invalidates tokens on navigation and data revisions without copying filter state', () => {
+    const context = stateContext();
+    vm.runInContext("selectedVisualizationTab = 'heatmap'", context);
+    const token = vm.runInContext("captureDashboardRenderToken('heatmap', 'All')", context);
+    context.token = token;
+    expect(vm.runInContext("isDashboardRenderTokenCurrent(token, 'All')", context)).toBe(true);
+    vm.runInContext('advanceDashboardRevision()', context);
+    expect(vm.runInContext("isDashboardRenderTokenCurrent(token, 'All')", context)).toBe(false);
+    expect(vm.runInContext('dashboardNavigationRevision', context)).toBe(1);
+    expect(vm.runInContext('dashboardDataRevision', context)).toBe(0);
+    vm.runInContext('advanceDashboardRevision(true)', context);
+    expect(vm.runInContext('dashboardDataRevision', context)).toBe(1);
+  });
+
+  it('rejects changed tabs, selections, and data even before event integration', () => {
+    const context = stateContext();
+    context.token = vm.runInContext("captureDashboardRenderToken('totalDistance', 'before')", context);
+    expect(vm.runInContext("isDashboardRenderTokenCurrent(token, 'after')", context)).toBe(false);
+    vm.runInContext("selectedVisualizationTab = 'equipment'", context);
+    expect(vm.runInContext("isDashboardRenderTokenCurrent(token, 'before')", context)).toBe(false);
+  });
+
+  it('registers adapters without reading a later owner until a snapshot is requested', () => {
+    const context = stateContext();
+    context.window = { dashboardTabNavigation: require('../src/tab-navigation') };
+    const source = fs.readFileSync(path.join(__dirname, '../src/dashboard-tabs.js'), 'utf8');
+    const start = source.indexOf('function registerDashboardFilterAdapter(');
+    expect(start).toBeGreaterThan(-1);
+    vm.runInContext(source.slice(start, source.indexOf('function flashNavigationCue(', start)), context);
+    context.read = jest.fn(() => ({ selection: [{ id: 'sport', value: 'All' }] }));
+    vm.runInContext("registerDashboardFilterAdapter('totalDistance', { readSnapshot: read })", context);
+    expect(context.read).not.toHaveBeenCalled();
+    const snapshot = vm.runInContext("readDashboardFilterSnapshot('totalDistance')", context);
+    expect(context.read).toHaveBeenCalledTimes(1);
+    expect(snapshot).toMatchObject({ tabId: 'totalDistance', dataRevision: 0, selection: [{ id: 'sport', value: 'All' }] });
+    expect(snapshot.canonicalKey).toBe('[["sport","All"]]');
+  });
+});
+
+function createArrowWorkspace() {
+  const navigation = require('../src/tab-navigation');
+  const listeners = {};
+  const root = {
+    classList: { contains: () => false },
+    contains: target => target && target.inside !== false,
+    setAttribute: jest.fn(),
+    focus: jest.fn()
+  };
+  const panel = { closest: () => null, contains: root.contains, querySelectorAll: () => [] };
+  const document = {
+    activeElement: null,
+    getElementById: id => id === 'dashboardMain' ? root : id.startsWith('vizPanel') ? panel : null,
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    addEventListener: (name, handler) => { (listeners[name] ||= []).push(handler); }
+  };
+  const context = vm.createContext({ document, window: { dashboardTabNavigation: navigation, setTimeout: jest.fn(), clearTimeout: jest.fn() }, Map, Set, onTabChange: jest.fn() });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/dashboard-state.js'), 'utf8'), context);
+  vm.runInContext("availableVisualizationTabs = ['totalDistance', 'equipment']; function setVisualizationTab(tab) { selectedVisualizationTab = tab; onTabChange(tab); }", context);
+  const source = fs.readFileSync(path.join(__dirname, '../src/dashboard-tabs.js'), 'utf8');
+  vm.runInContext(source.slice(source.indexOf('const NAVIGATION_CUE_DURATION_MS'), source.indexOf('function initializeVisualizationTabScroller(')), context);
+  const target = (kind = 'button', inside = true) => ({
+    inside, tagName: ['select', 'openSelect'].includes(kind) ? 'SELECT' : 'BUTTON', type: kind,
+    closest: selector => selector.includes('dialog') ? null : selector.includes('textarea') && kind === 'text' ? {} : null,
+    matches: selector => selector === ':open' ? kind === 'openSelect' : selector.includes('select') && kind === 'select',
+    disabled: false
+  });
+  const dispatch = (key, element = target(), extra = {}) => {
+    document.activeElement = element;
+    const event = { key, target: element, preventDefault: jest.fn(function () { this.defaultPrevented = true; }), ...extra };
+    (listeners.keydown || []).forEach(handler => handler(event));
+    return event;
+  };
+  return { context, document, root, listeners, target, dispatch };
+}
+
+describe('finite dashboard owner adapters', () => {
+  function loadOwner(file, extraWindow = {}) {
+    const context = vm.createContext({
+      window: { dashboardTabNavigation: require('../src/tab-navigation'), ...extraWindow },
+      document: { getElementById: () => null, querySelectorAll: () => [] },
+      processedActivities: []
+    });
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), context);
+    return context;
+  }
+
+  it('keeps valid empty distributions but excludes impossible sport/mode combinations', () => {
+    const owner = loadOwner('dashboard-distributions.js');
+    owner.renderDistributionsChart = jest.fn();
+    const adapter = owner.getDistributionsKeyboardAdapter();
+    const snapshot = adapter.readSnapshot();
+    const provider = adapter.getDomainProvider(snapshot);
+    expect(provider([{ id: 'metric', value: 'elevation' }]).values).not.toContain('Swim');
+    expect(provider([{ id: 'metric', value: 'length' }, { id: 'sport', value: 'All' }]).values).toEqual(['line']);
+    const candidate = snapshot.selection.map(choice => choice.id === 'palette' ? { ...choice, value: 'monochrome-blue' } : choice);
+    expect(adapter.applySelection(candidate)).toBe(true);
+    expect(owner.renderDistributionsChart).toHaveBeenCalledTimes(1);
+    expect(adapter.applySelection(candidate)).toBe(false);
+  });
+
+  it('keeps workout date bounds atomic and finite', () => {
+    const owner = loadOwner('dashboard-workout-time.js', { workoutTimeUtils: require('../src/workout-time-utils') });
+    owner.renderWorkoutTimeChart = jest.fn();
+    vm.runInContext('workoutTimeDateCandidates = [new Date(2025, 0, 1), new Date(2026, 0, 1)]', owner);
+    const adapter = owner.getWorkoutTimeKeyboardAdapter();
+    const snapshot = adapter.readSnapshot();
+    const candidate = snapshot.selection.map(choice => ['start', 'end'].includes(choice.id) ? { ...choice, value: 1 } : choice);
+    expect(adapter.applySelection(candidate)).toBe(true);
+    expect(owner.renderWorkoutTimeChart).toHaveBeenCalledTimes(1);
+    const invalid = candidate.map(choice => choice.id === 'end' ? { ...choice, value: 0 } : choice);
+    expect(adapter.applySelection(invalid)).toBe(false);
+    expect(owner.renderWorkoutTimeChart).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses only available calendar sports and the existing palette filter', () => {
+    const owner = loadOwner('dashboard-training-calendar.js', { trainingCalendarUtils: require('../src/training-calendar-utils') });
+    owner.processedActivities = [{ sport: 'Run', date: new Date(2026, 0, 1) }];
+    owner.renderTrainingCalendar = jest.fn();
+    const adapter = owner.getTrainingCalendarKeyboardAdapter();
+    const snapshot = adapter.readSnapshot();
+    expect(snapshot.selection.map(choice => choice.id)).toEqual(['palette', 'sport']);
+    expect(adapter.getDomainProvider(snapshot)([{ id: 'palette', value: 'green' }]).values).toEqual(['All', 'Run']);
+    adapter.applySelection([{ id: 'palette', value: 'blue' }, { id: 'sport', value: 'Run' }]);
+    expect(owner.renderTrainingCalendar).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('workspace arrow dispatch', () => {
+  function installView(workspace, onCommit = () => {}) {
+    let values = { sport: 'All', period: 'Year' };
+    const commit = jest.fn(next => { onCommit(); values = next; });
+    const adapter = require('../src/tab-navigation').createDashboardFilterAdapter(
+      () => ({ values }),
+      prefix => prefix.length === 0 ? { id: 'sport', values: ['All', 'Run'] }
+        : prefix.length === 1 ? { id: 'period', values: ['Year', 'Month', 'Week'] } : null,
+      commit
+    );
+    workspace.context.adapter = adapter;
+    vm.runInContext("registerDashboardFilterAdapter('totalDistance', adapter)", workspace.context);
+    return { adapter, commit };
+  }
+
+  it('commits one complete view then switches right without refocusing', () => {
+    const workspace = createArrowWorkspace();
+    const { adapter, commit } = installView(workspace);
+    const focused = workspace.target();
+    workspace.dispatch('ArrowDown', focused);
+    expect(adapter.readSnapshot().selection.map(choice => choice.value)).toEqual(['All', 'Month']);
+    expect(commit).toHaveBeenCalledTimes(1);
+    workspace.dispatch('ArrowRight', focused);
+    expect(workspace.context.onTabChange).toHaveBeenCalledWith('equipment');
+  });
+
+  it('avoids a one-second chart animation during keyboard commits and restores defaults', () => {
+    const workspace = createArrowWorkspace();
+    const animation = { duration: 1000 };
+    workspace.context.Chart = { defaults: { animation } };
+    let animationDuringCommit;
+    installView(workspace, () => { animationDuringCommit = workspace.context.Chart.defaults.animation; });
+    workspace.dispatch('ArrowDown');
+    expect(animationDuringCommit).toBe(false);
+    expect(workspace.context.Chart.defaults.animation).toBe(animation);
+  });
+
+  it('suppresses scrolling without success feedback for an unfiltered view', () => {
+    const workspace = createArrowWorkspace();
+    const event = workspace.dispatch('ArrowDown');
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(workspace.context.onTabChange).not.toHaveBeenCalled();
+    expect(workspace.context.window.setTimeout).not.toHaveBeenCalled();
+  });
+
+  it('shows cue availability independently of filter focus and ends feedback after 900ms', () => {
+    jest.useFakeTimers();
+    try {
+      const workspace = createArrowWorkspace();
+      installView(workspace);
+      const classes = new Set();
+      const cue = { dataset: { navigationCue: 'down' }, classList: {
+        add: name => classes.add(name), remove: name => classes.delete(name), toggle: (name, value) => value ? classes.add(name) : classes.delete(name)
+      } };
+      workspace.document.querySelector = selector => selector.startsWith('[data-navigation-cue=') ? cue : null;
+      workspace.document.querySelectorAll = selector => selector === '[data-navigation-cue]' ? [cue] : [];
+      workspace.context.window.setTimeout = setTimeout;
+      workspace.context.window.clearTimeout = clearTimeout;
+      workspace.dispatch('ArrowDown');
+      expect(classes.has('is-active')).toBe(true);
+      expect(classes.has('is-available')).toBe(true);
+      jest.advanceTimersByTime(900);
+      expect(classes.has('is-active')).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it.each(['button', 'chart', 'select', 'checkbox'])('switches from %s focus without returning to a tab', kind => {
+    const workspace = createArrowWorkspace();
+    const event = workspace.dispatch('ArrowRight', workspace.target(kind));
+    expect(workspace.context.onTabChange).toHaveBeenCalledTimes(1);
+    expect(workspace.context.onTabChange).toHaveBeenCalledWith('equipment');
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps excluded contexts and modified/composing input untouched', () => {
+    const workspace = createArrowWorkspace();
+    [workspace.dispatch('ArrowRight', workspace.target('text')),
+      workspace.dispatch('ArrowRight', workspace.target('button', false)),
+      workspace.dispatch('ArrowRight', workspace.target('openSelect')),
+      workspace.dispatch('ArrowRight', workspace.target(), { ctrlKey: true }),
+      workspace.dispatch('ArrowRight', workspace.target(), { isComposing: true })].forEach(event => {
+      expect(event.preventDefault).not.toHaveBeenCalled();
+    });
+    expect(workspace.context.onTabChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps open dialogs in control even before their focus transition', () => {
+    const workspace = createArrowWorkspace();
+    workspace.document.querySelector = selector => selector.startsWith('[aria-modal=') ? {} : null;
+    workspace.document.querySelectorAll = selector => selector === '[aria-modal="true"]' ? [{ closest: () => null }] : [];
+    const event = workspace.dispatch('ArrowRight');
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(workspace.context.onTabChange).not.toHaveBeenCalled();
+  });
+
+  it('does not let a modal inside a hidden ancestor disable workspace arrows', () => {
+    const workspace = createArrowWorkspace();
+    const hiddenDialog = { closest: () => ({ hidden: true }) };
+    workspace.document.querySelector = selector => selector.startsWith('[aria-modal=') ? hiddenDialog : null;
+    workspace.document.querySelectorAll = selector => selector === '[aria-modal="true"]' ? [hiddenDialog] : [];
+    workspace.dispatch('ArrowRight');
+    expect(workspace.context.onTabChange).toHaveBeenCalledWith('equipment');
+  });
+
+  it('leaves all selected state unchanged when a domain provider fails', () => {
+    const workspace = createArrowWorkspace();
+    const { adapter, commit } = installView(workspace);
+    adapter.getDomainProvider = () => () => { throw new Error('synthetic domain failure'); };
+    const event = workspace.dispatch('ArrowDown');
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(commit).not.toHaveBeenCalled();
+    expect(adapter.readSnapshot().selection.map(choice => choice.value)).toEqual(['All', 'Year']);
+  });
+
+  it('invalidates pending output before a manual finite-filter input is applied', () => {
+    const workspace = createArrowWorkspace();
+    const control = workspace.target('select');
+    const before = vm.runInContext('dashboardNavigationRevision', workspace.context);
+    (workspace.listeners.input || []).forEach(handler => handler({ type: 'input', target: control }));
+    expect(vm.runInContext('dashboardNavigationRevision', workspace.context)).toBe(before + 1);
+  });
+});
 
 // The dashboard orchestration files extracted from the former big inline script
 // (specs/022-modularize-inline-script). Order matches the required <script src>
@@ -207,55 +468,33 @@ describe('index.html inline script syntax', () => {
     expect(html).toContain('No visualizations are available for this import.');
     expect(inlineCode).not.toContain('updateActiveVisualizationFilterSummary');
     expect(inlineCode).toContain('refreshVisualizationTabs');
-    expect(inlineCode).toContain("document.addEventListener('keydown', handleDashboardFilterKeydown)");
+    expect(inlineCode).toContain("document.addEventListener('keydown', handleDashboardArrowKeydown, true)");
+    expect(inlineCode).toContain("if (event.key !== 'Tab') return;");
   });
 
-  it('limits Up/Down stepping to the focused choice in the active visible panel', () => {
-    expect(inlineCode).toContain("const button = event.target.closest && event.target.closest('button')");
-    expect(inlineCode).toContain("const targetGroup = button && button.closest('[data-keyboard-filter-group]')");
-    expect(inlineCode).toContain('activePanel.contains(button)');
-    expect(inlineCode).toContain("group.closest('.hidden')");
-    expect(inlineCode).toContain('if (nextIndex === null || choices[nextIndex] === button) return;');
-    expect(inlineCode).toContain('event.preventDefault();');
-    expect(inlineCode).toContain('nextChoice.click();');
-    expect(inlineCode).toContain('const focusedChoice = refreshedChoices.includes(nextChoice) ? nextChoice : refreshedChoices[nextIndex];');
-    expect(inlineCode).toContain("flashNavigationCue(direction > 0 ? 'down' : 'up')");
-    expect(inlineCode).toContain("const clickedChoice = target && target.closest && target.closest('button')");
-    expect(inlineCode).toContain('group.contains(clickedChoice)');
-    expect(inlineCode).toContain("choice === clickedChoice ? 'true' : 'false'");
+  it('uses complete owner snapshots rather than clicking a focused filter group', () => {
+    expect(inlineCode).toContain('context.snapshot = readDashboardFilterSnapshot()');
+    expect(inlineCode).toContain('adapter.getDomainProvider(context.snapshot)');
+    expect(inlineCode).toContain('applySelection(action.target)');
+    expect(inlineCode).not.toContain('nextChoice.click();');
+    expect(inlineCode).not.toContain('function getKeyboardFilterGroup');
   });
 
-  it('uses the active visualization filter fallback outside modal and native-control contexts', () => {
-    expect(inlineCode).toContain("const dashboardMain = document.getElementById('dashboardMain')");
-    expect(inlineCode).toContain("if (!dashboardMain || dashboardMain.classList.contains('hidden')) return;");
-    expect(inlineCode).toContain("target.closest('select, input[type=\"range\"], input[type=\"checkbox\"]')");
-    expect(inlineCode).toContain("target.closest('[role=\"dialog\"][aria-modal=\"true\"]')");
-    expect(inlineCode).toContain('function getKeyboardFilterGroup(target, activePanel)');
-    expect(inlineCode).toContain("activePanel.querySelectorAll('[data-keyboard-filter-group]')");
-    expect(inlineCode).toContain('const filterGroup = getKeyboardFilterGroup(event.target, activePanel);');
-    expect(inlineCode).toContain('focusedChoice.focus({ preventScroll: true });');
-    expect(inlineCode).toContain('if (focusedGroup) return focusedGroup;');
-    expect(inlineCode).toContain('if (targetGroup && activePanel.contains(button)) return null;');
-    expect(inlineCode).toContain('return eligibleGroups[0] || null;');
-
-    const handlerStart = inlineCode.indexOf('function handleDashboardFilterKeydown');
-    const handledDefault = inlineCode.indexOf('event.preventDefault();', handlerStart);
-    const noFilter = inlineCode.indexOf('if (!filterGroup) return;', handlerStart);
-    const cueActivation = inlineCode.indexOf("flashNavigationCue(direction > 0 ? 'down' : 'up')", handlerStart);
-    expect(handledDefault).toBeGreaterThan(handlerStart);
-    expect(noFilter).toBeGreaterThan(handledDefault);
-    expect(cueActivation).toBeGreaterThan(noFilter);
+  it('uses the same ownership and action resolver for both axes and cues', () => {
+    expect(inlineCode).toContain('getDashboardNavigationContext');
+    expect(inlineCode).toContain("context.inputOwner !== 'workspace'");
+    expect(inlineCode).toContain("target.matches(':open')");
+    expect(inlineCode).toContain('workspace.focus({ preventScroll: true })');
+    expect(html).toContain('id="dashboardMain" tabindex="-1"');
+    expect(inlineCode).toContain("resolveDashboardArrowAction(key, context).outcome === 'changed'");
   });
 
-  it('shows vertical cue availability for the selected navigation filter only', () => {
-    expect(inlineCode).toContain("const modalOwnsFocus = target && target.closest && target.closest('[role=\"dialog\"][aria-modal=\"true\"]')");
-    expect(inlineCode).toContain("const nativeControl = target && target.closest && target.closest('select, input[type=\"range\"], input[type=\"checkbox\"]')");
-    expect(inlineCode).toContain('const activePanelVisible = dashboardVisible && activePanel && !activePanel.closest(\'.hidden\')');
-    expect(inlineCode).toContain('const navigationFilterGroup = activePanelVisible && !modalOwnsFocus && !nativeControl');
-    expect(inlineCode).toContain('getKeyboardFilterGroup(target, activePanel)');
-    expect(inlineCode).toContain('direction === \'up\' || direction === \'down\'');
-    expect(inlineCode).toContain('navigationFilterGroup.querySelectorAll(\'button:not(:disabled)\').length > 1');
-    expect(inlineCode).toContain('focusedNativeFilter');
+  it('registers every existing dashboard and provides empty adapters for unfiltered tabs', () => {
+    ['getTotalDistanceKeyboardAdapter', 'getPaceMetricsKeyboardAdapter', 'getEquipmentKeyboardAdapter', 'getEquipmentTimelineKeyboardAdapter',
+      'getHeatmapKeyboardAdapter', 'getDistributionsKeyboardAdapter', 'getWorkoutTimeKeyboardAdapter', 'getTrainingCalendarKeyboardAdapter',
+      'getPieChartsKeyboardAdapter', 'window.wordcloudDashboard.getKeyboardAdapter()'].forEach(owner => expect(inlineCode).toContain(owner));
+    expect(inlineCode).toContain('window.dashboardTabNavigation.TAB_ORDER.forEach(tabId');
+    expect(inlineCode).toContain('getDomainProvider: () => () => null');
   });
 
   it('provides four decorative direction cues with reduced-motion support and timed feedback', () => {
@@ -282,9 +521,9 @@ describe('index.html inline script syntax', () => {
   });
 
   it('activates cues only after successful changes and retriggers them immediately', () => {
-    const filterHandlerStart = inlineCode.indexOf('function handleDashboardFilterKeydown');
-    const noOpReturn = inlineCode.indexOf('if (nextIndex === null || choices[nextIndex] === button) return;', filterHandlerStart);
-    const filterCueCall = inlineCode.indexOf("flashNavigationCue(direction > 0 ? 'down' : 'up')", filterHandlerStart);
+    const filterHandlerStart = inlineCode.indexOf('function handleDashboardArrowKeydown');
+    const noOpReturn = inlineCode.indexOf("if (action.outcome !== 'changed') return;", filterHandlerStart);
+    const filterCueCall = inlineCode.indexOf('flashNavigationCue(action.cue)', filterHandlerStart);
     const cueFunctionStart = inlineCode.indexOf('function flashNavigationCue(direction)');
     const cueActivation = inlineCode.indexOf("cue.classList.add('is-active')", cueFunctionStart);
     const cueTimeout = inlineCode.indexOf('window.setTimeout(() => {', cueFunctionStart);

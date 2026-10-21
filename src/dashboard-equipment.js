@@ -207,7 +207,7 @@
       });
     }
 
-    function setEquipmentFilter(filter) {
+    function setEquipmentFilter(filter, render = true) {
       selectedEquipmentFilter = filter;
 
       document.querySelectorAll('[id^="equipmentBtn"]').forEach(btn => {
@@ -219,10 +219,10 @@
         activeButton.className = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25';
       }
 
-      renderEquipmentChart();
+      if (render) renderEquipmentChart();
     }
 
-    function setEquipmentMetric(metric) {
+    function setEquipmentMetric(metric, render = true) {
       selectedEquipmentMetric = metric;
 
       document.querySelectorAll('[id^="equipmentMetric"]').forEach(btn => {
@@ -234,10 +234,10 @@
         activeButton.className = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25';
       }
 
-      renderEquipmentChart();
+      if (render) renderEquipmentChart();
     }
 
-    function setEquipmentTimelineFilter(filter) {
+    function setEquipmentTimelineFilter(filter, render = true) {
       selectedEquipmentTimelineFilter = filter;
 
       document.querySelectorAll('[id^="equipmentTimelineBtn"]').forEach(btn => {
@@ -249,10 +249,10 @@
         activeButton.className = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25';
       }
 
-      renderEquipmentTimeline();
+      if (render) renderEquipmentTimeline();
     }
 
-    function setEquipmentTimelineMode(mode) {
+    function setEquipmentTimelineMode(mode, render = true) {
       selectedEquipmentTimelineMode = mode;
 
       const btnContinuous = document.getElementById('equipmentTimelineModeContinuous');
@@ -270,7 +270,33 @@
           : 'Individual activities per piece of equipment, ordered by most recently used';
       }
 
-      renderEquipmentTimeline();
+      if (render) renderEquipmentTimeline();
+    }
+
+    function getEquipmentKeyboardAdapter() {
+      return window.dashboardTabNavigation.createDashboardFilterAdapter(
+        () => ({ values: { metric: selectedEquipmentMetric, category: selectedEquipmentFilter } }),
+        prefix => prefix.length === 0 ? { id: 'metric', values: ['distance', 'pace', 'count', 'avgLength'] }
+          : prefix.length === 1 ? { id: 'category', values: ['All', 'Shoes', 'Bikes'] } : null,
+        values => {
+          setEquipmentMetric(values.metric, false);
+          setEquipmentFilter(values.category, false);
+          renderEquipmentChart();
+        }
+      );
+    }
+
+    function getEquipmentTimelineKeyboardAdapter() {
+      return window.dashboardTabNavigation.createDashboardFilterAdapter(
+        () => ({ values: { mode: selectedEquipmentTimelineMode, category: selectedEquipmentTimelineFilter } }),
+        prefix => prefix.length === 0 ? { id: 'mode', values: ['continuous', 'activities'] }
+          : prefix.length === 1 ? { id: 'category', values: ['All', 'Shoes', 'Bikes'] } : null,
+        values => {
+          setEquipmentTimelineMode(values.mode, false);
+          setEquipmentTimelineFilter(values.category, false);
+          renderEquipmentTimeline();
+        }
+      );
     }
 
     // ─── shared helpers ────────────────────────────────────────────────────────

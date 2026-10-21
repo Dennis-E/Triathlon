@@ -10,6 +10,19 @@ function loadDashboardCore() {
 }
 
 describe('dashboard core visualization readiness', () => {
+  it('applies complete distance views with candidate aggregation periods and one render', () => {
+    const dashboard = loadDashboardCore();
+    dashboard.window = { dashboardTabNavigation: require('../src/tab-navigation') };
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/dashboard-state.js'), 'utf8'), dashboard);
+    dashboard.document = { querySelectorAll: () => [], getElementById: () => null };
+    dashboard.renderDashboard = jest.fn();
+    const adapter = dashboard.getTotalDistanceKeyboardAdapter();
+    expect(adapter.getDomainProvider(adapter.readSnapshot())([{ id: 'aggregation', value: 'yearly' }, { id: 'sport', value: 'All' }]).values).toEqual(['3y', '5y', '10y', 'all']);
+    adapter.applySelection([{ id: 'aggregation', value: 'yearly' }, { id: 'sport', value: 'Run' }, { id: 'timeframe', value: '3y' }]);
+    expect(adapter.readSnapshot().selection.map(choice => choice.value)).toEqual(['yearly', 'Run', '3y']);
+    expect(dashboard.renderDashboard).toHaveBeenCalledTimes(1);
+  });
+
   it('requires a valid date, supported sport, and positive distance for total distance', () => {
     const dashboard = loadDashboardCore();
 

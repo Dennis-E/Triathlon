@@ -64,6 +64,14 @@ The dashboard currently includes the following filters and controls:
 - Equipment category filters: All, Shoes, Bikes
 - Equipment timeline mode toggle: Continuous, Activities
 
+## Keyboard navigation
+
+- Left and Right switch between available dashboards, including after changing a filter, and wrap at either end.
+- Down and Up cycle forward and backward through valid combinations of the active dashboard's finite filters. The last displayed filter changes fastest; navigation wraps after the last combination.
+- Manual filter changes become the starting point for the next arrow action. A dashboard without alternative views does not change on Up/Down.
+- Text fields, open dialogs, expanded native selection popups, and continuous numeric editing keep their normal arrow-key behavior. Closed finite selectors and checkboxes do not block dashboard switching.
+- Existing Tab and Shift+Tab behavior is unchanged. Shortcuts apply only inside the active dashboard workspace.
+
 ## Alpha version
 
 This project is currently in alpha.

@@ -232,6 +232,14 @@
       }
     }
 
+    function getHeatmapKeyboardAdapter() {
+      return window.dashboardTabNavigation.createDashboardFilterAdapter(
+        () => ({ values: { sport: selectedHeatmapSportFilter } }),
+        prefix => prefix.length === 0 ? { id: 'sport', values: ['All', 'Run', 'Bike', 'Swim'] } : null,
+        values => setHeatmapSportFilter(values.sport)
+      );
+    }
+
     function setHeatmapSportFilter(sport) {
       hideHeatmapActivityTooltip();
       selectedHeatmapSportFilter = sport;
@@ -329,10 +337,18 @@
       maxLabel.textContent = guide.maxCount;
     }
 
+    let heatmapRenderRevision = 0;
+
     async function renderHeatmap() {
       const container = document.getElementById('heatmapMapContainer');
       const emptyState = document.getElementById('heatmapEmptyState');
       if (!container) return;
+      const revision = ++heatmapRenderRevision;
+      const token = captureDashboardRenderToken('heatmap', selectedHeatmapSportFilter);
+      const dataset = importedDataset;
+      const tracks = gpsTracksByActivityId;
+      const isCurrent = () => revision === heatmapRenderRevision && dataset === importedDataset && tracks === gpsTracksByActivityId &&
+        isDashboardRenderTokenCurrent(token, selectedHeatmapSportFilter);
 
       if (heatmapViewportDataset !== importedDataset) {
         heatmapViewportDataset = importedDataset;
@@ -366,6 +382,7 @@
       try {
         await ensureLeafletLoaded();
       } catch (err) {
+        if (!isCurrent()) return;
         console.error('Could not load map library', err);
         container.classList.add('hidden');
         if (emptyState) {
@@ -375,6 +392,8 @@
         renderHeatmapFrequencyLegend(null);
         return;
       }
+
+      if (!isCurrent()) return;
 
       if (!heatmapMapInstance) {
         heatmapMapInstance = L.map(container);
@@ -404,7 +423,7 @@
       }
 
       // Leaflet needs a resize nudge after becoming visible inside a previously hidden tab panel
-      setTimeout(() => heatmapMapInstance.invalidateSize({ pan: false }), 0);
+      setTimeout(() => { if (isCurrent()) heatmapMapInstance.invalidateSize({ pan: false }); }, 0);
     }
 
     // Synthetic demo route segments around cities with typical training activity, used only

@@ -18,6 +18,17 @@ const {
 } = require('../src/export-utils');
 
 describe('export-utils', () => {
+  it('preserves the heatmap capture target and selected Swim context', () => {
+    const target = createExportTarget({
+      kind: 'tab', key: 'heatmap', title: getTabDisplayTitle('heatmap'),
+      targetElementId: 'heatmapMapContainer', hasData: true,
+      filters: [{ label: 'Sport', value: 'Swim' }]
+    });
+    expect(target).toMatchObject({ key: 'heatmap', targetElementId: 'heatmapMapContainer', filters: [{ label: 'Sport', value: 'Swim' }] });
+    expect(generateExportFilename(target, new Date(2026, 9, 21, 10, 0, 0))).toBe('trianalytica-heatmap-20261021-100000.png');
+    expect(hasExportableContent('heatmap', { heatmap: false })).toBe(false);
+  });
+
   describe('module shape', () => {
     it('exposes the expected functions', () => {
       expect(typeof computeSquareFit).toBe('function');

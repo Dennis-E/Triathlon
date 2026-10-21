@@ -38,6 +38,25 @@ function makeFakeFitDeps(records) {
   };
 }
 
+function makeStandaloneSwim({ german = false, compressed = false, start = '1970-01-01 02:00:00', duration = 120, timestamps = true } = {}) {
+  const filename = `activities/swim.fit${compressed ? '.gz' : ''}`;
+  const records = [0, 60, 120].map((seconds, index) => ({
+    timestamp: timestamps ? new Date(seconds * 1000) : undefined,
+    position_lat: [48, 48.002, 48.001][index],
+    position_long: 11 + index * 0.002
+  }));
+  const headers = german
+    ? 'Aktivitäts-ID,Aktivitätsdatum,Aktivitätsart,Bewegungszeit,Dateiname'
+    : 'Activity ID,Activity Date,Activity Type,Moving Time,Filename';
+  return {
+    records,
+    csv: `${headers}\nswim,${start},${german ? 'Schwimmen' : 'Swim'},${duration},${filename}`,
+    zip: { files: { [filename]: { dir: false, async: jest.fn().mockResolvedValue(new Uint8Array([1])) } } },
+    sports: new Map([['swim', 'Swim']]),
+    deps: makeFakeFitDeps(records)
+  };
+}
+
 describe('zip importer relevant column extraction', () => {
   it('keeps Average Watts when present in original ZIP activities.csv headers', () => {
     const csv = [
@@ -103,6 +122,34 @@ describe('parseGpsFileIdToActivityId', () => {
 });
 
 describe('FIT multisport GPS segmentation', () => {
+  const timedRecords = [0, 10, 20, 30, 40, 50].map(seconds => ({ timestamp: new Date(seconds * 1000), marker: seconds }));
+  const windowFor = (activityId, start, end) => ({ activityId, startTime: new Date(start * 1000), endTime: new Date(end * 1000) });
+
+  it.each([
+    ['overlap', [windowFor('swim', 0, 30), windowFor('bike', 20, 50)], { swim: [0, 10], bike: [40, 50] }],
+    ['adjacent endpoints', [windowFor('swim', 0, 20), windowFor('bike', 20, 50)], { swim: [0, 10], bike: [30, 40, 50] }],
+    ['three disciplines and gaps', [windowFor('swim', 0, 5), windowFor('bike', 20, 25), windowFor('run', 40, 50)], { swim: [0], bike: [20], run: [40, 50] }]
+  ])('assigns records to exactly one shared owner for %s', (_name, sessions, expected) => {
+    const records = [...timedRecords, { marker: 'missing' }, { timestamp: new Date(NaN), marker: 'invalid' }];
+    const result = segmentFitRecordsByActivity(records, sessions);
+    for (const [activityId, markers] of Object.entries(expected)) {
+      expect(result[activityId]).toEqual(markers.map(marker => timedRecords.find(record => record.marker === marker)));
+    }
+  });
+
+  it.each([
+    ['missing start', { startTime: null }],
+    ['missing end', { endTime: null }],
+    ['invalid start', { startTime: new Date(NaN) }],
+    ['invalid end', { endTime: new Date(NaN) }],
+    ['reversed bounds', { endTime: new Date(-1) }],
+    ['equal bounds', { endTime: new Date(0) }],
+    ['duplicate activity IDs', { activityId: 'bike' }]
+  ])('rejects the entire shared interval set with %s', (_name, changes) => {
+    const sessions = [{ ...windowFor('swim', 0, 20), ...changes }, windowFor('bike', 30, 50)];
+    expect(segmentFitRecordsByActivity(timedRecords, sessions)).toEqual(Object.fromEntries(sessions.map(session => [session.activityId, []])));
+  });
+
   it('keeps only records inside each child activity session range', () => {
     const records = [0, 10, 20, 30, 40, 50].map((seconds, index) => ({
       timestamp: new Date(seconds * 1000),
@@ -394,6 +441,41 @@ describe('extractGpsAndPowerFromZip (spec 021 - faster bike power import)', () =
     return { dir: false, async: jest.fn().mockResolvedValue(content) };
   }
 
+  it.each([
+    ['summary timezone mismatch', {}],
+    ['short moving duration', { start: '1970-01-01 00:00:00', duration: 30 }],
+    ['missing point timestamps', { start: '1970-01-01 00:00:00', timestamps: false }],
+    ['invalid point timestamps', { start: '1970-01-01 00:00:00', invalidTimestamps: true }],
+    ['German summary mismatch', { german: true, start: '01.01.1970 02:00:00' }],
+    ['compressed FIT mismatch', { compressed: true }]
+  ])('retains a standalone Swim route despite %s', async (_name, options) => {
+    const input = makeStandaloneSwim(options);
+    if (options.invalidTimestamps) input.records.forEach(record => { record.timestamp = new Date(NaN); });
+
+    const result = await extractGpsAndPowerFromZip(input.zip, input.csv, input.sports, undefined, input.deps);
+
+    expect(result.gpsTracksByActivityId.swim).toEqual({
+      sport: 'Swim', points: [[48, 11], [48.002, 11.002], [48.001, 11.004]]
+    });
+    expect(result.fitBestEffortsByActivityId).toEqual({});
+    expect(input.deps.parseFitRecords).toHaveBeenCalledTimes(1);
+    expect(input.deps.gunzipUint8Array).toHaveBeenCalledTimes(options.compressed ? 1 : 0);
+  });
+
+  it('preserves standalone Swim endpoints and the 2000-point cap with full summary fields', async () => {
+    const input = makeStandaloneSwim();
+    const records = Array.from({ length: 2100 }, (_, index) => ({
+      timestamp: new Date(index * 1000),
+      position_lat: 48 + (index % 2) * 0.001,
+      position_long: 11 + index * 0.0001
+    }));
+    const result = await extractGpsAndPowerFromZip(input.zip, input.csv, input.sports, undefined, makeFakeFitDeps(records));
+    const expected = simplifyTrackPoints(extractFitTrackpoints(records), { toleranceMeters: 3, maxPoints: 2000 });
+
+    expect(result.gpsTracksByActivityId.swim.points).toEqual(expected.map(point => [point.lat, point.lon]));
+    expect(result.gpsTracksByActivityId.swim.points).toHaveLength(2000);
+  });
+
   it('parses each bike activity FIT file only once for both GPS tracks and power efforts (FR-001/FR-006)', async () => {
     const records = makeBikeFitRecords();
     const fitDeps = makeFakeFitDeps(records);
@@ -406,6 +488,51 @@ describe('extractGpsAndPowerFromZip (spec 021 - faster bike power import)', () =
     expect(fitDeps.parseFitRecords).toHaveBeenCalledTimes(1);
     expect(result.gpsTracksByActivityId['999'].points.length).toBeGreaterThan(0);
     expect(result.fitBestEffortsByActivityId['999'].powerEfforts.length).toBeGreaterThan(0);
+  });
+
+  it('does not assign an untimed shared FIT file to the first activity', async () => {
+    const input = makeStandaloneSwim();
+    const csv = 'Activity ID,Filename\nswim,activities/swim.fit\nbike,activities/swim.fit';
+    const result = await extractGpsAndPowerFromZip(input.zip, csv, new Map([['swim', 'Swim'], ['bike', 'Bike']]), undefined, input.deps);
+    expect(result.gpsTracksByActivityId).toEqual({});
+    expect(result.fitBestEffortsByActivityId).toEqual({});
+    expect(input.deps.parseFitRecords).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits ambiguous shared GPS points rather than leaking them across sports', async () => {
+    const input = makeStandaloneSwim();
+    const csv = 'Activity ID,Activity Date,Moving Time,Filename\nswim,1970-01-01 00:00:00,90,activities/swim.fit\nbike,1970-01-01 00:00:30,120,activities/swim.fit';
+    const result = await extractGpsAndPowerFromZip(input.zip, csv, new Map([['swim', 'Swim'], ['bike', 'Bike']]), undefined, input.deps);
+    expect(result.gpsTracksByActivityId).toEqual({
+      swim: { sport: 'Swim', points: [[48, 11]] },
+      bike: { sport: 'Bike', points: [[48.001, 11.004]] }
+    });
+  });
+
+  it.each(['Run', 'Bike'])('preserves standalone %s GPS and power despite summary mismatch', async sport => {
+    const input = makeStandaloneSwim();
+    const records = makeBikeFitRecords(361);
+    const result = await extractGpsAndPowerFromZip(input.zip, input.csv, new Map([['swim', sport]]), undefined, makeFakeFitDeps(records));
+    const previous = await extractGpsTracksFromZip(input.zip, input.csv, new Map([['swim', sport]]), undefined, makeFakeFitDeps(records));
+    expect(result.gpsTracksByActivityId).toEqual(previous);
+    expect(result.fitBestEffortsByActivityId).toEqual(sport === 'Bike' ? { swim: { powerEfforts: buildFitPowerEfforts(records) } } : {});
+  });
+
+  it('preserves power without GPS and isolates a corrupt Strava neighbor', async () => {
+    const input = makeStandaloneSwim();
+    const records = makeBikeFitRecords(361).map(({ timestamp, distance, power }) => ({ timestamp, distance, power }));
+    input.zip.files['activities/broken.fit'] = { async: jest.fn().mockRejectedValue(new Error('corrupt neighbor')) };
+    const result = await extractGpsAndPowerFromZip(input.zip, `${input.csv}\nbroken,1970-01-01 02:00:00,Swim,120,activities/broken.fit`, new Map([['swim', 'Bike'], ['broken', 'Swim']]), undefined, makeFakeFitDeps(records));
+    expect(result.gpsTracksByActivityId).toEqual({});
+    expect(result.fitBestEffortsByActivityId.swim.powerEfforts).toEqual(buildFitPowerEfforts(records));
+  });
+
+  it('retains a valid Swim route when a neighboring Strava FIT fails', async () => {
+    const input = makeStandaloneSwim();
+    input.zip.files['activities/broken.fit'] = { async: jest.fn().mockRejectedValue(new Error('corrupt neighbor')) };
+    const result = await extractGpsAndPowerFromZip(input.zip, `${input.csv}\nbroken,1970-01-01 02:00:00,Swim,120,activities/broken.fit`, input.sports, undefined, input.deps);
+    expect(result.gpsTracksByActivityId.swim.points).toHaveLength(3);
+    expect(result.gpsTracksByActivityId.broken).toBeUndefined();
   });
 
   it('creates independent GPS tracks for child activities sharing one multisport FIT file', async () => {
@@ -631,6 +758,19 @@ function makeFitSession({ start, end, sport, distance, duration, heartRate, cade
 }
 
 describe('importTrainingPeaksZips', () => {
+  it('retains a drawable standalone TrainingPeaks Swim route', async () => {
+    const records = [0, 60, 120].map((seconds, index) => ({
+      timestamp: new Date(Date.parse('2026-07-19T10:00:00Z') + seconds * 1000),
+      position_lat: [48, 48.002, 48.001][index], position_long: 11 + index * 0.002
+    }));
+    const deps = makeTrainingPeaksFitDeps({ 'swim.zip': { files: { 'swim.fit.gz': makeTrainingPeaksZipEntry([1]) } } }, {
+      1: { records, sessions: [makeFitSession({ start: '2026-07-19T10:00:00Z', end: '2026-07-19T10:02:00Z', duration: 120, distance: 400, sport: 'swimming' })] }
+    });
+    const result = await importTrainingPeaksZips([{ name: 'swim.zip', size: 1 }], undefined, deps);
+    expect(result.activities[0].sport).toBe('Swim');
+    expect(result.gpsTracksByActivityId[result.activities[0].id]).toEqual({ sport: 'Swim', points: [[48, 11], [48.002, 11.002], [48.001, 11.004]] });
+  });
+
   it('combines archives chronologically and segments GPS by FIT session sport', async () => {
     const archives = {
       'later.zip': { files: { 'run.fit.gz': makeTrainingPeaksZipEntry([2]) } },

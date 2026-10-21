@@ -119,62 +119,6 @@
       });
     }
 
-    function getFilterSummaryValue(group) {
-      const explicitValue = group.dataset.filterValueId && document.getElementById(group.dataset.filterValueId);
-      if (explicitValue) return explicitValue.textContent.trim();
-
-      const select = group.querySelector('select');
-      if (select) {
-        const selectedOption = select.options[select.selectedIndex];
-        return selectedOption ? selectedOption.textContent.trim() : '';
-      }
-
-      const checkboxes = Array.from(group.querySelectorAll('input[type="checkbox"]'));
-      if (checkboxes.length > 0) {
-        const checked = checkboxes.filter(checkbox => checkbox.checked);
-        if (group.dataset.filterMode === 'checked-count') return `${checked.length} selected`;
-        const values = checked.map(checkbox => {
-          const label = checkbox.closest('label');
-          return label ? label.textContent.trim().replace(/\s+/g, ' ') : checkbox.value;
-        });
-        if (values.length > 3) return `${values.length} selected`;
-        return values.length > 0 ? values.join(', ') : 'None';
-      }
-
-      const buttons = Array.from(group.querySelectorAll('button'));
-      const selectedButton = buttons.find(button => button.getAttribute('aria-pressed') === 'true' ||
-        button.getAttribute('aria-selected') === 'true' || button.getAttribute('aria-checked') === 'true' ||
-        button.classList.contains('bg-indigo-600'));
-      if (selectedButton) return selectedButton.textContent.trim().replace(/\s+/g, ' ');
-      if (buttons.length === 0) return '';
-      return 'None';
-    }
-
-    function updateActiveVisualizationFilterSummary() {
-      const summary = document.getElementById('activeVisualizationFilterSummary');
-      if (!summary) return;
-      const panelId = window.dashboardTabNavigation.TAB_PANEL_IDS[selectedVisualizationTab];
-      const panel = panelId && document.getElementById(panelId);
-      if (!panel) {
-        summary.replaceChildren();
-        summary.classList.add('hidden');
-        return;
-      }
-
-      summary.replaceChildren();
-      const groups = Array.from(panel.querySelectorAll('[data-filter-summary]'))
-        .filter(group => !group.closest('.hidden'));
-      groups.forEach(group => {
-        const value = getFilterSummaryValue(group);
-        if (!value) return;
-        const item = document.createElement('span');
-        item.className = 'rounded-full border border-slate-700 bg-slate-950/80 px-2.5 py-1';
-        item.textContent = `${group.dataset.filterLabel || 'Filter'}: ${value}`;
-        summary.append(item);
-      });
-      summary.classList.toggle('hidden', summary.childElementCount === 0);
-    }
-
     function isActiveFilterChoice(button) {
       return button.getAttribute('aria-pressed') === 'true' || button.getAttribute('aria-selected') === 'true' ||
         button.getAttribute('aria-checked') === 'true' || button.classList.contains('bg-indigo-600');
@@ -231,7 +175,6 @@
       const focusedChoice = refreshedChoices.includes(nextChoice) ? nextChoice : refreshedChoices[nextIndex];
       refreshedChoices.forEach(choice => choice.setAttribute('aria-pressed', choice === focusedChoice ? 'true' : 'false'));
       if (focusedChoice) focusedChoice.focus({ preventScroll: true });
-      updateActiveVisualizationFilterSummary();
       flashNavigationCue(direction > 0 ? 'down' : 'up');
     }
 
@@ -255,7 +198,6 @@
       const { control, value, key } = pendingNativeFilterKey;
       pendingNativeFilterKey = null;
       if (readNativeFilterValue(control) !== value) {
-        updateActiveVisualizationFilterSummary();
         flashNavigationCue(key === 'ArrowDown' ? 'down' : 'up');
       }
     }
@@ -279,10 +221,7 @@
           }
         }
       }
-      updateActiveVisualizationFilterSummary();
     });
-    document.addEventListener('input', updateActiveVisualizationFilterSummary);
-    document.addEventListener('change', updateActiveVisualizationFilterSummary);
 
     function initializeVisualizationTabScroller() {
       const viewport = document.getElementById('visualizationTabsViewport');
@@ -313,7 +252,6 @@
 
       if (availableVisualizationTabs.length === 0) {
         selectedVisualizationTab = null;
-        updateActiveVisualizationFilterSummary();
         return null;
       }
 
@@ -324,7 +262,6 @@
       window.dashboardTabNavigation.setVisualizationTab(selectedVisualizationTab, {
         availableTabs: availableVisualizationTabs
       });
-      updateActiveVisualizationFilterSummary();
       return selectedVisualizationTab;
     }
 
@@ -359,7 +296,6 @@
           window.lifetimeStatisticsDashboard.render();
         }
         ensureVisualizationTabVisible(nextTab);
-        updateActiveVisualizationFilterSummary();
       }
     }
 

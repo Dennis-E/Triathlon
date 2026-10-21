@@ -200,20 +200,13 @@ describe('index.html inline script syntax', () => {
     expect(html).toContain("onkeydown=\"handleVisualizationTabKeydown(event, 'trainingCalendar')\"");
   });
 
-  it('provides an active-filter summary above the visualization panels', () => {
-    const tablistEnd = html.indexOf('</div>', html.indexOf('role="tablist" aria-label="Visualization tabs"'));
-    const summaryIndex = html.indexOf('id="activeVisualizationFilterSummary"');
-    const firstPanelIndex = html.indexOf('id="vizPanelTotalDistance"');
-
-    expect(summaryIndex).toBeGreaterThan(tablistEnd);
-    expect(summaryIndex).toBeLessThan(firstPanelIndex);
-    expect(html).toContain('aria-label="Active visualization filters"');
+  it('omits the redundant active-filter summary above the visualization panels', () => {
+    expect(html).not.toContain('id="activeVisualizationFilterSummary"');
+    expect(html).not.toContain('aria-label="Active visualization filters"');
     expect(html).toContain('id="noVisualizationsAvailable" role="status"');
     expect(html).toContain('No visualizations are available for this import.');
-    expect(inlineCode).toContain('updateActiveVisualizationFilterSummary');
+    expect(inlineCode).not.toContain('updateActiveVisualizationFilterSummary');
     expect(inlineCode).toContain('refreshVisualizationTabs');
-    expect(inlineCode).toContain("document.addEventListener('input', updateActiveVisualizationFilterSummary)");
-    expect(inlineCode).toContain("document.addEventListener('change', updateActiveVisualizationFilterSummary)");
     expect(inlineCode).toContain("document.addEventListener('keydown', handleDashboardFilterKeydown)");
   });
 
@@ -226,7 +219,6 @@ describe('index.html inline script syntax', () => {
     expect(inlineCode).toContain('event.preventDefault();');
     expect(inlineCode).toContain('nextChoice.click();');
     expect(inlineCode).toContain('const focusedChoice = refreshedChoices.includes(nextChoice) ? nextChoice : refreshedChoices[nextIndex];');
-    expect(inlineCode).toContain('updateActiveVisualizationFilterSummary();');
     expect(inlineCode).toContain("flashNavigationCue(direction > 0 ? 'down' : 'up')");
     expect(inlineCode).toContain("const clickedChoice = target && target.closest && target.closest('button')");
     expect(inlineCode).toContain('group.contains(clickedChoice)');

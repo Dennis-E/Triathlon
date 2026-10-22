@@ -4,6 +4,7 @@
     let exportToastTimeoutId = null;
     let lastExportedImage = null; // { dataUrl, target }
     let exportAssetsPromise = null;
+    let exportDownloadAttempt = null;
 
     const EXPORT_CAPTURE_TARGET_IDS = {
       totalDistance: 'totalDistanceChartWrapper',
@@ -386,6 +387,8 @@
       if (!modal || !img) return;
       img.src = dataUrl;
       if (errorEl) errorEl.classList.add('hidden');
+      const button = document.getElementById('exportPreviewDownloadBtn');
+      if (button) button.disabled = !!exportDownloadAttempt;
       modal.classList.remove('hidden');
       modal.classList.add('flex');
     }
@@ -402,65 +405,85 @@
       exportRequestState = 'idle';
     }
 
-    function downloadExportedImageWithAnchor(filename) {
+    function downloadExportedImageWithAnchor(filename, image = lastExportedImage) {
       const link = document.createElement('a');
-      link.href = lastExportedImage.dataUrl;
+      link.href = image.dataUrl;
       link.download = filename;
       document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      try {
+        link.click();
+      } finally {
+        document.body.removeChild(link);
+      }
     }
 
     function exportDataUrlToBlob(dataUrl) {
-      const match = String(dataUrl || '').match(/^data:([^;,]+);base64,([\s\S]+)$/);
+      const match = String(dataUrl || '').match(/^data:image\/png;base64,([A-Za-z0-9+/]+={0,2})$/);
       if (!match) throw new Error('Could not prepare the export image for saving. Please try again.');
 
-      const binary = atob(match[2]);
+      const binary = atob(match[1]);
       const bytes = new Uint8Array(binary.length);
       for (let index = 0; index < binary.length; index++) {
         bytes[index] = binary.charCodeAt(index);
       }
-      return new Blob([bytes], { type: match[1] });
+      window.exportUtils.getExportPngDimensions(bytes);
+      return new Blob([bytes], { type: 'image/png' });
+    }
+
+    async function prepareExportImage(dataUrl, target, pbOpening = null) {
+      const blob = exportDataUrlToBlob(dataUrl);
+      const image = new Image();
+      image.src = dataUrl;
+      await image.decode();
+      if (!(image.naturalWidth > 0 && image.naturalHeight > 0)) {
+        throw new Error('Could not prepare the export image. Please export again.');
+      }
+      return Object.freeze({ dataUrl, blob, target, pbOpening, width: image.naturalWidth, height: image.naturalHeight });
     }
 
     async function downloadExportedImage() {
-      if (!lastExportedImage) return;
-      const filename = window.exportUtils.generateExportFilename(lastExportedImage.target, new Date())
+      const image = lastExportedImage;
+      if (exportDownloadAttempt || !image || !image.blob || !image.blob.size) return;
+      const attempt = { image, outcome: null };
+      exportDownloadAttempt = attempt;
+      const button = document.getElementById('exportPreviewDownloadBtn');
+      if (button) button.disabled = true;
+      if (exportToastTimeoutId) clearTimeout(exportToastTimeoutId);
+      exportToastTimeoutId = null;
+      const toast = document.getElementById('exportToast');
+      if (toast) {
+        toast.textContent = '';
+        toast.classList.add('hidden');
+      }
+      const filename = window.exportUtils.generateExportFilename(image.target, new Date())
         || 'trianalytica-export.png';
-      const saveFilePicker = window.showSaveFilePicker;
-
-      if (typeof saveFilePicker !== 'function') {
-        showExportToast('Your browser cannot choose a download location. The file will use the browser’s default download behavior.');
-        downloadExportedImageWithAnchor(filename);
-        return;
-      }
-
-      let fileHandle;
       try {
-        // Invoke the picker before any asynchronous work so the browser's user activation
-        // from the Download click is still active.
-        fileHandle = await saveFilePicker.call(window, {
-          suggestedName: filename,
-          types: [{
-            description: 'PNG image',
-            accept: { 'image/png': ['.png'] }
-          }]
-        });
+        downloadExportedImageWithAnchor(filename, image);
+        attempt.outcome = 'handed-off';
+        if (lastExportedImage === image) {
+          showExportToast('The image was handed to your browser. Browser settings control the download location.');
+        }
+        return attempt.outcome;
       } catch (error) {
-        if (error && error.name === 'AbortError') return;
-        showExportToast('Your browser could not open a location picker. The file will use the browser’s default download behavior.');
-        downloadExportedImageWithAnchor(filename);
-        return;
-      }
-
-      try {
-        const imageBlob = exportDataUrlToBlob(lastExportedImage.dataUrl);
-        const writable = await fileHandle.createWritable();
-        await writable.write(imageBlob);
-        await writable.close();
-      } catch (error) {
+        attempt.outcome = 'failed';
         console.error('Could not save exported image', error);
-        showExportToast(`Could not save export image. ${error.message || 'Please try again.'}`);
+        if (lastExportedImage === image) {
+          showExportToast(`Could not save export image. ${error && error.message || 'Please try again.'}`);
+        }
+        return attempt.outcome;
+      } finally {
+        exportDownloadAttempt = null;
+        if (button) button.disabled = false;
+        if (attempt.outcome === 'handed-off') {
+          const ownsPreview = lastExportedImage === image;
+          const canCloseOrigin = ownsPreview || !lastExportedImage;
+          if (ownsPreview) closeExportPreviewModal();
+          if (canCloseOrigin && image.target && image.target.kind === 'pb-tile' && image.pbOpening
+            && typeof pbDetailOpening !== 'undefined' && pbDetailOpening === image.pbOpening
+            && typeof closePbDetail === 'function') {
+            closePbDetail();
+          }
+        }
       }
     }
 
@@ -482,6 +505,7 @@
       }
 
       exportRequestState = 'capturing';
+      const pbOpening = target.kind === 'pb-tile' && typeof pbDetailOpening !== 'undefined' ? pbDetailOpening : null;
       const tooltip = document.getElementById('trainingCalendarDayTooltip');
       const tooltipWasVisible = tooltip && !tooltip.classList.contains('hidden');
       try {
@@ -522,7 +546,7 @@
           }
         });
         const dataUrl = drawExportComposition(captured, target, assets);
-        lastExportedImage = { dataUrl, target };
+        lastExportedImage = await prepareExportImage(dataUrl, target, pbOpening);
 
         exportRequestState = 'previewing';
         showExportPreviewModal(dataUrl);

@@ -8,6 +8,7 @@ const TAB_DISPLAY_TITLES = {
   equipmentTimeline: 'Equipment Timeline',
   personalBests: 'Personal Bests',
   heatmap: 'GPS Heatmap',
+  distributions: 'Distributions',
   workoutTime: 'Workout Time',
   trainingCalendar: 'Training Calendar',
   wordcloud: 'Workout Title Wordcloud',
@@ -22,6 +23,7 @@ const TAB_FILENAME_SLUGS = {
   equipmentTimeline: 'equipment-timeline',
   personalBests: 'personal-bests',
   heatmap: 'heatmap',
+  distributions: 'distributions',
   workoutTime: 'workout-time',
   trainingCalendar: 'training-calendar',
   wordcloud: 'wordcloud',
@@ -276,6 +278,31 @@ function hasExportableContent(tabName, flags) {
   return flags[tabName];
 }
 
+function getExportPngDimensions(bytes) {
+  const invalid = () => { throw new Error('Could not prepare a valid PNG image. Please export again.'); };
+  const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+  if (!bytes || bytes.length < 45 || !signature.every((value, index) => bytes[index] === value)) invalid();
+  const readLength = offset => bytes[offset] * 16777216 + bytes[offset + 1] * 65536 + bytes[offset + 2] * 256 + bytes[offset + 3];
+  if (readLength(8) !== 13 || String.fromCharCode(...bytes.slice(12, 16)) !== 'IHDR') invalid();
+  const width = readLength(16);
+  const height = readLength(20);
+  if (!(width > 0 && width <= 2147483647 && height > 0 && height <= 2147483647)) invalid();
+  let offset = 8;
+  let hasImageData = false;
+  while (offset + 12 <= bytes.length) {
+    const length = readLength(offset);
+    const type = String.fromCharCode(...bytes.slice(offset + 4, offset + 8));
+    if (offset + length + 12 > bytes.length) invalid();
+    if (type === 'IDAT') hasImageData = hasImageData || length > 0;
+    offset += length + 12;
+    if (type === 'IEND') {
+      if (length !== 0 || offset !== bytes.length || !hasImageData) invalid();
+      return { width, height };
+    }
+  }
+  return invalid();
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     computeSquareFit,
@@ -293,7 +320,8 @@ if (typeof module !== 'undefined' && module.exports) {
     getExportBrandConfig,
     getExportControlConfig,
     getExportLayoutConfig,
-    getExportTargetSlug
+    getExportTargetSlug,
+    getExportPngDimensions
   };
 }
 
@@ -314,6 +342,7 @@ if (typeof window !== 'undefined') {
     getExportBrandConfig,
     getExportControlConfig,
     getExportLayoutConfig,
-    getExportTargetSlug
+    getExportTargetSlug,
+    getExportPngDimensions
   };
 }

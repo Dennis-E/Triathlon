@@ -14,10 +14,35 @@ const {
   getExportBrandConfig,
   getExportControlConfig,
   getExportLayoutConfig,
-  getExportTargetSlug
+  getExportTargetSlug,
+  getExportPngDimensions
 } = require('../src/export-utils');
 
 describe('export-utils', () => {
+  describe('PNG byte validation', () => {
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6XcAAAAASUVORK5CYII=', 'base64');
+
+    it('reads dimensions from a genuine PNG', () => {
+      expect(getExportPngDimensions(png)).toEqual({ width: 1, height: 1 });
+    });
+
+    it.each([null, new Uint8Array(), Buffer.from('hello'), png.subarray(0, 20)])('rejects missing or truncated PNG bytes: %p', bytes => {
+      expect(() => getExportPngDimensions(bytes)).toThrow(/PNG/i);
+    });
+
+    it.each([0, 8, 12, 16, 20])('rejects a corrupt signature, header or dimension at byte %i', offset => {
+      const invalid = Buffer.from(png);
+      invalid.fill(0, offset, offset + 4);
+      expect(() => getExportPngDimensions(invalid)).toThrow(/PNG/i);
+    });
+
+    it('exposes the validator through the classic browser bridge', () => {
+      const context = { window: {} };
+      require('vm').runInNewContext(require('fs').readFileSync(require('path').join(__dirname, '../src/export-utils.js'), 'utf8'), context);
+      expect(context.window.exportUtils.getExportPngDimensions(png)).toEqual({ width: 1, height: 1 });
+    });
+  });
+
   describe('module shape', () => {
     it('exposes the expected functions', () => {
       expect(typeof computeSquareFit).toBe('function');
@@ -31,6 +56,22 @@ describe('export-utils', () => {
       expect(typeof getExportControlConfig).toBe('function');
       expect(typeof getExportTargetSlug).toBe('function');
     });
+  });
+
+  it.each(['totalDistance', 'paceMetrics', 'equipment', 'equipmentTimeline', 'personalBests', 'heatmap', 'distributions', 'workoutTime', 'trainingCalendar', 'wordcloud', 'pieCharts', 'lifetimeStatistics'])('preserves export context and no-data availability for %s', key => {
+    const filters = [{ label: 'Sport', value: 'Run' }];
+    const target = createExportTarget({ kind: 'tab', key, title: key, targetElementId: `${key}Target`, hasData: true, filters });
+    expect(target).toMatchObject({ key, targetElementId: `${key}Target`, filters });
+    expect(generateExportFilename(target, new Date(2026, 9, 22, 10, 0, 0))).toMatch(/^trianalytica-.+\.png$/);
+    expect(hasExportableContent(key, { [key]: true })).toBe(true);
+    expect(hasExportableContent(key, { [key]: false })).toBe(false);
+  });
+
+  it('preserves PB detail identity, filters and branded filename metadata', () => {
+    const target = createExportTarget({ kind: 'pb-tile', key: '5km', title: '5km Run', targetElementId: 'pbDetailCaptureTarget', hasData: true, detailKey: 'run-5km', filters: [{ label: 'Sport', value: 'Run' }] });
+    expect(target).toMatchObject({ kind: 'pb-tile', detailKey: 'run-5km', contentFit: 'pb-tight' });
+    expect(generateExportFilename(target, new Date(2026, 9, 22, 10, 0, 0))).toMatch(/^trianalytica-.+\.png$/);
+    expect(getExportBrandConfig().domain).toContain('Triathlon');
   });
 
   it('supports the Training Calendar export target', () => {

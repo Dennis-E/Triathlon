@@ -13,6 +13,14 @@ Selected workout files are processed locally in the browser and are not uploaded
 
 See [TrainingPeaks export instructions](docs/trainingpeaks-export-how-to.html) for the provider's Workout Files export flow and [docs/IMPORT_FEATURE.md](docs/IMPORT_FEATURE.md) for import behavior and privacy details.
 
+## Export images
+
+Use a visualization's Export action to prepare a local PNG preview, then select Download. Each click starts one browser-managed download. Your browser settings determine whether a save dialog appears and which folder is used, normally Downloads; enable the browser's ask-where-to-save setting to choose a folder or filename each time.
+
+The app does not open a separate native save picker before downloading. This avoids a second save dialog when a native write is restricted and the browser would otherwise retry through its ordinary download flow. Browser security checks and download errors remain managed by the browser.
+
+The export preview and its originating Personal Bests detail close after browser download handoff. If handoff fails, the preview remains available for retry. Browser handoff does not confirm that a file finished saving; later cancellation or storage errors are managed by the browser. Images are prepared and saved locally without uploading the export or activity data.
+
 ## Available visualizations
 
 - Total distance over time

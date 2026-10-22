@@ -185,6 +185,7 @@
 
     let activePbDetailModel = null;
     let pbDetailReturnFocus = null;
+    let pbDetailOpening = null;
 
     function createSvgElement(tag, attributes = {}) {
       const element = document.createElementNS('http://www.w3.org/2000/svg', tag);
@@ -491,6 +492,7 @@
     }
 
     function openPbDetail(model, sourceButton) {
+      pbDetailOpening = {};
       activePbDetailModel = model;
       pbDetailReturnFocus = sourceButton;
       document.getElementById('pbDetailTitle').textContent = model.title;
@@ -513,6 +515,7 @@
       const exportButton = document.getElementById('pbDetailExport');
       if (exportButton) exportButton.classList.add('hidden');
       activePbDetailModel = null;
+      pbDetailOpening = null;
       if (pbDetailReturnFocus) pbDetailReturnFocus.focus();
       pbDetailReturnFocus = null;
     }

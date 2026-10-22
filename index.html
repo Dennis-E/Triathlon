@@ -59,6 +59,12 @@
   <script src="./src/visualization-availability.js"></script>
   <script src="./src/analysis-counter.js"></script>
   <style>
+    .viz-export-button {
+      width: fit-content;
+      max-width: 100%;
+      flex-shrink: 0;
+    }
+
     #importProgressPreview {
       transition: opacity 320ms ease;
     }
@@ -1062,7 +1068,7 @@
             <div id="timeframeSelector" data-keyboard-filter-group data-filter-summary data-filter-label="Time period" class="flex flex-wrap bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
             </div>
 
-            <button type="button" onclick="exportVisualizationTab('totalDistance')" aria-label="Export for Insta / Strava: Total distance" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
+            <button type="button" onclick="exportVisualizationTab('totalDistance')" aria-label="Export for Insta / Strava: Total distance" class="viz-export-button inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
               <img src="assets/Strava_Logo.svg" alt="Strava" class="h-5 w-8 object-contain">
               Export for Insta / Strava
               <img src="assets/Instagram_logo_2016.svg" alt="Instagram" class="h-5 w-5 object-contain">
@@ -1152,7 +1158,7 @@
               <div id="paceMetricsSportFilters" data-keyboard-filter-group data-filter-summary data-filter-label="Sport" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner" aria-label="Pace metrics sport filter"></div>
               <div id="paceMetricsMetricFilters" data-keyboard-filter-group data-filter-summary data-filter-label="Metric" class="flex flex-wrap bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner" aria-label="Pace metrics filter"></div>
             </div>
-            <button type="button" onclick="exportVisualizationTab('paceMetrics')" aria-label="Export for Insta / Strava: Pace vs metrics" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
+            <button type="button" onclick="exportVisualizationTab('paceMetrics')" aria-label="Export for Insta / Strava: Pace vs metrics" class="viz-export-button inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
               <img src="assets/Strava_Logo.svg" alt="Strava" class="h-5 w-8 object-contain">
               Export for Insta / Strava
               <img src="assets/Instagram_logo_2016.svg" alt="Instagram" class="h-5 w-5 object-contain">
@@ -1208,7 +1214,7 @@
                 <button onclick="setEquipmentFilter('Bikes')" id="equipmentBtnBikes" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Bikes</button>
               </div>
 
-              <button type="button" onclick="exportVisualizationTab('equipment')" aria-label="Export for Insta / Strava: Equipment mileage" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
+              <button type="button" onclick="exportVisualizationTab('equipment')" aria-label="Export for Insta / Strava: Equipment mileage" class="viz-export-button inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
                 <img src="assets/Strava_Logo.svg" alt="Strava" class="h-5 w-8 object-contain">
                 Export for Insta / Strava
                 <img src="assets/Instagram_logo_2016.svg" alt="Instagram" class="h-5 w-5 object-contain">
@@ -1249,7 +1255,7 @@
                 <button onclick="setEquipmentTimelineFilter('Bikes')" id="equipmentTimelineBtnBikes" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Bikes</button>
               </div>
 
-              <button type="button" onclick="exportVisualizationTab('equipmentTimeline')" aria-label="Export for Insta / Strava: Equipment Timeline" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
+              <button type="button" onclick="exportVisualizationTab('equipmentTimeline')" aria-label="Export for Insta / Strava: Equipment Timeline" class="viz-export-button inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
                 <img src="assets/Strava_Logo.svg" alt="Strava" class="h-5 w-8 object-contain">
                 Export for Insta / Strava
                 <img src="assets/Instagram_logo_2016.svg" alt="Instagram" class="h-5 w-5 object-contain">
@@ -1385,7 +1391,7 @@
               <button onclick="setHeatmapSportFilter('Swim')" id="heatmapSportBtnSwim" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Swim</button>
             </div>
 
-            <button type="button" onclick="exportVisualizationTab('heatmap')" aria-label="Export for Insta / Strava: GPS Heatmap" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
+            <button type="button" onclick="exportVisualizationTab('heatmap')" aria-label="Export for Insta / Strava: GPS Heatmap" class="viz-export-button inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
               <img src="assets/Strava_Logo.svg" alt="Strava" class="h-5 w-8 object-contain">
               Export for Insta / Strava
               <img src="assets/Instagram_logo_2016.svg" alt="Instagram" class="h-5 w-5 object-contain">
@@ -1429,7 +1435,7 @@
               <p id="distributionsPointCount" class="text-xs text-slate-400">0 activities</p>
             </div>
 
-            <button type="button" onclick="exportVisualizationTab('distributions')" aria-label="Export for Insta / Strava: Distributions" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
+            <button type="button" onclick="exportVisualizationTab('distributions')" aria-label="Export for Insta / Strava: Distributions" class="viz-export-button inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
               <img src="assets/Strava_Logo.svg" alt="Strava" class="h-5 w-8 object-contain">
               Export for Insta / Strava
               <img src="assets/Instagram_logo_2016.svg" alt="Instagram" class="h-5 w-5 object-contain">
@@ -1496,7 +1502,7 @@
               <p id="workoutTimeActivityCount" class="text-xs text-slate-400">0 activities</p>
             </div>
 
-            <button type="button" onclick="exportVisualizationTab('workoutTime')" aria-label="Export for Insta / Strava: Workout Time" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
+            <button type="button" onclick="exportVisualizationTab('workoutTime')" aria-label="Export for Insta / Strava: Workout Time" class="viz-export-button inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
               <img src="assets/Strava_Logo.svg" alt="Strava" class="h-5 w-8 object-contain">
               Export for Insta / Strava
               <img src="assets/Instagram_logo_2016.svg" alt="Instagram" class="h-5 w-5 object-contain">
@@ -1548,7 +1554,7 @@
               <h2 class="text-2xl font-bold tracking-tight">Training Calendar</h2>
               <p id="trainingCalendarActivityCount" class="text-xs text-slate-400">0 activities</p>
             </div>
-            <button type="button" onclick="exportVisualizationTab('trainingCalendar')" aria-label="Export for Insta / Strava: Training Calendar" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
+            <button type="button" onclick="exportVisualizationTab('trainingCalendar')" aria-label="Export for Insta / Strava: Training Calendar" class="viz-export-button inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
               <img src="assets/Strava_Logo.svg" alt="Strava" class="h-5 w-8 object-contain">
               Export for Insta / Strava
               <img src="assets/Instagram_logo_2016.svg" alt="Instagram" class="h-5 w-5 object-contain">
@@ -1577,7 +1583,7 @@
             <h2 class="text-2xl font-bold tracking-tight">Workout Title Wordcloud</h2>
             <p class="text-xs text-slate-400">Explore the most frequent words in your activity titles.</p>
           </div>
-          <button type="button" onclick="exportVisualizationTab('wordcloud')" aria-label="Export for Insta / Strava: Workout Title Wordcloud" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
+          <button type="button" onclick="exportVisualizationTab('wordcloud')" aria-label="Export for Insta / Strava: Workout Title Wordcloud" class="viz-export-button inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
             <img src="assets/Strava_Logo.svg" alt="Strava" class="h-5 w-8 object-contain">
             Export for Insta / Strava
             <img src="assets/Instagram_logo_2016.svg" alt="Instagram" class="h-5 w-5 object-contain">
@@ -1616,7 +1622,7 @@
             <h2 class="text-2xl font-bold tracking-tight">Pie Charts</h2>
             <p class="text-xs text-slate-400">See how your training splits up by sport, duration, pace, equipment, length or power.</p>
           </div>
-          <button type="button" onclick="exportVisualizationTab('pieCharts')" aria-label="Export for Insta / Strava: Pie Charts" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
+          <button type="button" onclick="exportVisualizationTab('pieCharts')" aria-label="Export for Insta / Strava: Pie Charts" class="viz-export-button inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
             <img src="assets/Strava_Logo.svg" alt="Strava" class="h-5 w-8 object-contain">
             Export for Insta / Strava
             <img src="assets/Instagram_logo_2016.svg" alt="Instagram" class="h-5 w-5 object-contain">
@@ -1675,7 +1681,7 @@
             <h2 class="text-2xl font-bold tracking-tight">Lifetime Statistics</h2>
             <p class="text-xs text-slate-400">Your training history at a glance.</p>
           </div>
-          <button type="button" onclick="exportVisualizationTab('lifetimeStatistics')" aria-label="Export for Insta / Strava: Lifetime Statistics" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
+          <button type="button" onclick="exportVisualizationTab('lifetimeStatistics')" aria-label="Export for Insta / Strava: Lifetime Statistics" class="viz-export-button inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
             <img src="assets/Strava_Logo.svg" alt="Strava" class="h-5 w-8 object-contain">
             Export for Insta / Strava
             <img src="assets/Instagram_logo_2016.svg" alt="Instagram" class="h-5 w-5 object-contain">

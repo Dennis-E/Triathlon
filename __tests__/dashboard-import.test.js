@@ -164,6 +164,76 @@ function loadRuntimeDatasetApplicator() {
   return { applyDataset: context.__applyDataset, context, refreshVisualizationTabs: context.refreshVisualizationTabs };
 }
 
+function loadRuntimeTrainingPeaksImportStatus(importResult) {
+  let input;
+  const nodes = {
+    importProgressBar: { style: {} },
+    importProgressPercent: { textContent: '' },
+    importProgressStage: { textContent: '' },
+    importProgressError: { classList: { add() {}, remove() {} } },
+    importProgressDetail: { textContent: '', parentElement: { classList: { toggle() {} } } }
+  };
+  const context = {
+    importResult,
+    document: {
+      createElement: () => (input = { click() {} }),
+      getElementById: id => nodes[id] || null
+    },
+    updateStatusBadge: jest.fn(),
+    showImportProgressModal: jest.fn(),
+    setImportModalVisualState: jest.fn(),
+    updateImportProgress: jest.fn(),
+    setTimeout: jest.fn(),
+    console: { error: jest.fn() }
+  };
+  vm.createContext(context);
+  vm.runInContext(`${dashboardImportSource}\nexecuteTrainingPeaksZipImport = async () => importResult; this.__handleTrainingPeaksIngest = handleTrainingPeaksIngest;`, context, {
+    filename: 'src/dashboard-import.js'
+  });
+  return { handleImport: context.__handleTrainingPeaksIngest, getInput: () => input, context };
+}
+
+describe('runtime import success status copy', () => {
+  it('uses concise TrainingPeaks status during dataset application and preserves Strava wording', () => {
+    const runtime = loadRuntimeDatasetApplicator();
+    const trainingPeaksDataset = {
+      rawCsvData: [],
+      activities: [{ id: 'tp-1' }, { id: 'tp-2' }],
+      fitBestEffortsByActivityId: {},
+      gpsTracksByActivityId: {},
+      sourceLabel: 'TrainingPeaks ZIP import',
+      importedFileCount: 2,
+      skippedUnsupportedSportCount: 1,
+      skippedGpxRouteCount: 3
+    };
+
+    runtime.applyDataset(trainingPeaksDataset);
+
+    expect(runtime.context.updateStatusBadge).toHaveBeenLastCalledWith('success', 'Imported TrainingPeaks history');
+
+    const stravaDataset = { ...trainingPeaksDataset, sourceLabel: 'Imported Strava history' };
+    delete stravaDataset.importedFileCount;
+    runtime.applyDataset(stravaDataset);
+
+    expect(runtime.context.updateStatusBadge).toHaveBeenLastCalledWith('success', 'Imported Strava history: 2 activities');
+  });
+
+  it('uses concise TrainingPeaks status after import completion with skipped items', async () => {
+    const runtime = loadRuntimeTrainingPeaksImportStatus({
+      activities: [{ id: 'tp-1' }, { id: 'tp-2' }],
+      importedFileCount: 2,
+      skippedUnsupportedSportCount: 1,
+      skippedInvalidSessionCount: 1,
+      skippedGpxRouteCount: 3
+    });
+
+    runtime.handleImport();
+    await runtime.getInput().onchange({ target: { files: [{ name: 'period-a.zip' }, { name: 'period-b.zip' }] } });
+
+    expect(runtime.context.updateStatusBadge).toHaveBeenLastCalledWith('success', 'Imported TrainingPeaks history');
+  });
+});
+
 describe('runtime imported dataset availability refresh', () => {
   it('refreshes view visibility without modifying imported activity records', () => {
     const runtime = loadRuntimeDatasetApplicator();

@@ -23,6 +23,40 @@ const {
   sortSegmentsForDrawOrder
 } = require('../src/heatmap-utils');
 
+describe('imported Swim route visibility', () => {
+  const { extractGpsAndPowerFromZip } = require('../src/zip-importer');
+
+  it.each([false, true])('retains imported Swim segments across sport filters (mixed=%s)', async mixed => {
+    const records = [0, 60, 120].map((seconds, index) => ({
+      timestamp: new Date(seconds * 1000),
+      position_lat: [48, 48.002, 48.001][index],
+      position_long: 11 + index * 0.002
+    }));
+    const result = await extractGpsAndPowerFromZip(
+      { files: { 'activities/swim.fit': { async: async () => new Uint8Array([1]) } } },
+      'Activity ID,Activity Date,Moving Time,Filename\nswim,1970-01-01 02:00:00,30,activities/swim.fit',
+      new Map([['swim', 'Swim']]), undefined,
+      { ensureFitParserLoaded: async () => function FakeFitParser() {}, parseFitRecords: async () => records }
+    );
+    const tracks = { ...result.gpsTracksByActivityId };
+    if (mixed) {
+      tracks.run = { sport: 'Run', points: [[49, 12], [49.001, 12.002]] };
+      tracks.bike = { sport: 'Bike', points: [[50, 13], [50.001, 13.002]] };
+    }
+    for (const sportFilter of ['All', 'Swim', 'Bike', 'Run']) {
+      const ids = Object.values(buildRouteSegments(tracks, { sportFilter })).flatMap(segment => segment.activityIds);
+      if (sportFilter === 'All' || sportFilter === 'Swim') expect(ids).toContain('swim');
+      else expect(ids).not.toContain('swim');
+    }
+  });
+
+  it.each([
+    [], [[48, 11]], [[48, 11], [48, 11]], [[NaN, 11], [Infinity, 12]]
+  ])('does not invent a drawable Swim route for insufficient points %j', (...points) => {
+    expect(buildRouteSegments({ swim: { sport: 'Swim', points } }, { sportFilter: 'Swim' })).toEqual({});
+  });
+});
+
 describe('heatmap-utils', () => {
   const sampleTracks = {
     '1': { sport: 'Run', points: [[48.1, 11.5], [48.2, 11.6]] },

@@ -665,6 +665,14 @@ describe('index.html inline script syntax', () => {
     expect(html).toContain('id="wordcloudCanvas"');
   });
 
+  it('keeps visualization export buttons content-sized across stacked headers', () => {
+    const exportButtons = [...html.matchAll(/<button\b(?=[^>]*onclick="exportVisualizationTab\('[^']+'\)")([^>]*)>/g)];
+
+    expect(exportButtons).toHaveLength(11);
+    expect(exportButtons.every(([, attributes]) => /\bclass="[^"]*\bviz-export-button\b[^"]*"/.test(attributes))).toBe(true);
+    expect(html).toMatch(/\.viz-export-button\s*\{[^}]*width:\s*fit-content;[^}]*max-width:\s*100%;[^}]*flex-shrink:\s*0;/s);
+  });
+
   it('starts the Wordcloud slider at 50 while retaining its 10–100 range', () => {
     expect(html).toMatch(/id="wordcloudCountSlider"[^>]*min="10"[^>]*max="100"[^>]*value="50"/);
     expect(html).toMatch(/id="wordcloudCountValue"[^>]*>50 words<\/output>/);

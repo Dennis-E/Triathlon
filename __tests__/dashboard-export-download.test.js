@@ -116,6 +116,7 @@ function createDownloadRuntime({ showSaveFilePicker, decodeError, imageWidth = 1
   });
 
   return {
+    context,
     download: context.__downloadExportedImage,
     anchors,
     downloadLinks,
@@ -153,6 +154,46 @@ describe('dashboard export download destination', () => {
     expect(runtime.getImage()).toBeNull();
     await runtime.download();
     expect(runtime.downloadLinks).toHaveLength(1);
+  });
+
+  it.each([true, false])('captures only an exportable Swim heatmap and preserves its preview (hasData=%s)', async hasData => {
+    const runtime = createDownloadRuntime();
+    const context = runtime.context;
+    const map = { id: 'heatmapMapContainer' };
+    const getOriginalElement = context.document.getElementById;
+    const elements = {
+      heatmapMapContainer: map,
+      heatmapEmptyState: { classList: { contains: () => hasData } },
+      heatmapSportBtnSwim: { textContent: 'Swim', classList: { contains: () => true }, getAttribute: () => null }
+    };
+    context.window.exportUtils = require('../src/export-utils');
+    context.chartInstance = null;
+    context.document.getElementById = id => elements[id] || getOriginalElement(id);
+    context.document.querySelectorAll = () => [];
+    context.html2canvas = jest.fn().mockResolvedValue({ width: 400, height: 300 });
+    context.syntheticPngDataUrl = PNG_DATA_URL;
+    vm.runInContext(`
+      waitForChartRenderSettle = async () => {};
+      loadExportAssets = async () => ({});
+      drawExportComposition = () => syntheticPngDataUrl;
+      showExportPreviewModal = dataUrl => { this.previewForTest = dataUrl; };
+      this.exportSwimForTest = () => exportVisualizationTab('heatmap');
+      this.targetForTest = () => getTabExportTarget('heatmap');
+    `, context);
+
+    const target = context.targetForTest();
+    await context.exportSwimForTest();
+    if (!hasData) {
+      expect(target).toBeNull();
+      expect(context.html2canvas).not.toHaveBeenCalled();
+      expect(runtime.toast.textContent).toContain('Nothing to export');
+      return;
+    }
+    expect(target).toMatchObject({ targetElementId: 'heatmapMapContainer', filters: [{ label: 'Sport', value: 'Swim' }] });
+    expect(context.html2canvas).toHaveBeenCalledWith(map, expect.objectContaining({ useCORS: true }));
+    expect(context.previewForTest).toBe(PNG_DATA_URL);
+    await runtime.download();
+    expect(runtime.downloadLinks[0].download).toMatch(/^trianalytica-heatmap-/);
   });
 
   it('passes the current PNG bytes and suggested filename to the browser unchanged', async () => {

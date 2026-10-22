@@ -16,7 +16,7 @@ function element(id) {
   };
 }
 
-function harness() {
+function harness({ realGeometry = false } = {}) {
   const container = element('heatmapMapContainer');
   const emptyState = element('heatmapEmptyState');
   const elements = { heatmapMapContainer: container, heatmapEmptyState: emptyState };
@@ -37,7 +37,7 @@ function harness() {
     invalidateSize(options) { sizeInvalidations.push(options); return this; }
   };
 
-  const heatmapUtils = {
+  const heatmapUtils = realGeometry ? require('../src/heatmap-utils') : {
     hasGpsData: tracks => Object.keys(tracks || {}).length > 0,
     buildRouteSegments: (tracks, { sportFilter }) => Object.fromEntries(
       Object.entries(tracks || {})
@@ -120,6 +120,38 @@ describe('heatmap viewport lifecycle', () => {
     await pending;
     expect(h.renders).toHaveLength(0);
     expect(h.boundsFits).toHaveLength(0);
+  });
+
+  it('discards a delayed map load after an explicitly simulated tab revision', async () => {
+    const h = harness();
+    h.setDataset({ id: 'delayed' }, { run1: 'Run' });
+    let finishLoad;
+    h.sandbox.ensureLeafletLoaded = () => new Promise(resolve => { finishLoad = resolve; });
+    const pending = h.render();
+    vm.runInContext("selectedVisualizationTab = 'equipment'; advanceDashboardRevision();", h.sandbox);
+    finishLoad();
+    await pending;
+    expect(h.renders).toHaveLength(0);
+    expect(h.boundsFits).toHaveLength(0);
+  });
+
+  it.each([false, true])('shows Swim routes and hides empty filtered maps (mixed=%s)', async mixed => {
+    const h = harness({ realGeometry: true });
+    const tracks = { swim: { sport: 'Swim', points: [[48, 11], [48.001, 11.002]] } };
+    if (mixed) tracks.run = { sport: 'Run', points: [[49, 12], [49.001, 12.002]] };
+    h.setDataset({ id: 'swim-history' }, tracks);
+    await h.render();
+    await h.filter('Swim');
+    expect([...new Set(Object.values(h.renders.at(-1).segments).flatMap(segment => segment.activityIds))]).toEqual(['swim']);
+    expect(h.elements.heatmapMapContainer.classList.contains('hidden')).toBe(false);
+    expect(h.elements.heatmapEmptyState.classList.contains('hidden')).toBe(true);
+    await h.filter('Bike');
+    expect(h.elements.heatmapMapContainer.classList.contains('hidden')).toBe(true);
+    expect(h.elements.heatmapEmptyState.classList.contains('hidden')).toBe(false);
+    await h.filter('Swim');
+    h.setDataset({ id: 'pool' }, { pool: { sport: 'Swim', points: [[48, 11]] } });
+    await h.render();
+    expect(h.elements.heatmapEmptyState.classList.contains('hidden')).toBe(false);
   });
 
   it('fits a dataset once, then preserves center and zoom through sport filters and Heatmap tab renders', async () => {

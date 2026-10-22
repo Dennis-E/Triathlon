@@ -106,7 +106,10 @@
       const importLabel = dataset.sourceLabel === 'TrainingPeaks ZIP import' ? 'Imported TrainingPeaks history' : 'Imported Strava history';
       const fileCountLabel = Number.isSafeInteger(dataset.importedFileCount) && dataset.importedFileCount > 0
         ? ` from ${dataset.importedFileCount} ZIP archive(s)` : '';
-      updateStatusBadge('success', `${importLabel}${fileCountLabel}: ${processedActivities.length} activities`);
+      const statusMessage = dataset.sourceLabel === 'TrainingPeaks ZIP import'
+        ? importLabel
+        : `${importLabel}${fileCountLabel}: ${processedActivities.length} activities`;
+      updateStatusBadge('success', statusMessage);
 
       document.getElementById('previewCardsContainer').classList.remove('hidden');
       document.getElementById('enterDashboardContainer').classList.remove('hidden');
@@ -570,12 +573,7 @@
           });
 
           if (!dataset) return;
-          const skippedSessions = dataset.skippedUnsupportedSportCount + dataset.skippedInvalidSessionCount;
-          const summaryParts = [];
-          if (skippedSessions > 0) summaryParts.push(`${skippedSessions} unsupported or undated workout(s) skipped`);
-          if (dataset.skippedGpxRouteCount > 0) summaryParts.push(`${dataset.skippedGpxRouteCount} unmatched GPX route(s) omitted`);
-          const sourceSummary = `Imported TrainingPeaks history from ${dataset.importedFileCount} ZIP archive(s): ${dataset.activities.length} activities`;
-          updateStatusBadge('success', summaryParts.length > 0 ? `${sourceSummary}; ${summaryParts.join('; ')}` : sourceSummary);
+          updateStatusBadge('success', 'Imported TrainingPeaks history');
 
           if (importExperienceSession) window.importExperienceCatalog.setPhase(importExperienceSession, 'finalizing');
           updateImportProgress(null, 'Preparing visualizations...');

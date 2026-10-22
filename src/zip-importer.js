@@ -278,18 +278,30 @@ function parseGpsFileEntries(rawCsvText) {
 }
 
 function segmentFitRecordsByActivity(records, sessions) {
-  const result = {};
-  if (!Array.isArray(records) || !Array.isArray(sessions)) return result;
+  if (!Array.isArray(records) || !Array.isArray(sessions)) return {};
+  const result = Object.fromEntries(sessions.filter(session => session && session.activityId).map(session => [session.activityId, []]));
+  const windows = sessions.map(session => ({
+    activityId: session && session.activityId,
+    startMs: session && session.startTime instanceof Date ? session.startTime.getTime() : NaN,
+    endMs: session && session.endTime instanceof Date ? session.endTime.getTime() : NaN
+  }));
+  if (windows.length !== Object.keys(result).length || windows.some(window =>
+    !window.activityId || !Number.isFinite(window.startMs) || !Number.isFinite(window.endMs) || window.startMs >= window.endMs
+  )) return result;
 
-  for (const session of sessions) {
-    if (!session || !session.activityId) continue;
-    const startMs = session.startTime instanceof Date ? session.startTime.getTime() : null;
-    const endMs = session.endTime instanceof Date ? session.endTime.getTime() : null;
-    result[session.activityId] = records.filter(record => {
-      const timestamp = record && record.timestamp instanceof Date ? record.timestamp.getTime() : null;
-      if (!Number.isFinite(timestamp)) return false;
-      return (startMs === null || timestamp >= startMs) && (endMs === null || timestamp <= endMs);
-    });
+  for (const record of records) {
+    const timestamp = record && record.timestamp instanceof Date ? record.timestamp.getTime() : NaN;
+    if (!Number.isFinite(timestamp)) continue;
+    let owner = null;
+    for (const window of windows) {
+      if (timestamp < window.startMs || timestamp > window.endMs) continue;
+      if (owner !== null) {
+        owner = null;
+        break;
+      }
+      owner = window.activityId;
+    }
+    if (owner !== null) result[owner].push(record);
   }
 
   return result;
@@ -575,10 +587,8 @@ async function extractGpsAndPowerFromZip(zip, rawCsvText, activitySportById, rep
         const records = await readAndParseFitFile(zip, filename, fitDeps);
         parseMs = Math.max(0, now() - parseStartedAt);
         recordCount = records.length;
-        const segmentedRecords = segmentFitRecordsByActivity(records, fileMetadata);
-        const hasTimedSessions = fileMetadata.some(metadata => metadata.startTime || metadata.endTime);
-        const activityRecords = hasTimedSessions
-          ? segmentedRecords
+        const activityRecords = fileMetadata.length > 1
+          ? segmentFitRecordsByActivity(records, fileMetadata)
           : { [fileMetadata[0].activityId]: records };
 
         for (const metadata of fileMetadata) {

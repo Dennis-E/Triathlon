@@ -77,6 +77,7 @@
 
       const isPace = selectedEquipmentMetric === 'pace';
       const metric = selectedEquipmentMetric;
+      const useFireColors = isPace && ['Shoes', 'Bikes'].includes(selectedEquipmentFilter);
       const paceRows = isPace
         ? window.equipmentUtils.buildEquipmentPaceDisplay(sortedEntries)
         : [];
@@ -155,10 +156,12 @@
                   metric === 'avgLength' ? 'Avg Length' : '',
             data: values,
             borderRadius: 6,
-            backgroundColor: labels.map(name =>
-              window.equipmentUtils.getEquipmentType(name) === 'Shoes'
-                ? '#8B5CF6'
-                : '#14B8A6'
+            backgroundColor: labels.map((name, index) =>
+              useFireColors
+                ? window.distributionUtils.getFireGradientColor(rows[index].barValue)
+                : window.equipmentUtils.getEquipmentType(name) === 'Shoes'
+                  ? '#8B5CF6'
+                  : '#14B8A6'
             )
           }]
         },

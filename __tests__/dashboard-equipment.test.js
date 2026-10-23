@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const equipmentUtils = require('../src/equipment-utils');
+const distributionUtils = require('../src/distribution-utils');
 
 const activities = [
   { equipment: 'Nike Fast', distance: 10, duration: 2400 },
@@ -64,7 +65,7 @@ function harness(width = 768) {
     }
   }
   const sandbox = {
-    window: { equipmentUtils }, Chart,
+    window: { equipmentUtils, distributionUtils }, Chart,
     document: {
       getElementById: id => elements[id] || null,
       querySelectorAll: () => [],
@@ -152,6 +153,7 @@ describe('equipment chart', () => {
       h.draw();
       const chart = h.charts.at(-1);
       const values = Object.fromEntries(chart.data.labels.map((name, i) => [name, chart.data.datasets[0].data[i]]));
+      const colors = Object.fromEntries(chart.data.labels.map((name, i) => [name, chart.data.datasets[0].backgroundColor[i]]));
       if (filter !== 'Bikes') {
         expect(values['Nike Fast']).toBe(1);
         expect(values['Asics Slow']).toBeCloseTo(2 / 3);
@@ -173,6 +175,16 @@ describe('equipment chart', () => {
         expect(chart.data.labels.slice(0, 2)).toEqual(['Nike Fast', 'Asics Slow']);
         expect(h.elements.equipmentPaceExplanation.textContent).toContain('Shoes');
         expect(h.elements.equipmentPaceExplanation.textContent).toContain('Bikes');
+        expect(colors).toEqual({
+          'Nike Fast': '#8B5CF6',
+          'Asics Slow': '#8B5CF6',
+          'Road Fast': '#14B8A6',
+          'Road Slow': '#14B8A6'
+        });
+      } else {
+        chart.data.labels.forEach((name, index) => {
+          expect(colors[name]).toBe(distributionUtils.getFireGradientColor(values[name]));
+        });
       }
     }
   });
@@ -184,6 +196,9 @@ describe('equipment chart', () => {
       h.draw();
       expect(h.text.map(t => t.value).join(' ')).toContain(label);
       expect(h.charts.at(-1).options.scales.x.max).toBeUndefined();
+      expect(h.charts.at(-1).data.datasets[0].backgroundColor).toEqual(
+        h.charts.at(-1).data.labels.map(name => equipmentUtils.getEquipmentType(name) === 'Shoes' ? '#8B5CF6' : '#14B8A6')
+      );
     }
   });
 });

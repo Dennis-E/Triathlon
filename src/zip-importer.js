@@ -12,6 +12,9 @@ const FIT_TARGET_DISTANCES_KM = {
 const powerPbUtils = typeof module !== 'undefined' && module.exports
   ? require('./power-pb-utils')
   : (typeof window !== 'undefined' ? window.powerPbUtils : null);
+const mediaUtils = typeof module !== 'undefined' && module.exports
+  ? require('./media-utils')
+  : (typeof window !== 'undefined' ? window.mediaUtils : null);
 
 let fitParserModulePromise = null;
 
@@ -117,13 +120,146 @@ async function importStravaZip(zipFile, onProgress) {
 
   const activitySportById = parseActivitySportsById(csvText);
   const { gpsTracksByActivityId, fitBestEffortsByActivityId } = await extractGpsAndPowerFromZip(zip, csvText, activitySportById, reportProgress);
+  const mediaLibrary = await extractMediaFromZip(zip, csvText);
+  mediaLibrary.activityOptions = mediaLibrary.activityOptions.map(activity => ({
+    ...activity,
+    hasRoute: !!gpsTracksByActivityId[String(activity.id)]
+  }));
+  mediaLibrary.gpsTracksByActivityId = gpsTracksByActivityId;
   reportProgress({ percent: 95, stage: 'Finalizing...' });
 
   return {
     csvText,
     fitBestEffortsByActivityId,
-    gpsTracksByActivityId
+    gpsTracksByActivityId,
+    mediaLibrary
   };
+}
+
+function findCsvEntry(zip, filename) {
+  const normalizedName = filename.toLowerCase();
+  const matches = Object.entries(zip.files || {})
+    .filter(([path, entry]) => entry && !entry.dir &&
+      (path.toLowerCase() === normalizedName || path.toLowerCase().endsWith(`/${normalizedName}`)))
+    .sort(([first], [second]) => Number(first.includes('/')) - Number(second.includes('/')));
+  return matches.length ? matches[0][1] : null;
+}
+
+async function readMediaManifestFromZip(zip) {
+  const entry = findCsvEntry(zip, 'media.csv');
+  return entry ? entry.async('string') : '';
+}
+
+function findColumnIndex(headers, acceptedNames) {
+  const accepted = new Set(acceptedNames.map(name => name.trim().toLowerCase()));
+  return headers.findIndex(header => accepted.has(String(header || '').trim().toLowerCase()));
+}
+
+function splitMediaReference(value) {
+  const source = String(value || '');
+  const filenameMatches = source.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:jpe?g|mp4)/gi);
+  return filenameMatches || source.split(/[;,|\n]+/).map(token => token.trim()).filter(Boolean);
+}
+
+async function extractMediaFromZip(zip, activityCsvText) {
+  let manifestText = '';
+  try {
+    manifestText = await readMediaManifestFromZip(zip);
+  } catch (error) {
+    manifestText = '';
+  }
+
+  const manifestRows = parseCsvBasic(manifestText);
+  const manifestHeaders = manifestRows[0] || [];
+  const filenameIndex = findColumnIndex(manifestHeaders, ['Medien-Dateiname', 'Media Filename', 'Filename']);
+  const captionIndex = findColumnIndex(manifestHeaders, ['Medienunterschrift', 'Media Caption', 'Caption']);
+  const normalizedManifest = filenameIndex < 0 ? [] : manifestRows.slice(1)
+    .filter(row => row[filenameIndex])
+    .map(row => ({ filename: row[filenameIndex], caption: captionIndex < 0 ? '' : row[captionIndex] || '' }));
+
+  const activityRows = parseCsvBasic(activityCsvText);
+  const activityHeaders = activityRows[0] || [];
+  const idIndex = findColumnIndex(activityHeaders, ['Aktivitäts-ID', 'Activity ID']);
+  const sportIndex = findColumnIndex(activityHeaders, ['Aktivitätsart', 'Activity Type', 'Sport Type']);
+  const dateIndex = findColumnIndex(activityHeaders, ['Aktivitätsdatum', 'Activity Date']);
+  const nameIndex = findColumnIndex(activityHeaders, ['Name der Aktivität', 'Activity Name', 'Aktivitätsname']);
+  const mediaIndex = findColumnIndex(activityHeaders, ['Medien', 'Media']);
+  const activities = idIndex < 0 || mediaIndex < 0 ? [] : activityRows.slice(1)
+    .filter(row => row[idIndex])
+    .map(row => ({
+      id: row[idIndex],
+      sport: sportIndex < 0 ? null : normalizeSportForFit(row[sportIndex]),
+      date: dateIndex < 0 ? null : row[dateIndex],
+      name: nameIndex < 0 ? '' : row[nameIndex] || '',
+      mediaReferences: splitMediaReference(row[mediaIndex])
+    }));
+
+  const mediaPathPattern = /\.(?:jpe?g|png|gif|webp|heic|tiff?|mp4|mov|m4v|avi|webm)$/i;
+  const archiveEntries = Object.entries(zip.files || {})
+    .filter(([path, entry]) => entry && !entry.dir && mediaPathPattern.test(path))
+    .map(([path, entry]) => ({
+      path,
+      readable: true,
+      byteLength: entry._data && Number.isFinite(entry._data.uncompressedSize) ? entry._data.uncompressedSize : null,
+      readContent: () => entry.async('uint8array')
+    }));
+  const reconciled = mediaUtils.reconcileMediaReferences({
+    activities,
+    manifestRows: normalizedManifest,
+    archiveEntries
+  });
+  const linkedActivityIds = new Set(reconciled.references
+    .filter(reference => reference.status === 'matched')
+    .map(reference => String(reference.activityId)));
+  const activitiesById = new Map(activities.map(activity => [String(activity.id), activity]));
+  const objectUrls = new Map();
+  const library = {
+    ...reconciled,
+    manifestAvailable: Boolean(manifestText),
+    activityOptions: Array.from(linkedActivityIds, id => activitiesById.get(id))
+      .filter(Boolean)
+      .map(activity => ({ id: String(activity.id), name: activity.name, sport: activity.sport, date: activity.date })),
+    getObjectUrl: async asset => {
+      if (objectUrls.has(asset.key)) return objectUrls.get(asset.key);
+      const bytes = await asset.readContent();
+      if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
+        throw new Error('Local media preview is unavailable in this browser.');
+      }
+      if (objectUrls.size >= 48) {
+        const [expiredKey, expiredUrl] = objectUrls.entries().next().value;
+        URL.revokeObjectURL(expiredUrl);
+        objectUrls.delete(expiredKey);
+      }
+      const mimeType = asset.mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
+      const objectUrl = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+      objectUrls.set(asset.key, objectUrl);
+      return objectUrl;
+    },
+    release: () => {
+      if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+        objectUrls.forEach(objectUrl => URL.revokeObjectURL(objectUrl));
+      }
+      objectUrls.clear();
+      library.assets.forEach(asset => { asset.readContent = null; });
+      library.hasReadableMedia = false;
+    }
+  };
+
+  library.assets.forEach(asset => {
+    if (typeof asset.readContent !== 'function') return;
+    const readContent = asset.readContent;
+    asset.readContent = async () => {
+      try {
+        return await readContent();
+      } catch (error) {
+        asset.status = 'corrupt';
+        library.hasReadableMedia = library.assets.some(item => item.status === 'readable');
+        library.counts.corrupt = library.assets.filter(item => item.status === 'corrupt').length;
+        throw error;
+      }
+    };
+  });
+  return library;
 }
 
 function normalizeSportForFit(rawSport) {
@@ -1190,6 +1326,7 @@ function extractRelevantColumns(csvText) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     importStravaZip,
+    extractMediaFromZip,
     parseCsvBasic,
     serializeCsvBasic,
     extractRelevantColumns,

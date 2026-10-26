@@ -13,7 +13,8 @@ const TAB_DISPLAY_TITLES = {
   trainingCalendar: 'Training Calendar',
   wordcloud: 'Workout Title Wordcloud',
   pieCharts: 'Pie Charts',
-  lifetimeStatistics: 'Lifetime Statistics'
+  lifetimeStatistics: 'Lifetime Statistics',
+  mediaGallery: 'Media Gallery'
 };
 
 const TAB_FILENAME_SLUGS = {
@@ -28,7 +29,8 @@ const TAB_FILENAME_SLUGS = {
   trainingCalendar: 'training-calendar',
   wordcloud: 'wordcloud',
   pieCharts: 'pie-charts',
-  lifetimeStatistics: 'lifetime-statistics'
+  lifetimeStatistics: 'lifetime-statistics',
+  mediaGallery: 'media-gallery'
 };
 
 const EXPORT_ASSET_PATHS = {

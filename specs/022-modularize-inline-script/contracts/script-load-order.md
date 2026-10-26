@@ -19,6 +19,7 @@ werden, sonst schlagen `ReferenceError`s zur Laufzeit fehl.
 <script src="./src/equipment-utils.js"></script>
 <script src="./src/export-utils.js"></script>
 <script src="./src/power-pb-utils.js"></script>
+<script src="./src/media-utils.js"></script>
 <script src="./src/zip-importer.js"></script>
 <script src="./src/heatmap-utils.js"></script>
 <script src="./src/training-calendar-utils.js"></script>
@@ -39,6 +40,7 @@ werden, sonst schlagen `ReferenceError`s zur Laufzeit fehl.
 <script src="./src/dashboard-wordcloud.js"></script>
 <script src="./src/dashboard-pie-charts.js"></script>
 <script src="./src/dashboard-lifetime-statistics.js"></script>
+<script src="./src/dashboard-media.js"></script>
 <script src="./src/dashboard-export.js"></script>
 <script src="./src/dashboard-tabs.js"></script>
 ```

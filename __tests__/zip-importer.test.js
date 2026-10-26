@@ -13,12 +13,99 @@ const {
   extractGpsTracksFromZip,
   extractFitPowerEffortsFromZip,
   extractGpsAndPowerFromZip,
+  extractMediaFromZip,
   importTrainingPeaksZips
 } = require('../src/zip-importer');
 const {
   POWER_DURATIONS,
   calculateRollingPowerEfforts
 } = require('../src/power-pb-utils');
+const { createMediaZipFixture } = require('./fixtures/strava-media-export');
+
+describe('extractMediaFromZip', () => {
+  it('reconciles exact activity references with manifest filenames and archive entries', async () => {
+    const fixture = createMediaZipFixture({
+      activityRows: [
+        { id: 'run-1', sport: 'Run', date: '2025-03-01', media: 'photo-1.jpg' },
+        { id: 'run-2', sport: 'Run', date: '2025-03-02', media: '' }
+      ],
+      mediaRows: [{ filename: 'photo-1.jpg', caption: 'Synthetic caption' }],
+      mediaFiles: { 'media/photo-1.jpg': { content: 'synthetic-image' } }
+    });
+
+    const result = await extractMediaFromZip(fixture.zip, fixture.activityCsv);
+
+    expect(result.references).toEqual([expect.objectContaining({
+      activityId: 'run-1', sourceToken: 'photo-1.jpg', status: 'matched'
+    })]);
+    expect(result.assets).toEqual([expect.objectContaining({
+      filename: 'photo-1.jpg', caption: 'Synthetic caption', status: 'readable'
+    })]);
+    expect(result.activityOptions.map(activity => activity.id)).toEqual(['run-1']);
+    expect(result.hasReadableMedia).toBe(true);
+  });
+
+  it('reports missing files and duplicate manifest references without guessing', async () => {
+    const fixture = createMediaZipFixture({
+      activityRows: [{ id: 'run-1', sport: 'Run', date: '2025-03-01', media: 'missing.jpg;duplicate.jpg' }],
+      mediaRows: [
+        { filename: 'missing.jpg' },
+        { filename: 'duplicate.jpg' },
+        { filename: 'duplicate.jpg' }
+      ],
+      mediaFiles: { 'media/duplicate.jpg': { content: 'synthetic-image' } }
+    });
+
+    const result = await extractMediaFromZip(fixture.zip, fixture.activityCsv);
+
+    expect(result.references.map(reference => reference.status)).toEqual(['missing', 'ambiguous']);
+    expect(result.assets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ filename: 'missing.jpg', status: 'missing' }),
+      expect.objectContaining({ filename: 'duplicate.jpg', status: 'ambiguous' })
+    ]));
+  });
+
+  it('keeps corrupt and unsupported media isolated from readable entries', async () => {
+    const fixture = createMediaZipFixture({
+      activityRows: [{ id: 'run-1', sport: 'Run', date: '2025-03-01', media: 'good.jpg;broken.jpg;unsupported.gif' }],
+      mediaRows: [
+        { filename: 'good.jpg' },
+        { filename: 'broken.jpg' },
+        { filename: 'unsupported.gif' }
+      ],
+      mediaFiles: {
+        'media/good.jpg': { content: 'synthetic-image' },
+        'media/broken.jpg': { content: 'corrupt', corrupt: true },
+        'media/unsupported.gif': { content: 'unsupported' }
+      }
+    });
+
+    const result = await extractMediaFromZip(fixture.zip, fixture.activityCsv);
+    const broken = result.assets.find(asset => asset.filename === 'broken.jpg');
+    const unsupported = result.assets.find(asset => asset.filename === 'unsupported.gif');
+
+    expect(result.hasReadableMedia).toBe(true);
+    expect(unsupported.status).toBe('unsupported');
+    await expect(broken.readContent()).rejects.toThrow('Synthetic corrupt entry');
+    expect(broken.status).toBe('corrupt');
+    expect(result.hasReadableMedia).toBe(true);
+  });
+
+  it('releases cached URLs and archive readers when the media session ends', async () => {
+    const fixture = createMediaZipFixture({
+      activityRows: [{ id: 'run-1', sport: 'Run', date: '2025-03-01', media: 'photo.jpg' }],
+      mediaRows: [{ filename: 'photo.jpg' }],
+      mediaFiles: { 'media/photo.jpg': { content: 'synthetic-image' } }
+    });
+    const library = await extractMediaFromZip(fixture.zip, fixture.activityCsv);
+    const asset = library.assets[0];
+
+    library.release();
+
+    expect(asset.readContent).toBeNull();
+    expect(library.hasReadableMedia).toBe(false);
+  });
+});
 
 function makeBikeFitRecords(count = 3601) {
   return Array.from({ length: count }, (_, index) => ({

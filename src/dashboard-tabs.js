@@ -290,7 +290,9 @@
       advanceDashboardRevision(true);
       visualizationAvailabilityByTab = window.visualizationAvailability.getVisualizationAvailability(processedActivities, {
         fitBestEffortsByActivityId,
-        gpsTracksByActivityId
+        gpsTracksByActivityId,
+        mediaLibrary: importedDataset && importedDataset.mediaLibrary,
+        sourceLabel: importedDataset && importedDataset.sourceLabel
       });
       availableVisualizationTabs = window.dashboardTabNavigation.getAvailableVisualizationTabs(visualizationAvailabilityByTab);
       window.dashboardTabNavigation.setAvailableVisualizationTabs(availableVisualizationTabs);
@@ -343,6 +345,8 @@
           window.pieChartsDashboard.render();
         } else if (nextTab === 'lifetimeStatistics') {
           window.lifetimeStatisticsDashboard.render();
+        } else if (nextTab === 'mediaGallery') {
+          window.mediaGalleryDashboard.render(importedDataset && importedDataset.mediaLibrary);
         }
         ensureVisualizationTabVisible(nextTab);
         updateNavigationCueAvailability();

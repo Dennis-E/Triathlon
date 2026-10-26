@@ -1,4 +1,7 @@
 const {
+  TAB_ORDER,
+  TAB_BUTTON_IDS,
+  TAB_PANEL_IDS,
   getAvailableVisualizationTabs,
   getAvailableVisualizationTab,
   getNextVisualizationTab,
@@ -65,6 +68,7 @@ function createMockDocument() {
     vizTabWordcloud: createMockElement(),
     vizTabPieCharts: createMockElement(),
     vizTabLifetimeStatistics: createMockElement(),
+    vizTabMediaGallery: createMockElement(),
     vizPanelTotalDistance: createMockElement(),
     vizPanelPaceMetrics: createMockElement(),
     vizPanelEquipment: createMockElement(),
@@ -77,6 +81,7 @@ function createMockDocument() {
     vizPanelWordcloud: createMockElement(),
     vizPanelPieCharts: createMockElement(),
     vizPanelLifetimeStatistics: createMockElement(),
+    vizPanelMediaGallery: createMockElement(),
     noVisualizationsAvailable: createMockElement()
   };
 
@@ -89,6 +94,21 @@ function createMockDocument() {
 }
 
 describe('tab navigation helpers', () => {
+  it('registers media gallery IDs and shows the tab only when it is available', () => {
+    const doc = createMockDocument();
+
+    expect(TAB_ORDER).toContain('mediaGallery');
+    expect(TAB_BUTTON_IDS.mediaGallery).toBe('vizTabMediaGallery');
+    expect(TAB_PANEL_IDS.mediaGallery).toBe('vizPanelMediaGallery');
+
+    setAvailableVisualizationTabs(['mediaGallery'], { document: doc });
+    expect(doc.elements.vizTabMediaGallery.classList.contains('hidden')).toBe(false);
+    expect(doc.elements.vizPanelMediaGallery.classList.contains('hidden')).toBe(false);
+
+    setAvailableVisualizationTabs([], { document: doc });
+    expect(doc.elements.vizTabMediaGallery.classList.contains('hidden')).toBe(true);
+  });
+
   describe('complete filter combination traversal', () => {
     const dimensions = [{ id: 'sport', values: ['All', 'Run'] }, { id: 'period', values: ['Year', 'Month', 'Week'] }];
     const provider = prefix => dimensions[prefix.length] || null;
@@ -279,8 +299,9 @@ describe('tab navigation helpers', () => {
     expect(getNextVisualizationTab('trainingCalendar', 1)).toBe('wordcloud');
     expect(getNextVisualizationTab('wordcloud', 1)).toBe('pieCharts');
     expect(getNextVisualizationTab('pieCharts', 1)).toBe('lifetimeStatistics');
-    expect(getNextVisualizationTab('lifetimeStatistics', 1)).toBe('totalDistance');
-    expect(getNextVisualizationTab('totalDistance', -1)).toBe('lifetimeStatistics');
+    expect(getNextVisualizationTab('lifetimeStatistics', 1)).toBe('mediaGallery');
+    expect(getNextVisualizationTab('mediaGallery', 1)).toBe('totalDistance');
+    expect(getNextVisualizationTab('totalDistance', -1)).toBe('mediaGallery');
     expect(getNextVisualizationTab('workoutTime', -1)).toBe('distributions');
     expect(getNextVisualizationTab('unknown', 1)).toBe('totalDistance');
   });
@@ -435,9 +456,9 @@ describe('tab navigation helpers', () => {
 
     const previousTab = handleVisualizationTabKeydown(event, 'totalDistance', { onTabChange });
 
-    expect(previousTab).toBe('lifetimeStatistics');
+    expect(previousTab).toBe('mediaGallery');
     expect(event.preventDefault).toHaveBeenCalledTimes(1);
-    expect(onTabChange).toHaveBeenCalledWith('lifetimeStatistics', { focusTab: true });
+    expect(onTabChange).toHaveBeenCalledWith('mediaGallery', { focusTab: true });
   });
 
   it('leaves unrelated keys unhandled', () => {
@@ -560,7 +581,8 @@ describe('tab navigation helpers', () => {
 
     expect(handleVisualizationTabKeydown({ key: 'ArrowRight', preventDefault: jest.fn() }, 'wordcloud', { onTabChange })).toBe('pieCharts');
     expect(handleVisualizationTabKeydown({ key: 'ArrowRight', preventDefault: jest.fn() }, 'pieCharts', { onTabChange })).toBe('lifetimeStatistics');
-    expect(handleVisualizationTabKeydown({ key: 'ArrowRight', preventDefault: jest.fn() }, 'lifetimeStatistics', { onTabChange })).toBe('totalDistance');
+    expect(handleVisualizationTabKeydown({ key: 'ArrowRight', preventDefault: jest.fn() }, 'lifetimeStatistics', { onTabChange })).toBe('mediaGallery');
+    expect(handleVisualizationTabKeydown({ key: 'ArrowRight', preventDefault: jest.fn() }, 'mediaGallery', { onTabChange })).toBe('totalDistance');
     expect(onTabChange).toHaveBeenCalledWith('pieCharts', { focusTab: true });
   });
 

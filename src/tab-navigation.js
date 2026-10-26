@@ -1,4 +1,4 @@
-const TAB_ORDER = ['totalDistance', 'paceMetrics', 'equipment', 'equipmentTimeline', 'personalBests', 'heatmap', 'distributions', 'workoutTime', 'trainingCalendar', 'wordcloud', 'pieCharts', 'lifetimeStatistics'];
+const TAB_ORDER = ['totalDistance', 'paceMetrics', 'equipment', 'equipmentTimeline', 'personalBests', 'heatmap', 'distributions', 'workoutTime', 'trainingCalendar', 'wordcloud', 'pieCharts', 'lifetimeStatistics', 'mediaGallery'];
 
 const TAB_BUTTON_IDS = {
   totalDistance: 'vizTabTotalDistance',
@@ -12,7 +12,8 @@ const TAB_BUTTON_IDS = {
   trainingCalendar: 'vizTabTrainingCalendar',
   wordcloud: 'vizTabWordcloud',
   pieCharts: 'vizTabPieCharts',
-  lifetimeStatistics: 'vizTabLifetimeStatistics'
+  lifetimeStatistics: 'vizTabLifetimeStatistics',
+  mediaGallery: 'vizTabMediaGallery'
 };
 
 const TAB_PANEL_IDS = {
@@ -27,7 +28,8 @@ const TAB_PANEL_IDS = {
   trainingCalendar: 'vizPanelTrainingCalendar',
   wordcloud: 'vizPanelWordcloud',
   pieCharts: 'vizPanelPieCharts',
-  lifetimeStatistics: 'vizPanelLifetimeStatistics'
+  lifetimeStatistics: 'vizPanelLifetimeStatistics',
+  mediaGallery: 'vizPanelMediaGallery'
 };
 
 const TAB_ACTIVE_CLASS = 'px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25';
@@ -288,6 +290,7 @@ function setVisualizationTab(tabName, options = {}) {
   const wordcloudBtn = doc.getElementById(TAB_BUTTON_IDS.wordcloud);
   const pieChartsBtn = doc.getElementById(TAB_BUTTON_IDS.pieCharts);
   const lifetimeStatisticsBtn = doc.getElementById(TAB_BUTTON_IDS.lifetimeStatistics);
+  const mediaGalleryBtn = doc.getElementById(TAB_BUTTON_IDS.mediaGallery);
   const totalDistancePanel = doc.getElementById(TAB_PANEL_IDS.totalDistance);
   const paceMetricsPanel = doc.getElementById(TAB_PANEL_IDS.paceMetrics);
   const equipmentPanel = doc.getElementById(TAB_PANEL_IDS.equipment);
@@ -300,9 +303,10 @@ function setVisualizationTab(tabName, options = {}) {
   const wordcloudPanel = doc.getElementById(TAB_PANEL_IDS.wordcloud);
   const pieChartsPanel = doc.getElementById(TAB_PANEL_IDS.pieCharts);
   const lifetimeStatisticsPanel = doc.getElementById(TAB_PANEL_IDS.lifetimeStatistics);
+  const mediaGalleryPanel = doc.getElementById(TAB_PANEL_IDS.mediaGallery);
 
   if (!totalDistanceBtn || !paceMetricsBtn || !equipmentBtn || !equipmentTimelineBtn || !personalBestsBtn || !heatmapBtn || !distributionsBtn || !workoutTimeBtn ||
-      !trainingCalendarBtn || !wordcloudBtn || !pieChartsBtn || !lifetimeStatisticsBtn || !totalDistancePanel || !paceMetricsPanel || !equipmentPanel || !equipmentTimelinePanel || !personalBestsPanel || !heatmapPanel || !distributionsPanel || !workoutTimePanel || !trainingCalendarPanel || !wordcloudPanel || !pieChartsPanel || !lifetimeStatisticsPanel) {
+      !trainingCalendarBtn || !wordcloudBtn || !pieChartsBtn || !lifetimeStatisticsBtn || !mediaGalleryBtn || !totalDistancePanel || !paceMetricsPanel || !equipmentPanel || !equipmentTimelinePanel || !personalBestsPanel || !heatmapPanel || !distributionsPanel || !workoutTimePanel || !trainingCalendarPanel || !wordcloudPanel || !pieChartsPanel || !lifetimeStatisticsPanel || !mediaGalleryPanel) {
     return tabName;
   }
 
@@ -318,6 +322,7 @@ function setVisualizationTab(tabName, options = {}) {
   const isWordcloud = tabName === 'wordcloud';
   const isPieCharts = tabName === 'pieCharts';
   const isLifetimeStatistics = tabName === 'lifetimeStatistics';
+  const isMediaGallery = tabName === 'mediaGallery';
 
   totalDistanceBtn.setAttribute('aria-selected', isTotalDistance ? 'true' : 'false');
   totalDistanceBtn.setAttribute('tabindex', isTotalDistance ? '0' : '-1');
@@ -363,6 +368,9 @@ function setVisualizationTab(tabName, options = {}) {
   lifetimeStatisticsBtn.setAttribute('aria-selected', isLifetimeStatistics ? 'true' : 'false');
   lifetimeStatisticsBtn.setAttribute('tabindex', isLifetimeStatistics ? '0' : '-1');
   setVisualizationTabButtonClass(lifetimeStatisticsBtn, isLifetimeStatistics);
+  mediaGalleryBtn.setAttribute('aria-selected', isMediaGallery ? 'true' : 'false');
+  mediaGalleryBtn.setAttribute('tabindex', isMediaGallery ? '0' : '-1');
+  setVisualizationTabButtonClass(mediaGalleryBtn, isMediaGallery);
 
   totalDistancePanel.classList.toggle('hidden', !isTotalDistance);
   paceMetricsPanel.classList.toggle('hidden', !isPaceMetrics);
@@ -376,6 +384,7 @@ function setVisualizationTab(tabName, options = {}) {
   wordcloudPanel.classList.toggle('hidden', !isWordcloud);
   pieChartsPanel.classList.toggle('hidden', !isPieCharts);
   lifetimeStatisticsPanel.classList.toggle('hidden', !isLifetimeStatistics);
+  mediaGalleryPanel.classList.toggle('hidden', !isMediaGallery);
 
   if (options.focusTab) {
     (isTotalDistance ? totalDistanceBtn :
@@ -388,7 +397,7 @@ function setVisualizationTab(tabName, options = {}) {
     isWorkoutTime ? workoutTimeBtn :
     isTrainingCalendar ? trainingCalendarBtn :
     isWordcloud ? wordcloudBtn :
-    isPieCharts ? pieChartsBtn : lifetimeStatisticsBtn).focus();
+    isPieCharts ? pieChartsBtn : isLifetimeStatistics ? lifetimeStatisticsBtn : mediaGalleryBtn).focus();
   }
 
   return tabName;

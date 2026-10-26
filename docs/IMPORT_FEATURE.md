@@ -12,6 +12,12 @@ After each import, the dashboard shows only visualization tabs that can produce 
 
 Select a Strava export ZIP. The importer reads its `activities.csv`, retains the supported activity fields, and enriches activities with available FIT/GPX GPS tracks and bike power best efforts.
 
+### Strava media gallery
+
+When the selected Strava ZIP contains readable JPG photos or MP4 videos, the dashboard also offers a Media tab. The media manifest and activity references are checked against archive filenames; only a complete, unique match is linked. Missing or ambiguous references are left unassigned and reported, and media failures do not block the training import. The gallery is available for the current page session only, so switching tabs does not require choosing the ZIP again, but closing or reloading the page may require a new import. Videos start only after the user selects them.
+
+Filter media by year, sport, or activity, then create an annual recap or a collage from the visible or selected items. These views use the existing local preview/download flow. Routes are excluded unless explicitly selected, and exports are rasterized locally so embedded location metadata from original photos is not retained. Media files and captions are not uploaded or saved to browser storage by this feature.
+
 ### Swim GPS regression and recording ownership
 
 Standalone FIT recordings use all of their recorded samples for GPS and bike power extraction. CSV summary start times and Moving Time do not trim a recording that belongs to only one activity. This preserves outdoor-swim routes when summary and recording times disagree, the athlete paused, or GPS samples lack timestamps. Existing coordinate validation and route simplification still apply; pool swims without GPS and single-point recordings do not acquire invented routes.

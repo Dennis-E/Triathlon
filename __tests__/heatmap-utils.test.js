@@ -437,6 +437,22 @@ describe('heatmap-utils', () => {
       expect(computeRouteSegmentColor(10, scale)).toBe(colors[1]);
     });
 
+    it.each([
+      ['blue-red', ['#60A5FA', '#897BB3', '#B3506D', '#DC2626']],
+      ['yellow-red', ['#FDE047', '#F2A23C', '#E76431', '#DC2626']],
+      ['blue', ['#BFDBFE', '#89A5D7', '#5470B1', '#1E3A8A']],
+      ['black-fire', ['#DC2626', '#E76431', '#F2A23C', '#FDE047']]
+    ])('maps logarithmic steps through the %s palette', (scheme, expected) => {
+      const colors = segments.map(segment => computeRouteSegmentColor(segment.count, scale, { scheme }));
+      expect(colors).toEqual(expected);
+      expect(new Set(colors).size).toBe(4);
+    });
+
+    it('falls back to Blue to Red for an unknown palette', () => {
+      expect(computeRouteSegmentColor(1, scale, { scheme: 'unknown' })).toBe('#60A5FA');
+      expect(computeRouteSegmentColor(1000, scale, { scheme: 'unknown' })).toBe('#DC2626');
+    });
+
     it('uses a custom palette when both endpoint colors are supplied', () => {
       expect(computeRouteSegmentColor(1, scale, {
         lowColor: '#000000',
@@ -475,6 +491,7 @@ describe('heatmap-utils', () => {
         minCount: 1,
         midpointCount: 32,
         maxCount: 1000,
+        colors: { low: '#60A5FA', midpoint: '#9E6690', high: '#DC2626' },
         ariaLabel: 'Frequency scale from 1 visit (light blue) through about 32 visits (midpoint) to 1000 visits (red).'
       });
     });
@@ -485,6 +502,7 @@ describe('heatmap-utils', () => {
         visible: true,
         mode: 'constant',
         count: 5,
+        color: '#60A5FA',
         ariaLabel: 'All displayed routes have 5 visits.'
       });
     });
@@ -495,6 +513,19 @@ describe('heatmap-utils', () => {
         mode: 'hidden',
         ariaLabel: ''
       });
+    });
+
+    it('provides scheme-specific gradient colors and accessible color meanings', () => {
+      const scale = computeRouteFrequencyScale([1, 10, 100, 1000].map(count => ({ count })));
+      const blueGuide = buildFrequencyScaleGuide(scale, 'blue');
+      const fireGuide = buildFrequencyScaleGuide(scale, 'black-fire');
+
+      expect(blueGuide.colors).toEqual({ low: '#BFDBFE', midpoint: '#6F8BC4', high: '#1E3A8A' });
+      expect(blueGuide.ariaLabel).toContain('(light blue)');
+      expect(blueGuide.ariaLabel).toContain('(dark blue)');
+      expect(fireGuide.colors).toEqual({ low: '#DC2626', midpoint: '#ED8337', high: '#FDE047' });
+      expect(fireGuide.ariaLabel).toContain('(red)');
+      expect(fireGuide.ariaLabel).toContain('(yellow)');
     });
   });
 

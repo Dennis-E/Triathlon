@@ -295,6 +295,7 @@ const DASHBOARD_MODULE_FILES = [
   'dashboard-wordcloud.js',
   'dashboard-pie-charts.js',
   'dashboard-lifetime-statistics.js',
+  'dashboard-media.js',
   'dashboard-export.js',
   'dashboard-tabs.js'
 ];
@@ -668,9 +669,17 @@ describe('index.html inline script syntax', () => {
   it('keeps visualization export buttons content-sized across stacked headers', () => {
     const exportButtons = [...html.matchAll(/<button\b(?=[^>]*onclick="exportVisualizationTab\('[^']+'\)")([^>]*)>/g)];
 
-    expect(exportButtons).toHaveLength(11);
+    expect(exportButtons).toHaveLength(12);
     expect(exportButtons.every(([, attributes]) => /\bclass="[^"]*\bviz-export-button\b[^"]*"/.test(attributes))).toBe(true);
     expect(html).toMatch(/\.viz-export-button\s*\{[^}]*width:\s*fit-content;[^}]*max-width:\s*100%;[^}]*flex-shrink:\s*0;/s);
+  });
+
+  it('provides accessible media filters and a live status for the gallery', () => {
+    expect(html).toContain('aria-label="Filter media by year"');
+    expect(html).toContain('aria-label="Filter media by sport"');
+    expect(html).toContain('aria-label="Filter media by activity"');
+    expect(html).toContain('id="mediaGalleryLoadMore"');
+    expect(html).toContain('id="mediaGalleryStatus" role="status" aria-live="polite"');
   });
 
   it('starts the Wordcloud slider at 50 while retaining its 10–100 range', () => {
@@ -1032,6 +1041,18 @@ describe('index.html inline script syntax', () => {
     expect(html).toContain('id="distributionsColorScheme"');
     expect(html).toContain('value="fire" selected>On fire</option>');
     expect(html).toContain('value="monochrome-blue">Monochrome blue</option>');
+  });
+
+  it('exposes the four heatmap color schemes with Blue to Red selected by default', () => {
+    const selector = html.match(/<select id="heatmapColorScheme"[\s\S]*?<\/select>/)?.[0] || '';
+    expect(selector).toContain('<option value="blue-red" selected>Blue to Red</option>');
+    expect(selector).toContain('<option value="yellow-red">Yellow to Red</option>');
+    expect(selector).toContain('<option value="blue">Blue</option>');
+    expect(selector).toContain('<option value="black-fire">Black + Fire</option>');
+    expect((selector.match(/<option\b/g) || [])).toHaveLength(4);
+    expect(html).toContain('data-filter-label="Color scheme"');
+    expect(inlineCode).toContain('getHeatmapKeyboardAdapter');
+    expect(selector).toContain('onchange="setHeatmapColorScheme(this.value)"');
   });
 
   it('uses filled circular markers and explicit metric axis units (026-distributions-labels-colors US1)', () => {

@@ -102,7 +102,9 @@ function getVisualizationAvailability(activities, auxiliaryData = {}) {
     trainingCalendar: calendar.years.some(year => year.activityCount > 0),
     wordcloud: wordcloud.getWordFrequencies(records).length > 0,
     pieCharts: hasPieChartData(records, pieCharts),
-    lifetimeStatistics: lifetimeSummary.workoutCount > 0
+    lifetimeStatistics: lifetimeSummary.workoutCount > 0,
+    mediaGallery: auxiliaryData.sourceLabel !== 'TrainingPeaks ZIP import' &&
+      !!(auxiliaryData.mediaLibrary && auxiliaryData.mediaLibrary.hasReadableMedia)
   };
 }
 

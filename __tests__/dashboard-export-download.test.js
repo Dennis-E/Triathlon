@@ -156,15 +156,71 @@ describe('dashboard export download destination', () => {
     expect(runtime.downloadLinks).toHaveLength(1);
   });
 
+  it.each([true, false])('captures only prepared media recap content (hasData=%s)', async hasData => {
+    const runtime = createDownloadRuntime();
+    const context = runtime.context;
+    const captureTarget = { id: 'mediaGalleryExportArea', childElementCount: hasData ? 2 : 0 };
+    const originalGetElementById = context.document.getElementById;
+    context.chartInstance = null;
+    const elements = {
+      mediaGalleryExportArea: captureTarget,
+      mediaGalleryYearFilter: { value: '2025', selectedOptions: [{ textContent: '2025' }] },
+      mediaGallerySportFilter: { value: 'Run', selectedOptions: [{ textContent: 'Run' }] },
+      mediaGalleryActivityFilter: { value: 'all', selectedOptions: [{ textContent: 'All activities' }] },
+      mediaGalleryIncludeRoutes: { checked: false }
+    };
+    context.window.exportUtils = require('../src/export-utils');
+    context.window.mediaGalleryDashboard = {
+      getExportContext: () => [
+        { label: 'Year', value: '2025' }, { label: 'Sport', value: 'Run' }, { label: 'Routes', value: 'Excluded' }
+      ]
+    };
+    context.document.getElementById = id => elements[id] || originalGetElementById(id);
+    context.document.querySelectorAll = () => [];
+    context.html2canvas = jest.fn().mockResolvedValue({ width: 960, height: 960 });
+    context.__mockCapture(PNG_DATA_URL);
+    vm.runInContext(`
+      showExportPreviewModal = dataUrl => { this.previewForTest = dataUrl; };
+      this.exportMediaForTest = () => exportVisualizationTab('mediaGallery');
+      this.mediaTargetForTest = () => getTabExportTarget('mediaGallery');
+    `, context);
+
+    const target = context.mediaTargetForTest();
+    await context.exportMediaForTest();
+    if (!hasData) {
+      expect(target).toBeNull();
+      expect(context.html2canvas).not.toHaveBeenCalled();
+      expect(runtime.toast.textContent).toContain('Nothing to export');
+      return;
+    }
+    expect(target).toMatchObject({
+      targetElementId: 'mediaGalleryExportArea',
+      filters: expect.arrayContaining([
+        { label: 'Year', value: '2025' },
+        { label: 'Sport', value: 'Run' },
+        { label: 'Routes', value: 'Excluded' }
+      ]),
+      availableControls: expect.arrayContaining([
+        { label: 'Include routes', controls: [{ label: 'Excluded', selected: false }] }
+      ])
+    });
+    expect(context.html2canvas).toHaveBeenCalledWith(captureTarget, expect.objectContaining({ useCORS: true }));
+    expect(context.previewForTest).toBe(PNG_DATA_URL);
+    await runtime.download();
+    expect(runtime.downloadLinks[0].download).toMatch(/^trianalytica-media-gallery-/);
+  });
+
   it.each([true, false])('captures only an exportable Swim heatmap and preserves its preview (hasData=%s)', async hasData => {
     const runtime = createDownloadRuntime();
     const context = runtime.context;
     const map = { id: 'heatmapMapContainer' };
     const getOriginalElement = context.document.getElementById;
+    context.chartInstance = null;
     const elements = {
       heatmapMapContainer: map,
       heatmapEmptyState: { classList: { contains: () => hasData } },
-      heatmapSportBtnSwim: { textContent: 'Swim', classList: { contains: () => true }, getAttribute: () => null }
+      heatmapSportBtnSwim: { textContent: 'Swim', classList: { contains: () => true }, getAttribute: () => null },
+      heatmapColorScheme: { value: 'black-fire', selectedOptions: [{ textContent: 'Black + Fire' }] }
     };
     context.window.exportUtils = require('../src/export-utils');
     context.chartInstance = null;
@@ -189,11 +245,57 @@ describe('dashboard export download destination', () => {
       expect(runtime.toast.textContent).toContain('Nothing to export');
       return;
     }
-    expect(target).toMatchObject({ targetElementId: 'heatmapMapContainer', filters: [{ label: 'Sport', value: 'Swim' }] });
+    expect(target).toMatchObject({
+      targetElementId: 'heatmapMapContainer',
+      filters: [
+        { label: 'Sport', value: 'Swim' },
+        { label: 'Color scheme', value: 'Black + Fire' }
+      ],
+      availableControls: expect.arrayContaining([
+        { label: 'Color scheme', controls: [{ label: 'Black + Fire', selected: true }] }
+      ])
+    });
     expect(context.html2canvas).toHaveBeenCalledWith(map, expect.objectContaining({ useCORS: true }));
     expect(context.previewForTest).toBe(PNG_DATA_URL);
     await runtime.download();
     expect(runtime.downloadLinks[0].download).toMatch(/^trianalytica-heatmap-/);
+  });
+
+  it('darkens only the cloned tile layer for Black + Fire exports', async () => {
+    const runtime = createDownloadRuntime();
+    const context = runtime.context;
+    const map = { id: 'heatmapMapContainer' };
+    const tileLayer = { style: { filter: 'invert(1) hue-rotate(180deg) brightness(0.8)', opacity: '' } };
+    const clonedMap = { style: { backgroundColor: '' }, querySelector: jest.fn(() => tileLayer) };
+    const clonedDocument = {
+      getElementById: id => id === 'heatmapMapContainer' ? clonedMap : (id === 'heatmapColorScheme' ? { value: 'black-fire' } : null)
+    };
+    const getOriginalElement = context.document.getElementById;
+    context.chartInstance = null;
+    const elements = {
+      heatmapMapContainer: map,
+      heatmapEmptyState: { classList: { contains: () => true } },
+      heatmapSportBtnAll: { textContent: 'All Sports', classList: { contains: () => true }, getAttribute: () => null },
+      heatmapColorScheme: { value: 'black-fire', selectedOptions: [{ textContent: 'Black + Fire' }] }
+    };
+    context.document.getElementById = id => elements[id] || getOriginalElement(id);
+    context.document.querySelectorAll = () => [];
+    context.html2canvas = jest.fn(async (_target, options) => {
+      options.onclone(clonedDocument);
+      return { width: 400, height: 300 };
+    });
+    context.__mockCapture(PNG_DATA_URL);
+    vm.runInContext(`
+      showExportPreviewModal = dataUrl => { this.previewForTest = dataUrl; };
+      this.exportBlackFireForTest = () => exportVisualizationTab('heatmap');
+    `, context);
+
+    await context.exportBlackFireForTest();
+
+    expect(tileLayer.style.filter).toBe('');
+    expect(tileLayer.style.opacity).toBe('0.45');
+    expect(clonedMap.style.backgroundColor).toBe('rgb(2, 6, 23)');
+    expect(runtime.context.previewForTest).toBe(PNG_DATA_URL);
   });
 
   it('passes the current PNG bytes and suggested filename to the browser unchanged', async () => {

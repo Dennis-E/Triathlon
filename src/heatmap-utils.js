@@ -316,6 +316,17 @@ const ROUTE_COLOR_DEFAULTS = {
   extremeColor: '#DC2626'
 };
 
+const ROUTE_COLOR_SCHEMES = {
+  'blue-red': { ...ROUTE_COLOR_DEFAULTS, lowDescription: 'light blue', extremeDescription: 'red' },
+  'yellow-red': { lowColor: '#FDE047', extremeColor: '#DC2626', lowDescription: 'yellow', extremeDescription: 'red' },
+  blue: { lowColor: '#BFDBFE', extremeColor: '#1E3A8A', lowDescription: 'light blue', extremeDescription: 'dark blue' },
+  'black-fire': { lowColor: '#DC2626', extremeColor: '#FDE047', lowDescription: 'red', extremeDescription: 'yellow' }
+};
+
+function getRouteColorScheme(scheme) {
+  return ROUTE_COLOR_SCHEMES[scheme] || ROUTE_COLOR_SCHEMES['blue-red'];
+}
+
 function parseHexColor(color) {
   if (typeof color !== 'string' || !/^#[0-9a-f]{6}$/i.test(color)) return null;
   return [
@@ -337,12 +348,12 @@ function interpolateHexColor(startColor, endColor, progress) {
  * Map a route frequency directly across the light-blue -> red scale.
  * @param {number} count
  * @param {Object|null} scale - output of computeRouteFrequencyScale()
- * @param {{lowColor?: string, extremeColor?: string}} [options]
+ * @param {{scheme?: string, lowColor?: string, extremeColor?: string}} [options]
  * @returns {string}
  */
 function computeRouteSegmentColor(count, scale, options = {}) {
   const customColors = [options.lowColor, options.extremeColor];
-  const palette = customColors.every(color => parseHexColor(color)) ? options : ROUTE_COLOR_DEFAULTS;
+  const palette = customColors.every(color => parseHexColor(color)) ? options : getRouteColorScheme(options.scheme);
   const normalized = normalizeRouteFrequency(count, scale);
   return interpolateHexColor(palette.lowColor, palette.extremeColor, normalized);
 }
@@ -356,14 +367,22 @@ function formatVisitCount(count) {
  * @param {Object|null} scale - output of computeRouteFrequencyScale()
  * @returns {Object}
  */
-function buildFrequencyScaleGuide(scale) {
+function buildFrequencyScaleGuide(scale, scheme = 'blue-red') {
   if (!scale) return { visible: false, mode: 'hidden', ariaLabel: '' };
+
+  const palette = getRouteColorScheme(scheme);
+  const colors = {
+    low: palette.lowColor,
+    midpoint: interpolateHexColor(palette.lowColor, palette.extremeColor, 0.5),
+    high: palette.extremeColor
+  };
 
   if (!scale.hasRange) {
     return {
       visible: true,
       mode: 'constant',
       count: scale.minCount,
+      color: colors.low,
       ariaLabel: `All displayed routes have ${formatVisitCount(scale.minCount)}.`
     };
   }
@@ -375,7 +394,8 @@ function buildFrequencyScaleGuide(scale) {
     minCount: scale.minCount,
     midpointCount,
     maxCount: scale.maxCount,
-    ariaLabel: `Frequency scale from ${formatVisitCount(scale.minCount)} (light blue) through about ${formatVisitCount(midpointCount)} (midpoint) to ${formatVisitCount(scale.maxCount)} (red).`
+    colors,
+    ariaLabel: `Frequency scale from ${formatVisitCount(scale.minCount)} (${palette.lowDescription}) through about ${formatVisitCount(midpointCount)} (midpoint) to ${formatVisitCount(scale.maxCount)} (${palette.extremeDescription}).`
   };
 }
 

@@ -54,6 +54,21 @@ describe('export-utils', () => {
     expect(hasExportableContent('heatmap', { heatmap: false })).toBe(false);
   });
 
+  it('supports the media gallery local export title, filename, and capture metadata', () => {
+    expect(getTabDisplayTitle('mediaGallery')).toBe('Media Gallery');
+    expect(getExportTargetSlug('mediaGallery')).toBe('media-gallery');
+    expect(generateExportFilename('mediaGallery', new Date(2026, 9, 21, 10, 0, 0)))
+      .toBe('trianalytica-media-gallery-20261021-100000.png');
+    expect(createExportTarget({
+      kind: 'tab', key: 'mediaGallery', title: 'Media Gallery',
+      targetElementId: 'mediaGalleryExportArea', hasData: true,
+      filters: [{ label: 'Year', value: '2025' }]
+    })).toMatchObject({
+      targetElementId: 'mediaGalleryExportArea', hasData: true,
+      filters: [{ label: 'Year', value: '2025' }]
+    });
+  });
+
   describe('module shape', () => {
     it('exposes the expected functions', () => {
       expect(typeof computeSquareFit).toBe('function');
@@ -69,7 +84,7 @@ describe('export-utils', () => {
     });
   });
 
-  it.each(['totalDistance', 'paceMetrics', 'equipment', 'equipmentTimeline', 'personalBests', 'heatmap', 'distributions', 'workoutTime', 'trainingCalendar', 'wordcloud', 'pieCharts', 'lifetimeStatistics'])('preserves export context and no-data availability for %s', key => {
+  it.each(['totalDistance', 'paceMetrics', 'equipment', 'equipmentTimeline', 'personalBests', 'heatmap', 'distributions', 'workoutTime', 'trainingCalendar', 'wordcloud', 'pieCharts', 'lifetimeStatistics', 'mediaGallery'])('preserves export context and no-data availability for %s', key => {
     const filters = [{ label: 'Sport', value: 'Run' }];
     const target = createExportTarget({ kind: 'tab', key, title: key, targetElementId: `${key}Target`, hasData: true, filters });
     expect(target).toMatchObject({ key, targetElementId: `${key}Target`, filters });

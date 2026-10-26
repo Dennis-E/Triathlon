@@ -18,7 +18,8 @@
       trainingCalendar: 'trainingCalendarYears',
       wordcloud: 'wordcloudCanvas',
       pieCharts: 'pieChartsCaptureArea',
-      lifetimeStatistics: 'lifetimeStatisticsExportArea'
+      lifetimeStatistics: 'lifetimeStatisticsExportArea',
+      mediaGallery: 'mediaGalleryExportArea'
     };
 
     const EXPORT_DOMAIN = window.exportUtils.getExportBrandConfig().domain;
@@ -50,7 +51,9 @@
         trainingCalendar: typeof processedActivities !== 'undefined' && processedActivities.length > 0,
         wordcloud: !!(window.wordcloudDashboard && window.wordcloudDashboard.canRequestExport()),
         pieCharts: isEmptyStateHidden('pieChartsEmptyState'),
-        lifetimeStatistics: isEmptyStateHidden('lifetimeStatisticsEmptyState')
+        lifetimeStatistics: isEmptyStateHidden('lifetimeStatisticsEmptyState'),
+        mediaGallery: !!(document.getElementById('mediaGalleryExportArea') &&
+          document.getElementById('mediaGalleryExportArea').childElementCount > 0)
       };
     }
 
@@ -73,6 +76,19 @@
       return { label, controls: getControlSnapshot(ids) };
     }
 
+    function getSelectControlGroup(label, id) {
+      const select = document.getElementById(id);
+      const selectedOption = select?.selectedOptions?.[0];
+      const selectedLabel = selectedOption?.textContent.trim();
+      return { label, controls: selectedLabel ? [{ label: selectedLabel, selected: true }] : [] };
+    }
+
+    function getCheckboxControlGroup(label, id) {
+      const checkbox = document.getElementById(id);
+      if (!checkbox) return { label, controls: [] };
+      return { label, controls: [{ label: checkbox.checked ? 'Included' : 'Excluded', selected: checkbox.checked === true }] };
+    }
+
     function getAvailableControlContext(tabName) {
       const viewIds = [
         'vizTabTotalDistance',
@@ -86,7 +102,8 @@
         'vizTabTrainingCalendar',
         'vizTabWordcloud',
         'vizTabPieCharts',
-        'vizTabLifetimeStatistics'
+        'vizTabLifetimeStatistics',
+        'vizTabMediaGallery'
       ];
       const groups = [getControlGroup('Views', viewIds)];
       const tabGroups = {
@@ -109,7 +126,8 @@
         ],
         personalBests: [],
         heatmap: [
-          getControlGroup('Sport', ['heatmapSportBtnAll', 'heatmapSportBtnRun', 'heatmapSportBtnBike', 'heatmapSportBtnSwim'])
+          getControlGroup('Sport', ['heatmapSportBtnAll', 'heatmapSportBtnRun', 'heatmapSportBtnBike', 'heatmapSportBtnSwim']),
+          getSelectControlGroup('Color scheme', 'heatmapColorScheme')
         ],
         workoutTime: [
           getControlGroup('Granularity', ['workoutTimeGranularityBtnDay', 'workoutTimeGranularityBtnWeek', 'workoutTimeGranularityBtnMonth', 'workoutTimeGranularityBtnYear']),
@@ -125,7 +143,13 @@
           getControlGroup('Slice size', ['pieMeasureBtnCount', 'pieMeasureBtnTime', 'pieMeasureBtnDistance']),
           getControlGroup('Sport', ['pieSportBtnAll', 'pieSportBtnRun', 'pieSportBtnBike', 'pieSportBtnSwim'])
         ],
-        lifetimeStatistics: []
+        lifetimeStatistics: [],
+        mediaGallery: [
+          getSelectControlGroup('Year', 'mediaGalleryYearFilter'),
+          getSelectControlGroup('Sport', 'mediaGallerySportFilter'),
+          getSelectControlGroup('Activity', 'mediaGalleryActivityFilter'),
+          getCheckboxControlGroup('Include routes', 'mediaGalleryIncludeRoutes')
+        ]
       };
       return window.exportUtils.summarizeAvailableControls(groups.concat(tabGroups[tabName] || []));
     }
@@ -151,7 +175,8 @@
         ],
         personalBests: [],
         heatmap: [
-          { label: 'Sport', value: getActiveButtonText(['heatmapSportBtnAll', 'heatmapSportBtnRun', 'heatmapSportBtnBike', 'heatmapSportBtnSwim']) }
+          { label: 'Sport', value: getActiveButtonText(['heatmapSportBtnAll', 'heatmapSportBtnRun', 'heatmapSportBtnBike', 'heatmapSportBtnSwim']) },
+          { label: 'Color scheme', value: document.getElementById('heatmapColorScheme')?.selectedOptions[0]?.textContent.trim() }
         ],
         workoutTime: [
           { label: 'Granularity', value: getActiveButtonText(['workoutTimeGranularityBtnDay', 'workoutTimeGranularityBtnWeek', 'workoutTimeGranularityBtnMonth', 'workoutTimeGranularityBtnYear']) },
@@ -169,7 +194,11 @@
           { label: 'Sport', value: getActiveButtonText(['pieSportBtnAll', 'pieSportBtnRun', 'pieSportBtnBike', 'pieSportBtnSwim']) },
           { label: 'Colour scheme', value: document.getElementById('pieChartsColorScheme')?.selectedOptions[0]?.textContent.trim() }
         ],
-        lifetimeStatistics: []
+        lifetimeStatistics: [],
+        mediaGallery: [
+          ...(window.mediaGalleryDashboard && typeof window.mediaGalleryDashboard.getExportContext === 'function'
+            ? window.mediaGalleryDashboard.getExportContext() : [])
+        ]
       };
       return window.exportUtils.summarizeFilters(contexts[tabName] || []);
     }
@@ -531,9 +560,18 @@
           useCORS: true,
           logging: false,
           onclone: clonedDocument => {
-            if (target.key !== 'trainingCalendar') return;
             const clonedTarget = clonedDocument.getElementById(target.targetElementId);
             if (!clonedTarget) return;
+            if (target.key === 'heatmap' && document.getElementById('heatmapColorScheme')?.value === 'black-fire') {
+              const tileLayer = clonedTarget.querySelector('.leaflet-tile-pane .leaflet-layer');
+              if (tileLayer) {
+                tileLayer.style.filter = '';
+                tileLayer.style.opacity = '0.45';
+                clonedTarget.style.backgroundColor = 'rgb(2, 6, 23)';
+              }
+              return;
+            }
+            if (target.key !== 'trainingCalendar') return;
             const regions = Array.from(clonedTarget.querySelectorAll('[role="region"]'));
             const captureWidth = Math.max(clonedTarget.clientWidth, ...regions.map(region => region.scrollWidth));
             regions.forEach(region => {

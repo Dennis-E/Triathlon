@@ -1,9 +1,20 @@
      let selectedHeatmapSportFilter = 'All';
+    const HEATMAP_COLOR_SCHEMES = ['blue-red', 'yellow-red', 'blue', 'black-fire'];
+    let selectedHeatmapColorScheme = 'blue-red';
      let heatmapMapInstance = null;
+    let heatmapTileLayerInstance = null;
      let routeCanvasLayerInstance = null;
      let leafletLoadPromise = null;
     let heatmapViewportDataset = null;
     let heatmapInitialFitPending = false;
+
+    function updateHeatmapTilePresentation() {
+      const tileContainer = heatmapTileLayerInstance && heatmapTileLayerInstance.getContainer();
+      if (!tileContainer) return;
+      tileContainer.style.filter = selectedHeatmapColorScheme === 'black-fire'
+        ? 'invert(1) hue-rotate(180deg) brightness(0.8)'
+        : '';
+    }
 
     // Lazy-load Leaflet only when the heatmap tab is first opened. Route lines are
     // drawn with vanilla Leaflet polylines, so no heat-plugin dependency is needed.
@@ -44,6 +55,7 @@
           L.Util.setOptions(this, options || {});
           this._segments = [];
           this._frequencyScale = null;
+          this._colorScheme = 'blue-red';
           this._lowZoomSegments = null;
           this._screenSegmentIndex = window.heatmapUtils.buildScreenSegmentIndex([]);
           this._hoverFrame = null;
@@ -79,12 +91,13 @@
         // Replace the segments this layer draws (called on every renderHeatmap(), e.g.
         // after a sport-filter change) and force a fresh redraw (FR-006/SC-004 from
         // specs/001-route-line-heatmap: no stale routes left visible).
-        setSegments: function (segments, frequencyScale) {
+        setSegments: function (segments, frequencyScale, colorScheme = selectedHeatmapColorScheme) {
           const segmentList = Object.values(segments || {});
           this._frequencyScale = frequencyScale || window.heatmapUtils.computeRouteFrequencyScale(segmentList);
+          this._colorScheme = colorScheme;
           const styledSegments = segmentList.map(segment => ({
             ...segment,
-            color: window.heatmapUtils.computeRouteSegmentColor(segment.count, this._frequencyScale)
+            color: window.heatmapUtils.computeRouteSegmentColor(segment.count, this._frequencyScale, { scheme: this._colorScheme })
           }));
           // Sort once here (not per redraw frame) so higher-frequency segments are always
           // drawn last/on top, independent of import order (spec 005 FR-001/FR-002/FR-003).
@@ -135,7 +148,7 @@
               const styledLowZoomSegments = Object.values(window.heatmapUtils.buildLowZoomRouteSegments(this._segments))
                 .map(segment => ({
                   ...segment,
-                  color: window.heatmapUtils.computeRouteSegmentColor(segment.colorCount, this._frequencyScale)
+                  color: window.heatmapUtils.computeRouteSegmentColor(segment.colorCount, this._frequencyScale, { scheme: this._colorScheme })
                 }));
               // Same frequency-on-top guarantee for aggregates, keyed by colorCount (FR-010).
               this._lowZoomSegments = window.heatmapUtils.sortSegmentsForDrawOrder(styledLowZoomSegments, 'colorCount');
@@ -234,9 +247,18 @@
 
     function getHeatmapKeyboardAdapter() {
       return window.dashboardTabNavigation.createDashboardFilterAdapter(
-        () => ({ values: { sport: selectedHeatmapSportFilter } }),
-        prefix => prefix.length === 0 ? { id: 'sport', values: ['All', 'Run', 'Bike', 'Swim'] } : null,
-        values => setHeatmapSportFilter(values.sport)
+        () => ({ values: { sport: selectedHeatmapSportFilter, palette: selectedHeatmapColorScheme } }),
+        prefix => {
+          if (prefix.length === 0) return { id: 'sport', values: ['All', 'Run', 'Bike', 'Swim'] };
+          if (prefix.length === 1) return { id: 'palette', values: HEATMAP_COLOR_SCHEMES };
+          return null;
+        },
+        values => {
+          selectedHeatmapColorScheme = HEATMAP_COLOR_SCHEMES.includes(values.palette) ? values.palette : 'blue-red';
+          const selector = document.getElementById('heatmapColorScheme');
+          if (selector) selector.value = selectedHeatmapColorScheme;
+          setHeatmapSportFilter(values.sport);
+        }
       );
     }
 
@@ -244,6 +266,13 @@
       hideHeatmapActivityTooltip();
       selectedHeatmapSportFilter = sport;
       setHeatmapSportBtnActive(`heatmapSportBtn${sport}`);
+      renderHeatmap();
+    }
+
+    function setHeatmapColorScheme(scheme) {
+      selectedHeatmapColorScheme = HEATMAP_COLOR_SCHEMES.includes(scheme) ? scheme : 'blue-red';
+      const selector = document.getElementById('heatmapColorScheme');
+      if (selector) selector.value = selectedHeatmapColorScheme;
       renderHeatmap();
     }
 
@@ -298,9 +327,11 @@
       const legend = document.getElementById('heatmapFrequencyLegend');
       if (!legend) return;
 
-      const guide = window.heatmapUtils.buildFrequencyScaleGuide(scale);
+      const guide = window.heatmapUtils.buildFrequencyScaleGuide(scale, selectedHeatmapColorScheme);
       const range = document.getElementById('heatmapFrequencyRange');
+      const gradient = document.getElementById('heatmapFrequencyGradient');
       const constant = document.getElementById('heatmapFrequencyConstant');
+      const constantSwatch = document.getElementById('heatmapFrequencyConstantSwatch');
       const minLabel = document.getElementById('heatmapFrequencyMin');
       const midpointLabel = document.getElementById('heatmapFrequencyMidpoint');
       const maxLabel = document.getElementById('heatmapFrequencyMax');
@@ -317,6 +348,9 @@
 
       legend.classList.remove('hidden');
       legend.setAttribute('aria-label', guide.ariaLabel);
+      if (guide.colors && gradient) {
+        gradient.style.background = `linear-gradient(to right, ${guide.colors.low} 0%, ${guide.colors.midpoint} 50%, ${guide.colors.high} 100%)`;
+      }
       if (guide.mode === 'constant') {
         range.classList.add('hidden');
         constant.classList.remove('hidden');
@@ -325,6 +359,7 @@
         midpointLabel.textContent = '';
         maxLabel.textContent = '';
         constantValue.textContent = `${guide.count} ${guide.count === 1 ? 'visit' : 'visits'}`;
+        if (constantSwatch) constantSwatch.style.backgroundColor = guide.color;
         return;
       }
 
@@ -397,11 +432,12 @@
 
       if (!heatmapMapInstance) {
         heatmapMapInstance = L.map(container);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        heatmapTileLayerInstance = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
           maxZoom: 19
         }).addTo(heatmapMapInstance);
       }
+      updateHeatmapTilePresentation();
 
       // A single canvas layer draws all segments directly (no per-segment Leaflet
       // objects), redrawing on moveend/zoomend for smooth pan/zoom at scale. Calling
@@ -413,7 +449,7 @@
         routeCanvasLayerInstance = new RouteCanvasLayer({ lowZoomThresholdZoom: 10, minLengthPx: 1.5 });
         routeCanvasLayerInstance.addTo(heatmapMapInstance);
       }
-      routeCanvasLayerInstance.setSegments(segments, frequencyScale);
+      routeCanvasLayerInstance.setSegments(segments, frequencyScale, selectedHeatmapColorScheme);
       renderHeatmapFrequencyLegend(frequencyScale);
 
       const bounds = window.heatmapUtils.computeRouteSegmentBounds(segments);

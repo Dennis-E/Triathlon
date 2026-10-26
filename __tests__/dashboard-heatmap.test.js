@@ -18,6 +18,12 @@ function element(id) {
 
 function harness({ realGeometry = false } = {}) {
   const container = element('heatmapMapContainer');
+  container.style = { filter: '' };
+  const tileContainer = { style: { filter: '' } };
+  const tileLayer = {
+    addTo() { return this; },
+    getContainer() { return tileContainer; }
+  };
   const emptyState = element('heatmapEmptyState');
   const elements = { heatmapMapContainer: container, heatmapEmptyState: emptyState };
   const renders = [];
@@ -52,7 +58,7 @@ function harness({ realGeometry = false } = {}) {
 
   class RouteCanvasLayerStub {
     addTo() { return this; }
-    setSegments(segments, scale) { renders.push({ segments, scale }); return this; }
+    setSegments(segments, scale, scheme) { renders.push({ segments, scale, scheme }); return this; }
   }
 
   const sandbox = {
@@ -64,7 +70,7 @@ function harness({ realGeometry = false } = {}) {
     L: {
       polyline() {},
       map: jest.fn(() => map),
-      tileLayer: () => ({ addTo: () => ({}) }),
+      tileLayer: () => tileLayer,
       Layer: { extend: () => RouteCanvasLayerStub }
     },
     console,
@@ -73,7 +79,7 @@ function harness({ realGeometry = false } = {}) {
   vm.createContext(sandbox);
   const stateSource = fs.readFileSync(path.join(__dirname, '../src/dashboard-state.js'), 'utf8');
   const heatmapSource = fs.readFileSync(path.join(__dirname, '../src/dashboard-heatmap.js'), 'utf8');
-  vm.runInContext(`${stateSource}\n${heatmapSource}\nselectedVisualizationTab = 'heatmap'; this.heatmapTestApi = { renderHeatmap, setHeatmapSportFilter };`, sandbox);
+  vm.runInContext(`${stateSource}\n${heatmapSource}\nselectedVisualizationTab = 'heatmap'; this.heatmapTestApi = { renderHeatmap, setHeatmapSportFilter, setHeatmapColorScheme, getHeatmapKeyboardAdapter };`, sandbox);
   const api = sandbox.heatmapTestApi;
 
   function setDataset(dataset, tracks) {
@@ -92,21 +98,65 @@ function harness({ realGeometry = false } = {}) {
     await Promise.resolve();
   }
 
-  return { sandbox, map, elements, renders, boundsFits, sizeInvalidations, setDataset, render, filter };
+  async function setScheme(scheme) {
+    api.setHeatmapColorScheme(scheme);
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  return { sandbox, map, elements, renders, boundsFits, sizeInvalidations, tileContainer, setDataset, render, filter, setScheme };
 }
 
 describe('heatmap viewport lifecycle', () => {
-  it('exposes only sport as a keyboard dimension and renders one final selection', async () => {
+  it('exposes sport and palette as keyboard dimensions and renders one final selection', async () => {
     const h = harness();
     h.sandbox.window.dashboardTabNavigation = require('../src/tab-navigation');
     h.setDataset({ id: 'keyboard' }, { run1: 'Run', bike1: 'Bike' });
     const adapter = h.sandbox.getHeatmapKeyboardAdapter();
-    expect(adapter.readSnapshot().selection).toEqual([{ id: 'sport', value: 'All' }]);
-    adapter.applySelection([{ id: 'sport', value: 'Bike' }]);
+    expect(adapter.readSnapshot().selection).toEqual([
+      { id: 'sport', value: 'All' },
+      { id: 'palette', value: 'blue-red' }
+    ]);
+    adapter.applySelection([{ id: 'sport', value: 'Bike' }, { id: 'palette', value: 'yellow-red' }]);
     await Promise.resolve();
     await Promise.resolve();
     expect(h.renders).toHaveLength(1);
     expect(Object.keys(h.renders[0].segments)).toEqual(['bike1']);
+    expect(h.renders[0].scheme).toBe('yellow-red');
+  });
+
+  it('retains the selected palette through sport changes and rerenders', async () => {
+    const h = harness();
+    h.setDataset({ id: 'palette-state' }, { run1: 'Run', bike1: 'Bike' });
+
+    await h.render();
+    h.map.center = [40.7128, -74.006];
+    h.map.zoom = 13;
+    await h.setScheme('blue');
+    expect(h.renders.at(-1).scheme).toBe('blue');
+    expect(h.map.getCenter()).toEqual([40.7128, -74.006]);
+    expect(h.map.getZoom()).toBe(13);
+    await h.filter('Bike');
+    expect(h.renders.at(-1).scheme).toBe('blue');
+    expect(Object.keys(h.renders.at(-1).segments)).toEqual(['bike1']);
+    expect(h.map.getCenter()).toEqual([40.7128, -74.006]);
+    expect(h.map.getZoom()).toBe(13);
+  });
+
+  it('darkens only the tile layer for Black + Fire and restores standard tiles for other schemes', async () => {
+    const h = harness();
+    h.setDataset({ id: 'dark-map' }, { run1: 'Run' });
+
+    await h.render();
+    expect(h.tileContainer.style.filter).toBe('');
+    await h.setScheme('black-fire');
+    expect(h.tileContainer.style.filter).toBe('invert(1) hue-rotate(180deg) brightness(0.8)');
+    expect(h.elements.heatmapMapContainer.style.filter).toBe('');
+    expect(h.renders.at(-1).scheme).toBe('black-fire');
+
+    await h.setScheme('yellow-red');
+    expect(h.tileContainer.style.filter).toBe('');
+    expect(h.renders.at(-1).scheme).toBe('yellow-red');
   });
 
   it('discards a delayed map load after an explicitly simulated tab revision', async () => {

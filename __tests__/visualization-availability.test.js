@@ -47,7 +47,8 @@ describe('visualization availability', () => {
       trainingCalendar: false,
       wordcloud: false,
       pieCharts: false,
-      lifetimeStatistics: false
+      lifetimeStatistics: false,
+      mediaGallery: false
     });
   });
 
@@ -72,7 +73,8 @@ describe('visualization availability', () => {
       trainingCalendar: true,
       wordcloud: true,
       pieCharts: true,
-      lifetimeStatistics: true
+      lifetimeStatistics: true,
+      mediaGallery: false
     });
     expect(activities).toEqual(originalActivities);
   });
@@ -124,5 +126,19 @@ describe('visualization availability', () => {
     expect(availability.heatmap).toBe(true);
     expect(availability.workoutTime).toBe(false);
     expect(availability.trainingCalendar).toBe(true);
+  });
+
+  it('shows the media gallery only when a readable media library is available', () => {
+    const activities = [createActivity()];
+
+    expect(visualizationAvailability.getVisualizationAvailability(activities, {
+      mediaLibrary: { hasReadableMedia: true }
+    }).mediaGallery).toBe(true);
+    expect(visualizationAvailability.getVisualizationAvailability(activities, {
+      mediaLibrary: { hasReadableMedia: false }
+    }).mediaGallery).toBe(false);
+    expect(visualizationAvailability.getVisualizationAvailability(activities, {
+      sourceLabel: 'TrainingPeaks ZIP import', mediaLibrary: { hasReadableMedia: true }
+    }).mediaGallery).toBe(false);
   });
 });

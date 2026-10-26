@@ -95,6 +95,13 @@
     }
 
     function applyImportedDataset(dataset, options = {}) {
+      if (importedDataset && importedDataset !== dataset && importedDataset.mediaLibrary &&
+          typeof importedDataset.mediaLibrary.release === 'function') {
+        if (window.mediaGalleryDashboard && typeof window.mediaGalleryDashboard.clear === 'function') {
+          window.mediaGalleryDashboard.clear();
+        }
+        importedDataset.mediaLibrary.release();
+      }
       importedDataset = dataset;
       rawCsvData = dataset.rawCsvData;
       processedActivities = dataset.activities;
@@ -106,9 +113,15 @@
       const importLabel = dataset.sourceLabel === 'TrainingPeaks ZIP import' ? 'Imported TrainingPeaks history' : 'Imported Strava history';
       const fileCountLabel = Number.isSafeInteger(dataset.importedFileCount) && dataset.importedFileCount > 0
         ? ` from ${dataset.importedFileCount} ZIP archive(s)` : '';
+      const mediaCounts = dataset.mediaLibrary && dataset.mediaLibrary.counts || {};
+      const mediaStatusLabel = dataset.mediaLibrary
+        ? `; media ${mediaCounts.readable || 0} readable, ${mediaCounts.missingReferences || 0} unmatched, ${mediaCounts.ambiguousReferences || 0} ambiguous, ${mediaCounts.corrupt || 0} corrupt, ${mediaCounts.unsupported || 0} unsupported${mediaCounts.unreferenced ? `, ${mediaCounts.unreferenced} unlisted` : ''}`
+        : '';
       const statusMessage = dataset.sourceLabel === 'TrainingPeaks ZIP import'
         ? importLabel
-        : `${importLabel}${fileCountLabel}: ${processedActivities.length} activities`;
+        : `${importLabel}${fileCountLabel}: ${processedActivities.length} activities${mediaStatusLabel}${
+          dataset.mediaLibrary && !dataset.mediaLibrary.hasReadableMedia ? '; no readable media found' : ''
+        }`;
       updateStatusBadge('success', statusMessage);
 
       document.getElementById('previewCardsContainer').classList.remove('hidden');
@@ -265,6 +278,9 @@
               }
               if (options.gpsTracksByActivityId && typeof options.gpsTracksByActivityId === 'object') {
                 dataset.gpsTracksByActivityId = options.gpsTracksByActivityId;
+              }
+              if (options.mediaLibrary && typeof options.mediaLibrary === 'object') {
+                dataset.mediaLibrary = options.mediaLibrary;
               }
                   if (typeof options.onDatasetPrepared === 'function') options.onDatasetPrepared(dataset);
                   applyImportedDataset(dataset, options);
@@ -522,7 +538,8 @@
               if (personalMessages.length) advanceImportExperience();
             },
             fitBestEffortsByActivityId: importResult.fitBestEffortsByActivityId || {},
-            gpsTracksByActivityId: importResult.gpsTracksByActivityId || {}
+            gpsTracksByActivityId: importResult.gpsTracksByActivityId || {},
+            mediaLibrary: importResult.mediaLibrary
           });
           recordCompletedAnalysis();
 

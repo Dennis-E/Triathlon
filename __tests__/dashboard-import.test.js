@@ -135,11 +135,15 @@ function loadRuntimeDatasetApplicator() {
     'previewCardsContainer', 'enterDashboardContainer', 'emptyStateMessage'
   ].map(id => [id, { classList: { add() {}, remove() {} } }]));
   const context = {
+    importedDataset: null,
     rawCsvData: [],
     processedActivities: [],
     fitBestEffortsByActivityId: {},
     gpsTracksByActivityId: {},
-    window: { heatmapUtils: { buildActivitySummaryIndex: () => new Map() } },
+    window: {
+      heatmapUtils: { buildActivitySummaryIndex: () => new Map() },
+      mediaGalleryDashboard: { clear: jest.fn() }
+    },
     document: { getElementById: id => nodes[id] || null },
     updateStatusBadge: jest.fn(),
     hideHeatmapActivityTooltip: jest.fn(),
@@ -158,7 +162,7 @@ function loadRuntimeDatasetApplicator() {
     renderTrainingCalendar: jest.fn()
   };
   vm.createContext(context);
-  vm.runInContext(`${dashboardImportSource}\nthis.__applyDataset = applyImportedDataset;`, context, {
+  vm.runInContext(`${dashboardImportSource}\nthis.__applyDataset = applyImportedDataset; this.__getDataset = () => importedDataset;`, context, {
     filename: 'src/dashboard-import.js'
   });
   return { applyDataset: context.__applyDataset, context, refreshVisualizationTabs: context.refreshVisualizationTabs };
@@ -267,6 +271,45 @@ describe('runtime imported dataset availability refresh', () => {
     expect(runtime.context.processedActivities).toEqual(originalSecondActivities);
     expect(firstDataset.activities).toEqual(originalFirstActivities);
     expect(secondDataset.activities).toEqual(originalSecondActivities);
+  });
+
+  it('releases the prior Strava media library when replacing the imported dataset', () => {
+    const runtime = loadRuntimeDatasetApplicator();
+    const release = jest.fn();
+    const firstDataset = {
+      rawCsvData: [], activities: [], fitBestEffortsByActivityId: {}, gpsTracksByActivityId: {},
+      sourceLabel: 'Strava ZIP import', mediaLibrary: { hasReadableMedia: true, release }
+    };
+    const nextDataset = {
+      rawCsvData: [], activities: [], fitBestEffortsByActivityId: {}, gpsTracksByActivityId: {},
+      sourceLabel: 'TrainingPeaks ZIP import'
+    };
+
+    runtime.applyDataset(firstDataset);
+    runtime.applyDataset(nextDataset);
+
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(runtime.context.window.mediaGalleryDashboard.clear).toHaveBeenCalledTimes(1);
+    expect(runtime.context.__getDataset()).toBe(nextDataset);
+    expect(nextDataset.mediaLibrary).toBeUndefined();
+  });
+
+  it('summarizes media reconciliation when no readable media tab will be shown', () => {
+    const runtime = loadRuntimeDatasetApplicator();
+    runtime.applyDataset({
+      rawCsvData: [], activities: [], fitBestEffortsByActivityId: {}, gpsTracksByActivityId: {},
+      sourceLabel: 'Strava ZIP import',
+      mediaLibrary: {
+        hasReadableMedia: false,
+        counts: { readable: 0, matchedReferences: 0, missingReferences: 2, ambiguousReferences: 1, corrupt: 1, unsupported: 3 }
+      }
+    });
+
+    expect(runtime.context.updateStatusBadge).toHaveBeenLastCalledWith('success', expect.stringContaining('no readable media found'));
+    expect(runtime.context.updateStatusBadge.mock.calls.at(-1)[1]).toContain('2 unmatched');
+    expect(runtime.context.updateStatusBadge.mock.calls.at(-1)[1]).toContain('1 ambiguous');
+    expect(runtime.context.updateStatusBadge.mock.calls.at(-1)[1]).toContain('1 corrupt');
+    expect(runtime.context.updateStatusBadge.mock.calls.at(-1)[1]).toContain('3 unsupported');
   });
 });
 

@@ -203,7 +203,7 @@ function loadRuntimeTrainingPeaksImportStatus(importResult) {
 }
 
 describe('runtime import success status copy', () => {
-  it('uses concise TrainingPeaks status during dataset application and preserves Strava wording', () => {
+  it('uses source-only success labels for both import sources', () => {
     const runtime = loadRuntimeDatasetApplicator();
     const trainingPeaksDataset = {
       rawCsvData: [],
@@ -224,7 +224,11 @@ describe('runtime import success status copy', () => {
     delete stravaDataset.importedFileCount;
     runtime.applyDataset(stravaDataset);
 
-    expect(runtime.context.updateStatusBadge).toHaveBeenLastCalledWith('success', 'Imported Strava history: 2 activities');
+    expect(runtime.context.updateStatusBadge).toHaveBeenLastCalledWith('success', 'Imported Strava history');
+
+    runtime.applyDataset({ ...stravaDataset, activities: [] });
+
+    expect(runtime.context.updateStatusBadge).toHaveBeenLastCalledWith('success', 'Imported Strava history');
   });
 
   it('uses concise TrainingPeaks status after import completion with skipped items', async () => {
@@ -299,7 +303,7 @@ describe('runtime imported dataset availability refresh', () => {
     expect(nextDataset.mediaLibrary).toBeUndefined();
   });
 
-  it('summarizes media reconciliation when no readable media tab will be shown', () => {
+  it('keeps media reconciliation details out of the successful import status', () => {
     const runtime = loadRuntimeDatasetApplicator();
     runtime.applyDataset({
       rawCsvData: [], activities: [], fitBestEffortsByActivityId: {}, gpsTracksByActivityId: {},
@@ -310,11 +314,7 @@ describe('runtime imported dataset availability refresh', () => {
       }
     });
 
-    expect(runtime.context.updateStatusBadge).toHaveBeenLastCalledWith('success', expect.stringContaining('no readable media found'));
-    expect(runtime.context.updateStatusBadge.mock.calls.at(-1)[1]).toContain('2 unmatched');
-    expect(runtime.context.updateStatusBadge.mock.calls.at(-1)[1]).toContain('1 ambiguous');
-    expect(runtime.context.updateStatusBadge.mock.calls.at(-1)[1]).toContain('1 corrupt');
-    expect(runtime.context.updateStatusBadge.mock.calls.at(-1)[1]).toContain('3 unsupported');
+    expect(runtime.context.updateStatusBadge).toHaveBeenLastCalledWith('success', 'Imported Strava history');
   });
 });
 

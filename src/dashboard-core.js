@@ -447,23 +447,39 @@
         }
       });
 
-      // Peak week is always computed weekly within the currently displayed horizon
-      const weeklyAggregationForPeak = aggregateActivitiesByWeek().aggregatedList;
-      weeklyAggregationForPeak.forEach(bucket => {
+      const aggregationLabels = {
+        daily: { distance: 'Daily Distance', average: 'Daily Average', averageUnit: 'km/day', peak: 'Peak Day' },
+        weekly: { distance: 'Weekly Distance', average: 'Weekly Average', averageUnit: 'km/wk', peak: 'Peak Week' },
+        monthly: { distance: 'Monthly Distance', average: 'Monthly Average', averageUnit: 'km/mo', peak: 'Peak Month' },
+        yearly: { distance: 'Yearly Distance', average: 'Yearly Average', averageUnit: 'km/yr', peak: 'Peak Year' }
+      }[selectedAggregationLevel] || { distance: 'Weekly Distance', average: 'Weekly Average', averageUnit: 'km/wk', peak: 'Peak Week' };
+
+      document.getElementById('distanceChartTitle').textContent = aggregationLabels.distance;
+      document.getElementById('cardAvgLabel').textContent = aggregationLabels.average;
+      document.getElementById('cardAvgUnit').textContent = aggregationLabels.averageUnit;
+      document.getElementById('cardPeakLabel').textContent = aggregationLabels.peak;
+
+      let peakPeriod = '';
+      aggregatedList.forEach(bucket => {
         const volume = selectedSportFilter === 'All'
           ? (bucket.Run + bucket.Bike + bucket.Swim)
           : (bucket[selectedSportFilter] || 0);
-        if (volume > peakKm) peakKm = volume;
+        if (volume > peakKm) {
+          peakKm = volume;
+          peakPeriod = bucket.formattedLabel;
+        }
       });
 
-      // Weekly average always reflects visible horizon length in weeks
-      const weeksInHorizon = getWeeksInDisplayedHorizon();
-      const avgKmPerWeek = weeksInHorizon > 0 ? (totalKm / weeksInHorizon) : 0;
+      const avgKmPerBucket = aggregatedList.length > 0 ? (totalKm / aggregatedList.length) : 0;
+      const peakPeriodLabel = selectedAggregationLevel === 'weekly' && peakPeriod
+        ? `Week of ${peakPeriod}`
+        : peakPeriod;
 
       // Update Card UI
       document.getElementById('cardTotalKm').textContent = totalKm.toFixed(1);
-      document.getElementById('cardAvgKm').textContent = avgKmPerWeek.toFixed(1);
+      document.getElementById('cardAvgKm').textContent = avgKmPerBucket.toFixed(1);
       document.getElementById('cardPeakKm').textContent = peakKm.toFixed(1);
+      document.getElementById('cardPeakPeriod').textContent = peakPeriodLabel;
 
       // Sport Distribution Pill split
       const totalAllSports = totalRun + totalBike + totalSwim;

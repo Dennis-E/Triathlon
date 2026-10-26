@@ -1040,7 +1040,7 @@
         <!-- Chart Controls Header -->
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
           <div class="space-y-1">
-            <h2 class="text-2xl font-bold tracking-tight">Distance</h2>
+            <h2 id="distanceChartTitle" class="text-2xl font-bold tracking-tight">Weekly Distance</h2>
           </div>
 
           <div class="flex flex-wrap items-center gap-4">
@@ -1103,10 +1103,10 @@
 
           <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between shadow-sm">
             <div class="space-y-1">
-              <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Weekly Average</p>
+              <p id="cardAvgLabel" class="text-xs font-medium text-slate-400 uppercase tracking-wider">Weekly Average</p>
               <div class="flex items-baseline space-x-1">
                 <span id="cardAvgKm" class="text-xl font-bold tracking-tight">0.0</span>
-                <span class="text-[11px] text-slate-400 font-medium">km/wk</span>
+                <span id="cardAvgUnit" class="text-[11px] text-slate-400 font-medium">km/wk</span>
               </div>
             </div>
             <div class="bg-emerald-500/10 text-emerald-400 p-2 rounded-lg border border-emerald-500/10">
@@ -1139,11 +1139,12 @@
 
           <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between shadow-sm">
             <div class="space-y-1">
-              <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Peak Week</p>
+              <p id="cardPeakLabel" class="text-xs font-medium text-slate-400 uppercase tracking-wider">Peak Week</p>
               <div class="flex items-baseline space-x-1">
                 <span id="cardPeakKm" class="text-xl font-bold tracking-tight">0.0</span>
                 <span class="text-[11px] text-slate-400 font-medium">km</span>
               </div>
+              <p id="cardPeakPeriod" class="text-[10px] text-slate-400"></p>
             </div>
             <div class="bg-amber-500/10 text-amber-400 p-2 rounded-lg border border-amber-500/10">
               <i data-lucide="crown" class="w-4 h-4"></i>

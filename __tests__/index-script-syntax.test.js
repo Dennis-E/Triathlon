@@ -463,7 +463,14 @@ describe('index.html inline script syntax', () => {
     const nextPanelStart = html.indexOf('id="vizPanelPaceMetrics"', distancePanelStart);
     const distancePanel = html.slice(distancePanelStart, nextPanelStart);
 
-    expect(distancePanel).toContain('>Distance</h2>');
+    expect(distancePanel).toContain('id="distanceChartTitle"');
+    expect(distancePanel).toContain('>Weekly Distance</h2>');
+    expect(distancePanel).toContain('id="cardAvgLabel"');
+    expect(distancePanel).toContain('>Weekly Average</p>');
+    expect(distancePanel).toContain('id="cardAvgUnit"');
+    expect(distancePanel).toContain('>km/wk</span>');
+    expect(distancePanel).toContain('id="cardPeakLabel"');
+    expect(distancePanel).toContain('id="cardPeakPeriod"');
     expect(distancePanel).not.toContain('Countries visited');
     expect(distancePanel).not.toContain('countryCountValue');
     expect(distancePanel).not.toContain('countryCountStatus');

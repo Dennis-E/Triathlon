@@ -3,6 +3,7 @@ const {
   aggregateEquipmentDistance,
   aggregateEquipmentPace,
   buildEquipmentPaceDisplay,
+  getEquipmentPaceColorRange,
   aggregateEquipmentActivityCount,
   aggregateEquipmentAvgLength,
   aggregateEquipmentTimeline,
@@ -10,6 +11,33 @@ const {
 } = require('../src/equipment-utils');
 
 describe('equipment utils', () => {
+  describe('getEquipmentPaceColorRange', () => {
+    it.each([[10, 12, 15], [20, 25, 30], [29.9, 30]])('uses actual positive displayed speeds for %j', (...speeds) => {
+      const rows = Object.freeze(speeds.map(speedKmh => Object.freeze({ speedKmh })));
+      expect(getEquipmentPaceColorRange(rows)).toEqual({ minSpeedKmh: Math.min(...speeds), maxSpeedKmh: Math.max(...speeds) });
+      expect(rows.map(row => row.speedKmh)).toEqual(speeds);
+    });
+
+    it('ignores invalid entries without coercing strings or inventing zero bounds', () => {
+      const invalid = [null, undefined, {}, { speedKmh: '20' }, { speedKmh: NaN }, { speedKmh: Infinity }, { speedKmh: 0 }, { speedKmh: -1 }];
+      expect(getEquipmentPaceColorRange(invalid)).toBeNull();
+      expect(getEquipmentPaceColorRange([])).toBeNull();
+      expect(getEquipmentPaceColorRange([...invalid, { speedKmh: 20 }, { speedKmh: 25 }])).toEqual({ minSpeedKmh: 20, maxSpeedKmh: 25 });
+    });
+
+    it('retains single/equal bounds and very close distinct values', () => {
+      expect(getEquipmentPaceColorRange([{ speedKmh: 12 }])).toEqual({ minSpeedKmh: 12, maxSpeedKmh: 12 });
+      expect(getEquipmentPaceColorRange([{ speedKmh: 12 }, { speedKmh: 12 }])).toEqual({ minSpeedKmh: 12, maxSpeedKmh: 12 });
+      expect(getEquipmentPaceColorRange([{ speedKmh: 30 }, { speedKmh: 30 - 1e-12 }])).toEqual({ minSpeedKmh: 30 - 1e-12, maxSpeedKmh: 30 });
+    });
+
+    it('exposes the same additive helper through the browser bridge', () => {
+      const browser = { window: {} };
+      require('vm').runInNewContext(require('fs').readFileSync(require('path').join(__dirname, '../src/equipment-utils.js'), 'utf8'), browser);
+      expect(browser.window.equipmentUtils.getEquipmentPaceColorRange([{ speedKmh: 15 }])).toEqual({ minSpeedKmh: 15, maxSpeedKmh: 15 });
+    });
+  });
+
   it('detects shoe vs bike equipment', () => {
     expect(getEquipmentType('ASICS Novablast 4')).toBe('Shoes');
     expect(getEquipmentType('Saucony Kinvara 13')).toBe('Shoes');

@@ -277,7 +277,7 @@ describe('export-utils', () => {
 
   describe('getTabDisplayTitle', () => {
     it('returns the expected label for every supported tab', () => {
-      expect(getTabDisplayTitle('totalDistance')).toBe('Total distance');
+      expect(getTabDisplayTitle('totalDistance')).toBe('Distance');
       expect(getTabDisplayTitle('paceMetrics')).toBe('Pace vs ...');
       expect(getTabDisplayTitle('equipment')).toBe('Equipment mileage');
       expect(getTabDisplayTitle('equipmentTimeline')).toBe('Equipment Timeline');
@@ -295,7 +295,7 @@ describe('export-utils', () => {
     it('matches the trianalytica-<tab-slug>-<yyyyMMdd-HHmmss>.png pattern', () => {
       const date = new Date(2026, 8, 17, 9, 5, 3); // 2026-09-17 09:05:03 local
       expect(generateExportFilename('paceMetrics', date)).toBe('trianalytica-pace-metrics-20260917-090503.png');
-      expect(generateExportFilename('totalDistance', date)).toBe('trianalytica-total-distance-20260917-090503.png');
+      expect(generateExportFilename('totalDistance', date)).toBe('trianalytica-distance-20260917-090503.png');
       expect(generateExportFilename('equipmentTimeline', date)).toBe('trianalytica-equipment-timeline-20260917-090503.png');
       expect(generateExportFilename('workoutTime', date)).toBe('trianalytica-workout-time-20260917-090503.png');
     });

@@ -486,12 +486,45 @@
       }
       const filename = window.exportUtils.generateExportFilename(image.target, new Date())
         || 'trianalytica-export.png';
+      const saveFilePicker = window.showSaveFilePicker;
       try {
+        if (typeof saveFilePicker === 'function') {
+          let fileHandle;
+          try {
+            fileHandle = await saveFilePicker({
+              suggestedName: filename,
+              types: [{ description: 'PNG image', accept: { 'image/png': ['.png'] } }]
+            });
+          } catch (error) {
+            if (error && error.name === 'AbortError') {
+              attempt.outcome = 'cancelled';
+              return attempt.outcome;
+            }
+            showExportToast('Your browser could not open a location picker. The file will use the browser’s default download behavior.');
+          }
+
+          if (fileHandle) {
+            try {
+              const writable = await fileHandle.createWritable();
+              await writable.write(image.blob);
+              await writable.close();
+              attempt.outcome = 'saved';
+              return attempt.outcome;
+            } catch (error) {
+              attempt.outcome = 'failed';
+              console.error('Could not save exported image', error);
+              if (lastExportedImage === image) {
+                showExportToast(`Could not save export image. ${error && error.message || 'Please try again.'}`);
+              }
+              return attempt.outcome;
+            }
+          }
+        } else {
+          showExportToast('Your browser cannot choose a download location. The file will use the browser’s default download behavior.');
+        }
+
         downloadExportedImageWithAnchor(filename, image);
         attempt.outcome = 'handed-off';
-        if (lastExportedImage === image) {
-          showExportToast('The image was handed to your browser. Browser settings control the download location.');
-        }
         return attempt.outcome;
       } catch (error) {
         attempt.outcome = 'failed';
@@ -503,7 +536,7 @@
       } finally {
         exportDownloadAttempt = null;
         if (button) button.disabled = false;
-        if (attempt.outcome === 'handed-off') {
+        if (attempt.outcome === 'handed-off' || attempt.outcome === 'saved') {
           const ownsPreview = lastExportedImage === image;
           const canCloseOrigin = ownsPreview || !lastExportedImage;
           if (ownsPreview) closeExportPreviewModal();

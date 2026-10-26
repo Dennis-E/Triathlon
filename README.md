@@ -37,6 +37,9 @@ The export preview and its originating Personal Bests detail close after browser
   - See kilometers by shoe or bike
   - Switch between distance, pace, activity count, and average session length
   - Filter by equipment category: All, Shoes, Bikes
+  - For Pace with Shoes or Bikes, choose On fire or Monochrome blue
+  - Fire progresses within each bar from the slowest displayed performance (yellow) to the fastest (red), without changing bar lengths; a single item or equal performances stay yellow
+  - All keeps the existing shoe/bike type colors; exported images retain the selected eligible Pace scheme
 
 - Equipment timeline
   - Track when each piece of equipment was active

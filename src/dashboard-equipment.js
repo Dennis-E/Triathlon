@@ -1,5 +1,6 @@
     let selectedEquipmentFilter = 'All';
     let selectedEquipmentMetric = 'distance';
+    let selectedEquipmentColorScheme = 'fire';
     let selectedEquipmentTimelineFilter = 'All';
     let selectedEquipmentTimelineMode = 'continuous'; // 'continuous' | 'activities'
     let equipmentTimelineChartInstance = null;
@@ -40,6 +41,11 @@
       const canvasArea = document.getElementById('equipmentCanvasArea');
       const fallback = document.getElementById('equipmentValueFallback');
       const explanation = document.getElementById('equipmentPaceExplanation');
+      const colorControl = document.getElementById('equipmentColorSchemeControl');
+      const colorSelect = document.getElementById('equipmentColorScheme');
+      const canSelectColors = selectedEquipmentMetric === 'pace' && ['Shoes', 'Bikes'].includes(selectedEquipmentFilter);
+      if (colorControl) colorControl.classList.toggle('hidden', !canSelectColors);
+      if (colorSelect) colorSelect.value = selectedEquipmentColorScheme;
       if (!canvas) return;
 
       let sortedEntries;
@@ -66,17 +72,9 @@
       }
       if (explanation) explanation.classList.add('hidden');
 
-      if (sortedEntries.length === 0) {
-        canvas.classList.add('hidden');
-        if (emptyState) emptyState.classList.remove('hidden');
-        return;
-      }
-
-      canvas.classList.remove('hidden');
-      if (emptyState) emptyState.classList.add('hidden');
-
       const isPace = selectedEquipmentMetric === 'pace';
       const metric = selectedEquipmentMetric;
+      const useFireColors = canSelectColors && selectedEquipmentColorScheme === 'fire';
       const paceRows = isPace
         ? window.equipmentUtils.buildEquipmentPaceDisplay(sortedEntries)
         : [];
@@ -85,6 +83,14 @@
         ? paceRows.filter(row => row.type === 'Shoes').concat(paceRows.filter(row => row.type === 'Bikes'))
         : paceRows;
       const labels = isPace ? rows.map(row => row.name) : sortedEntries.map(([name]) => name);
+      if (labels.length === 0) {
+        canvas.classList.add('hidden');
+        if (emptyState) emptyState.classList.remove('hidden');
+        return;
+      }
+      canvas.classList.remove('hidden');
+      if (emptyState) emptyState.classList.add('hidden');
+      const colorRange = useFireColors ? window.equipmentUtils.getEquipmentPaceColorRange(rows) : null;
       const values = isPace
         ? rows.map(row => row.barValue)
         : sortedEntries.map(([, value]) => metric === 'count' ? value : Number(value.toFixed(2)));
@@ -111,6 +117,24 @@
         type: 'bar',
         plugins: [{
           id: 'equipmentValueLabels',
+          beforeDatasetsDraw(chart) {
+            if (!useFireColors) return;
+            let fill = window.distributionUtils.getFireGradientColor(0);
+            const scale = chart.scales && chart.scales.x;
+            if (colorRange && colorRange.maxSpeedKmh > colorRange.minSpeedKmh && scale) {
+              const start = scale.getPixelForValue(colorRange.minSpeedKmh / colorRange.maxSpeedKmh);
+              const end = scale.getPixelForValue(1);
+              if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+                fill = chart.ctx.createLinearGradient(start, 0, end, 0);
+                [0, 0.5, 1].forEach(position => {
+                  fill.addColorStop(position, window.distributionUtils.getFireGradientColor(position));
+                });
+              }
+            }
+            chart.getDatasetMeta(0).data.forEach(bar => {
+              bar.options = { ...bar.options, backgroundColor: fill };
+            });
+          },
           afterDatasetsDraw(chart) {
             const { ctx } = chart;
             const unavailable = [];
@@ -156,14 +180,17 @@
             data: values,
             borderRadius: 6,
             backgroundColor: labels.map(name =>
-              window.equipmentUtils.getEquipmentType(name) === 'Shoes'
-                ? '#8B5CF6'
-                : '#14B8A6'
+              canSelectColors
+                ? window.distributionUtils.getDistributionColor(0, selectedEquipmentColorScheme)
+                : window.equipmentUtils.getEquipmentType(name) === 'Shoes'
+                  ? '#8B5CF6'
+                  : '#14B8A6'
             )
           }]
         },
         options: {
           indexAxis: 'y',
+          ...(isPace ? { animation: false } : {}),
           responsive: true,
           maintainAspectRatio: false,
           layout: { padding: { right: labelPadding(canvasArea ? canvasArea.clientWidth : canvas.clientWidth) } },
@@ -207,7 +234,12 @@
       });
     }
 
-    function setEquipmentFilter(filter, render = true) {
+    function setEquipmentColorScheme(scheme) {
+      selectedEquipmentColorScheme = scheme === 'monochrome-blue' ? scheme : 'fire';
+      renderEquipmentChart();
+    }
+
+  function setEquipmentFilter(filter, render = true) {
       selectedEquipmentFilter = filter;
 
       document.querySelectorAll('[id^="equipmentBtn"]').forEach(btn => {

@@ -339,6 +339,23 @@ describe('index.html inline script syntax', () => {
     expect(scriptSrcTags).toEqual(DASHBOARD_MODULE_FILES);
   });
 
+  it('offers the established labeled equipment pace color selector without changing tab or export wiring', () => {
+    const control = html.match(/<label id="equipmentColorSchemeControl"[\s\S]*?<\/label>/);
+    expect(control).not.toBeNull();
+    expect(control[0]).toContain('data-filter-summary');
+    expect(control[0]).toContain('data-filter-label="Colour scheme"');
+    expect(control[0]).toContain('hidden');
+    expect(control[0]).toContain('<span>Color scheme</span>');
+    expect(control[0]).toContain('id="equipmentColorScheme"');
+    expect(control[0]).toContain('onchange="setEquipmentColorScheme(this.value)"');
+    expect(control[0]).toContain('<option value="fire" selected>On fire</option>');
+    expect(control[0]).toContain('<option value="monochrome-blue">Monochrome blue</option>');
+    expect(control[0]).toContain('rounded-lg border border-slate-800 bg-slate-950');
+    expect(html).toContain('id="vizPanelEquipment" role="tabpanel" aria-labelledby="vizTabEquipment"');
+    expect(html).toContain("exportVisualizationTab('equipment')");
+    expect(inlineCode).toContain('function setEquipmentColorScheme(');
+  });
+
   it('loads the import experience catalog before dashboard orchestration and exposes its modal anchors', () => {
     expect(html).toContain('<script src="./src/import-experience-catalog.js"></script>');
     expect(html.indexOf('./src/import-experience-catalog.js')).toBeLessThan(html.indexOf('./src/dashboard-import.js'));
@@ -439,6 +456,19 @@ describe('index.html inline script syntax', () => {
     expect(html).toContain("onclick=\"setVisualizationTab('trainingCalendar')\"");
     expect(inlineCode).toContain("nextTab === 'trainingCalendar'");
     expect(inlineCode).toContain('renderTrainingCalendar();');
+  });
+
+  it('labels the distance visualization Distance and keeps country metrics out of its panel', () => {
+    const distancePanelStart = html.indexOf('id="vizPanelTotalDistance"');
+    const nextPanelStart = html.indexOf('id="vizPanelPaceMetrics"', distancePanelStart);
+    const distancePanel = html.slice(distancePanelStart, nextPanelStart);
+
+    expect(distancePanel).toContain('>Distance</h2>');
+    expect(distancePanel).not.toContain('Countries visited');
+    expect(distancePanel).not.toContain('countryCountValue');
+    expect(distancePanel).not.toContain('countryCountStatus');
+    expect(html).toContain('>Distance</button>');
+    expect(html).toContain('>Lifetime Statistics</h2>');
   });
 
   it('wraps visualization tabs with accessible sibling scroll controls', () => {

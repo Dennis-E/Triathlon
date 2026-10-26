@@ -14,7 +14,7 @@ function createClassList() {
   };
 }
 
-function createDashboardContext(activities, summary) {
+function createDashboardContext(activities, summary, countrySummary = null) {
   const elements = {
     lifetimeStatisticsCaptureArea: { classList: createClassList(), innerHTML: '' },
     lifetimeStatisticsExportArea: { style: {}, innerHTML: '', setAttribute: jest.fn() },
@@ -30,7 +30,7 @@ function createDashboardContext(activities, summary) {
       aggregateLifetimeStatistics: jest.fn(() => summary)
     }
   };
-  const context = { window, document, processedActivities: activities };
+  const context = { window, document, processedActivities: activities, countryCountSummary: countrySummary };
   vm.createContext(context);
   vm.runInContext(fs.readFileSync(dashboardSourcePath, 'utf8'), context, {
     filename: 'src/dashboard-lifetime-statistics.js'
@@ -117,6 +117,44 @@ describe('lifetime statistics dashboard', () => {
     expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain('0,3 km');
     expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain('grid-cols-4');
     expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain('Lifetime milestones');
+  });
+
+  it('shows visited country names and neutral coverage context in the lifetime tile and export', () => {
+    const countrySummary = {
+      status: 'partial',
+      countryCount: 2,
+      countryNames: ['France', 'Germany'],
+      trackedActivityCount: 3,
+      totalActivityCount: 4
+    };
+    const { context, elements } = createDashboardContext(
+      createLifetimeBaselineActivities(),
+      coreSummary,
+      countrySummary
+    );
+
+    context.window.lifetimeStatisticsDashboard.render();
+
+    for (const html of [elements.lifetimeStatisticsCaptureArea.innerHTML, elements.lifetimeStatisticsExportArea.innerHTML]) {
+      expect(html).toContain('Countries visited');
+      expect(html).toContain('France');
+      expect(html).toContain('Germany');
+      expect(html).toContain('Based on 3 of 4 activities');
+      expect(html).not.toContain('GPS routes');
+    }
+  });
+
+  it('does not label location unavailable while the country summary is still loading', () => {
+    const { context, elements } = createDashboardContext(
+      createLifetimeBaselineActivities(),
+      coreSummary,
+      null
+    );
+
+    context.window.lifetimeStatisticsDashboard.render();
+
+    expect(elements.lifetimeStatisticsCaptureArea.innerHTML).toContain('Calculating...');
+    expect(elements.lifetimeStatisticsCaptureArea.innerHTML).not.toContain('Location unavailable');
   });
 
   it('renders lifetime milestones without partial-data notifications', () => {

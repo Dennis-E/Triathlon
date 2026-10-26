@@ -128,8 +128,51 @@
     </section>`;
   }
 
+  function renderCountriesVisited(countrySummary, exportMode = false) {
+    const loading = !countrySummary;
+    const unavailable = !loading && (
+      countrySummary.status === 'unavailable'
+      || !Number.isSafeInteger(countrySummary.countryCount)
+    );
+    const value = unavailable
+      ? 'Not available'
+      : loading
+        ? 'Calculating...'
+        : formatNumber(countrySummary.countryCount, 0);
+    const countryNames = countrySummary && Array.isArray(countrySummary.countryNames)
+      ? countrySummary.countryNames.filter(name => typeof name === 'string' && name.trim())
+      : [];
+    const namesText = loading
+      ? 'Country names loading'
+      : unavailable
+        ? 'Location unavailable'
+        : countryNames.length > 0
+          ? countryNames.join(', ')
+          : 'No countries identified';
+    const coverageText = !countrySummary
+      ? ''
+      : unavailable
+        ? ''
+        : countrySummary.status === 'partial'
+          ? `Based on ${formatNumber(countrySummary.trackedActivityCount, 0)} of ${formatNumber(countrySummary.totalActivityCount, 0)} activities`
+          : `All ${formatNumber(countrySummary.totalActivityCount, 0)} activities included`;
+    const cardClass = exportMode
+      ? 'min-w-0 rounded-xl border border-slate-700 bg-slate-900 p-6'
+      : 'min-w-0 rounded-xl border border-slate-800 bg-slate-950 p-4 sm:p-5';
+    const valueClass = exportMode
+      ? 'mt-3 break-words text-3xl font-bold tabular-nums text-white'
+      : 'mt-2 break-words text-xl font-semibold tabular-nums text-white';
+    return `<article aria-label="Countries visited" class="${cardClass}">
+      <h3 class="text-xs font-medium uppercase tracking-wide text-slate-400">Countries visited</h3>
+      <p class="${valueClass}">${escapeHtml(value)}</p>
+      <p class="mt-2 break-words text-sm text-slate-200">${escapeHtml(namesText)}</p>
+      ${coverageText ? `<p class="mt-1 break-words text-xs text-slate-500">${escapeHtml(coverageText)}</p>` : ''}
+    </article>`;
+  }
+
   function renderLifetimeStatistics(summary, options = {}) {
     const exportMode = options.export === true;
+    const countrySummary = options.countryCountSummary || null;
     const rows = summary.sportSummaries.map(renderSportSummary).join('');
     const sportBreakdown = exportMode
       ? ''
@@ -147,7 +190,7 @@
 
     return `<section aria-labelledby="lifetimeStatisticsHeading" class="${exportMode ? 'space-y-8' : 'space-y-5'}">
       ${exportMode ? '' : '<h2 id="lifetimeStatisticsHeading" class="sr-only">Lifetime Statistics</h2>'}
-      <div class="grid min-w-0 grid-cols-3 gap-4">
+      <div class="grid min-w-0 ${exportMode ? 'grid-cols-4 gap-3' : 'grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4'}">
         ${renderPrimaryMetric('Total distance', summary.distance, value => formatNumber(value, 0), 'km', exportMode)}
         ${renderPrimaryMetric('Moving time', summary.movingTime, formatMovingTime, '', exportMode)}
         ${exportMode
@@ -156,6 +199,7 @@
               <h3 class="text-xs font-medium uppercase tracking-wide text-slate-400">Workouts</h3>
               <p class="mt-2 break-words text-2xl font-semibold tabular-nums text-white">${formatNumber(summary.workoutCount, 0)}</p>
             </article>`}
+            ${renderCountriesVisited(countrySummary, exportMode)}
       </div>
       ${sportBreakdown || ''}
       ${renderMilestones(summary, exportMode)}
@@ -182,8 +226,9 @@
     }
 
     const summary = root.lifetimeStatisticsUtils.aggregateLifetimeStatistics(activities);
-    captureArea.innerHTML = renderLifetimeStatistics(summary);
-    if (exportArea) exportArea.innerHTML = renderLifetimeStatistics(summary, { export: true });
+    const countrySummary = typeof countryCountSummary !== 'undefined' ? countryCountSummary : null;
+    captureArea.innerHTML = renderLifetimeStatistics(summary, { countryCountSummary: countrySummary });
+    if (exportArea) exportArea.innerHTML = renderLifetimeStatistics(summary, { export: true, countryCountSummary: countrySummary });
     captureArea.classList.remove('hidden');
     emptyState.classList.add('hidden');
   }

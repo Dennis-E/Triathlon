@@ -2,7 +2,7 @@
 // See specs/007-instagram-export-button for the feature spec/plan/tasks.
 
 const TAB_DISPLAY_TITLES = {
-  totalDistance: 'Total distance',
+  totalDistance: 'Distance',
   paceMetrics: 'Pace vs ...',
   equipment: 'Equipment mileage',
   equipmentTimeline: 'Equipment Timeline',
@@ -18,7 +18,7 @@ const TAB_DISPLAY_TITLES = {
 };
 
 const TAB_FILENAME_SLUGS = {
-  totalDistance: 'total-distance',
+  totalDistance: 'distance',
   paceMetrics: 'pace-metrics',
   equipment: 'equipment',
   equipmentTimeline: 'equipment-timeline',

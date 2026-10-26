@@ -144,16 +144,35 @@ function createDownloadRuntime({ showSaveFilePicker, decodeError, imageWidth = 1
 }
 
 describe('dashboard export download destination', () => {
-  it('uses only one browser-managed save flow even when a native picker is available', async () => {
-    const picker = jest.fn().mockRejectedValue(Object.assign(new Error('Restricted'), { name: 'NotAllowedError' }));
+  it('uses the native save picker when the browser supports it', async () => {
+    const write = jest.fn().mockResolvedValue(undefined);
+    const close = jest.fn().mockResolvedValue(undefined);
+    const createWritable = jest.fn().mockResolvedValue({ write, close });
+    const picker = jest.fn().mockResolvedValue({ createWritable });
     const runtime = createDownloadRuntime({ showSaveFilePicker: picker });
+
     await runtime.download();
-    expect(picker).not.toHaveBeenCalled();
-    expect(runtime.downloadLinks).toHaveLength(1);
-    expect(runtime.downloadLinks[0]).toMatchObject({ clicked: true, href: PNG_DATA_URL });
+    expect(picker).toHaveBeenCalledTimes(1);
+    expect(runtime.pickerCalls[0]).toMatchObject({
+      suggestedName: expect.stringMatching(/^trianalytica-paceMetrics-/),
+      types: [{ description: 'PNG image', accept: { 'image/png': ['.png'] } }]
+    });
+    expect(write).toHaveBeenCalledWith(expect.any(Blob));
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(runtime.downloadLinks).toHaveLength(0);
     expect(runtime.getImage()).toBeNull();
+  });
+
+  it('treats native save-picker cancellation quietly and keeps the preview retryable', async () => {
+    const cancellation = Object.assign(new Error('User cancelled'), { name: 'AbortError' });
+    const runtime = createDownloadRuntime({ showSaveFilePicker: jest.fn().mockRejectedValue(cancellation) });
+
     await runtime.download();
-    expect(runtime.downloadLinks).toHaveLength(1);
+
+    expect(runtime.pickerCalls).toHaveLength(1);
+    expect(runtime.downloadLinks).toHaveLength(0);
+    expect(runtime.getImage()).not.toBeNull();
+    expect(runtime.toast.textContent).toBe('');
   });
 
   it.each([true, false])('captures only prepared media recap content (hasData=%s)', async hasData => {
@@ -208,6 +227,42 @@ describe('dashboard export download destination', () => {
     expect(context.previewForTest).toBe(PNG_DATA_URL);
     await runtime.download();
     expect(runtime.downloadLinks[0].download).toMatch(/^trianalytica-media-gallery-/);
+  });
+
+  it.each([
+    ['fire', true], ['monochrome-blue', true], ['fire', false], ['monochrome-blue', false]
+  ])('preserves Equipment %s preview/download through the existing capture flow (hasData=%s)', async (scheme, hasData) => {
+    const runtime = createDownloadRuntime();
+    const context = runtime.context;
+    const wrapper = { id: 'equipmentChartWrapper', scheme };
+    const getOriginalElement = context.document.getElementById;
+    const elements = {
+      equipmentChartWrapper: wrapper,
+      equipmentEmptyState: { classList: { contains: () => hasData } }
+    };
+    context.window.exportUtils = require('../src/export-utils');
+    context.chartInstance = null;
+    context.document.getElementById = id => elements[id] || getOriginalElement(id);
+    context.document.querySelectorAll = () => [];
+    context.html2canvas = jest.fn().mockResolvedValue({ width: 400, height: 300 });
+    vm.runInContext(`
+      waitForChartRenderSettle = async () => {};
+      loadExportAssets = async () => ({});
+      drawExportComposition = () => '${PNG_DATA_URL}';
+      showExportPreviewModal = dataUrl => { this.previewForTest = dataUrl; };
+      this.exportEquipmentForTest = () => exportVisualizationTab('equipment');
+    `, context);
+
+    await context.exportEquipmentForTest();
+    if (!hasData) {
+      expect(context.html2canvas).not.toHaveBeenCalled();
+      expect(runtime.toast.textContent).toContain('Nothing to export');
+      return;
+    }
+    expect(context.html2canvas).toHaveBeenCalledWith(wrapper, expect.objectContaining({ useCORS: true }));
+    await runtime.download();
+    expect(runtime.downloadLinks[0].href).toBe(PNG_DATA_URL);
+    expect(runtime.downloadLinks[0].download).toMatch(/^trianalytica-equipment-/);
   });
 
   it.each([true, false])('captures only an exportable Swim heatmap and preserves its preview (hasData=%s)', async hasData => {
@@ -322,7 +377,7 @@ describe('dashboard export download destination', () => {
     expect(runtime.toast.textContent).toMatch(/location|destination|Speicherort/i);
   });
 
-  it('never attempts the restricted native picker', async () => {
+  it('falls back to the browser download when the native picker is restricted', async () => {
     const denial = Object.assign(new Error('Picker unavailable in this context'), { name: 'SecurityError' });
     const runtime = createDownloadRuntime({
       showSaveFilePicker: jest.fn().mockRejectedValue(denial)
@@ -332,8 +387,33 @@ describe('dashboard export download destination', () => {
 
     expect(runtime.downloadLinks).toHaveLength(1);
     expect(runtime.downloadLinks[0].clicked).toBe(true);
-    expect(runtime.pickerCalls).toHaveLength(0);
+    expect(runtime.pickerCalls).toHaveLength(1);
     expect(runtime.toast.textContent).toMatch(/location|destination|Speicherort/i);
+  });
+
+  it('keeps country count and names out of Distance export metadata', () => {
+    const runtime = createDownloadRuntime();
+    const context = runtime.context;
+    const originalGetElementById = context.document.getElementById;
+    const elements = {
+      totalDistanceChartWrapper: { id: 'totalDistanceChartWrapper' },
+      countryCountValue: { textContent: '2' },
+      countryCountStatus: { textContent: 'GPS routes for 3 of 4 activities' },
+      sportBtnAll: { textContent: 'All Sports', classList: { contains: () => true } },
+      aggBtnWeekly: { textContent: 'Weekly', classList: { contains: () => true } }
+    };
+    context.window.exportUtils = require('../src/export-utils');
+    context.chartInstance = {};
+    context.document.getElementById = id => elements[id] || originalGetElementById(id);
+    context.document.querySelectorAll = () => [];
+    vm.runInContext(`this.totalDistanceTargetForTest = () => getTabExportTarget('totalDistance');`, context);
+
+    const target = context.totalDistanceTargetForTest();
+
+    expect(target.filters).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Countries visited' }),
+      expect.objectContaining({ label: 'GPS coverage' })
+    ]));
   });
 
   it('does not start a download without a prepared PNG', async () => {
@@ -433,22 +513,22 @@ describe('download attempt outcomes', () => {
     expect(runtime.toast.textContent).toContain('Old failure');
     await runtime.download();
     expect(runtime.toast.textContent).not.toContain('Old failure');
-    expect(runtime.toast.textContent).toMatch(/handed to your browser/);
+    expect(runtime.toast.textContent).toMatch(/location|destination/i);
     expect(runtime.timers.size).toBe(1);
     expect(runtime.getImage()).toBeNull();
   });
 });
 
 describe('owned export surface lifecycle', () => {
-  it('uses a fresh image for a subsequent intentional export without opening a native picker', async () => {
-    const picker = jest.fn();
+  it('uses a fresh image for each intentional export after native-picker fallback', async () => {
+    const picker = jest.fn().mockRejectedValue(Object.assign(new Error('Restricted'), { name: 'SecurityError' }));
     const runtime = createDownloadRuntime({ showSaveFilePicker: picker });
     const original = runtime.getImage();
     await runtime.download();
     runtime.setImage({ ...original, target: 'workoutTime' });
     runtime.showPreview(PNG_DATA_URL);
     await runtime.download();
-    expect(picker).not.toHaveBeenCalled();
+    expect(picker).toHaveBeenCalledTimes(2);
     expect(runtime.downloadLinks).toHaveLength(2);
     expect(runtime.downloadLinks[1].download).toMatch(/workoutTime/);
     expect(runtime.getImage()).toBeNull();

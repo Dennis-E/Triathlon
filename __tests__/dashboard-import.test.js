@@ -7,6 +7,7 @@ const dashboardImportSource = fs.readFileSync(
   'utf8'
 );
 const importExperienceCatalog = require('../src/import-experience-catalog');
+const countryCountUtils = require('../src/country-count-utils');
 
 function loadRuntimeProcessData() {
   const context = {
@@ -139,7 +140,13 @@ function loadRuntimeDatasetApplicator() {
     processedActivities: [],
     fitBestEffortsByActivityId: {},
     gpsTracksByActivityId: {},
-    window: { heatmapUtils: { buildActivitySummaryIndex: () => new Map() } },
+    countryCountSummary: null,
+    countryCountRequestToken: 0,
+    countryCountReady: Promise.resolve(null),
+    window: {
+      countryCountUtils,
+      heatmapUtils: { buildActivitySummaryIndex: () => new Map() }
+    },
     document: { getElementById: id => nodes[id] || null },
     updateStatusBadge: jest.fn(),
     hideHeatmapActivityTooltip: jest.fn(),

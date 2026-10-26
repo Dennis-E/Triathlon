@@ -160,6 +160,35 @@ describe('dashboard export download destination', () => {
     expect(runtime.downloadLinks[0].download).toMatch(/^trianalytica-heatmap-/);
   });
 
+  it('keeps country count and names out of Distance export metadata', () => {
+    const runtime = createDownloadRuntime();
+    const context = runtime.context;
+    const originalGetElementById = context.document.getElementById;
+    const elements = {
+      totalDistanceChartWrapper: { id: 'totalDistanceChartWrapper' },
+      countryCountValue: { textContent: '2' },
+      countryCountStatus: { textContent: 'GPS routes for 3 of 4 activities' },
+      sportBtnAll: { textContent: 'All Sports', classList: { contains: () => true } },
+      aggBtnWeekly: { textContent: 'Weekly', classList: { contains: () => true } }
+    };
+    context.window.exportUtils = require('../src/export-utils');
+    context.chartInstance = {};
+    context.document.getElementById = id => elements[id] || originalGetElementById(id);
+    context.document.querySelectorAll = () => [];
+    vm.runInContext(`this.totalDistanceTargetForTest = () => getTabExportTarget('totalDistance');`, context);
+
+    const target = context.totalDistanceTargetForTest();
+
+    expect(target).toMatchObject({
+      key: 'totalDistance',
+      targetElementId: 'totalDistanceChartWrapper'
+    });
+    expect(target.filters).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Countries visited' }),
+      expect.objectContaining({ label: 'GPS coverage' })
+    ]));
+  });
+
   it('opens the save picker from Download and writes the current PNG using its suggested filename', async () => {
     const write = jest.fn().mockResolvedValue(undefined);
     const close = jest.fn().mockResolvedValue(undefined);

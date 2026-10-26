@@ -6,6 +6,107 @@
       'schwimmen': 'Swim', 'swim': 'Swim', 'swimming': 'Swim'
     };
 
+    const COUNTRY_BOUNDARY_ASSET_URL = './assets/country-boundaries/ne_50m_admin_0_countries.geojson';
+    let countryCountResourcesPromise = null;
+
+    function loadCountryCountResources() {
+      if (!countryCountResourcesPromise) {
+        countryCountResourcesPromise = Promise.all([
+          fetch(COUNTRY_BOUNDARY_ASSET_URL).then(response => {
+            if (!response.ok) throw new Error('Country boundary data could not be loaded');
+            return response.json();
+          }),
+          import('https://esm.sh/@turf/boolean-intersects@7.4.0'),
+          import('https://esm.sh/@turf/boolean-point-in-polygon@7.4.0')
+        ]).then(([countryGeoJson, intersectsModule, pointInPolygonModule]) => {
+          if (!countryGeoJson || !Array.isArray(countryGeoJson.features)) {
+            throw new Error('Country boundary data is invalid');
+          }
+          if (typeof intersectsModule.booleanIntersects !== 'function' || typeof pointInPolygonModule.booleanPointInPolygon !== 'function') {
+            throw new Error('Country geometry functions are unavailable');
+          }
+          return {
+            countryFeatures: countryGeoJson.features,
+            geometryOperations: {
+              booleanIntersects: intersectsModule.booleanIntersects,
+              booleanPointInPolygon: pointInPolygonModule.booleanPointInPolygon
+            }
+          };
+        }).catch(error => {
+          countryCountResourcesPromise = null;
+          throw error;
+        });
+      }
+      return countryCountResourcesPromise;
+    }
+
+    function hasUsableCountryCountTrack(activities, tracksByActivityId) {
+      return activities.some(activity => {
+        if (!activity || activity.id === null || activity.id === undefined) return false;
+        const track = tracksByActivityId[String(activity.id)];
+        return !!(track && Array.isArray(track.points) && track.points.some(point => (
+          Array.isArray(point)
+          && point.length >= 2
+          && Number.isFinite(point[0])
+          && Number.isFinite(point[1])
+          && point[0] >= -90
+          && point[0] <= 90
+          && point[1] >= -180
+          && point[1] <= 180
+        )));
+      });
+    }
+
+    function renderLifetimeCountryCount() {
+      if (window.lifetimeStatisticsDashboard && typeof window.lifetimeStatisticsDashboard.render === 'function') {
+        window.lifetimeStatisticsDashboard.render();
+      }
+    }
+
+    function refreshCountryCountSummary(resourcesLoader = loadCountryCountResources) {
+      const requestToken = ++countryCountRequestToken;
+      const activities = processedActivities;
+      const tracksByActivityId = gpsTracksByActivityId;
+      countryCountSummary = null;
+      renderLifetimeCountryCount();
+
+      if (!hasUsableCountryCountTrack(activities, tracksByActivityId)) {
+        countryCountSummary = window.countryCountUtils.aggregateCountryCount({
+          activities,
+          gpsTracksByActivityId: tracksByActivityId,
+          countryFeatures: [],
+          geometryOperations: {}
+        });
+        renderLifetimeCountryCount();
+        countryCountReady = Promise.resolve(countryCountSummary);
+        return countryCountReady;
+      }
+
+      countryCountReady = Promise.resolve()
+        .then(() => resourcesLoader())
+        .then(resources => window.countryCountUtils.aggregateCountryCount({
+          activities,
+          gpsTracksByActivityId: tracksByActivityId,
+          countryFeatures: resources.countryFeatures,
+          geometryOperations: resources.geometryOperations
+        }))
+        .catch(() => window.countryCountUtils.aggregateCountryCount({
+          activities,
+          gpsTracksByActivityId: tracksByActivityId,
+          countryFeatures: [],
+          geometryOperations: {}
+        }))
+        .then(summary => {
+          if (requestToken === countryCountRequestToken) {
+            countryCountSummary = summary;
+            renderLifetimeCountryCount();
+          }
+          return summary;
+        });
+
+      return countryCountReady;
+    }
+
     let importExperienceTimer = null;
     let importExperienceSession = null;
     let importExperienceVisibilityHandler = null;
@@ -100,6 +201,7 @@
       processedActivities = dataset.activities;
       fitBestEffortsByActivityId = dataset.fitBestEffortsByActivityId || {};
       gpsTracksByActivityId = dataset.gpsTracksByActivityId || {};
+      const countryCountResult = refreshCountryCountSummary(options.countryCountResourcesLoader);
       heatmapActivitySummaryIndex = window.heatmapUtils.buildActivitySummaryIndex(processedActivities);
       hideHeatmapActivityTooltip();
 
@@ -134,6 +236,8 @@
       if (options.openDashboard) {
         openDashboardTab(availableVisualizationTabs[0]);
       }
+
+      return countryCountResult;
     }
 
     function setImportModalVisualState(iconName, spinning) {

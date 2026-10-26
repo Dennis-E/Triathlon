@@ -196,6 +196,19 @@ describe('index.html inline script syntax', () => {
     expect(inlineCode).toContain('renderTrainingCalendar();');
   });
 
+  it('labels the distance visualization Distance and keeps country metrics out of its panel', () => {
+    const distancePanelStart = html.indexOf('id="vizPanelTotalDistance"');
+    const nextPanelStart = html.indexOf('id="vizPanelPaceMetrics"', distancePanelStart);
+    const distancePanel = html.slice(distancePanelStart, nextPanelStart);
+
+    expect(distancePanel).toContain('>Distance</h2>');
+    expect(distancePanel).not.toContain('Countries visited');
+    expect(distancePanel).not.toContain('countryCountValue');
+    expect(distancePanel).not.toContain('countryCountStatus');
+    expect(html).toContain('>Distance</button>');
+    expect(html).toContain('>Lifetime Statistics</h2>');
+  });
+
   it('wraps visualization tabs with accessible sibling scroll controls', () => {
     const leftButtonIndex = html.indexOf('id="visualizationTabsScrollLeft"');
     const viewportIndex = html.indexOf('id="visualizationTabsViewport"');

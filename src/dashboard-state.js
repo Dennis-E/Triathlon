@@ -3,6 +3,9 @@
     let processedActivities = [];
     let fitBestEffortsByActivityId = {};
     let gpsTracksByActivityId = {};
+    let countryCountSummary = null;
+    let countryCountRequestToken = 0;
+    let countryCountReady = Promise.resolve(null);
     let heatmapActivitySummaryIndex = new Map();
     let heatmapTooltipSegmentKey = null;
     let heatmapTooltipModel = null;

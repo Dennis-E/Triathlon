@@ -11,10 +11,18 @@ const activities = [
   { equipment: 'Road Slow', distance: 40, duration: 7200 }
 ];
 
+function comparisonActivities(speeds = [10, 12, 15], type = 'Shoes') {
+  return speeds.map((speed, index) => ({
+    equipment: `${type === 'Shoes' ? 'Nike' : 'Road'} ${index}`,
+    distance: 10,
+    duration: 36000 / speed
+  }));
+}
+
 function element(id) {
   const classes = new Set(['hidden']);
   return {
-    id, style: {}, children: [], textContent: '',
+    id, style: {}, children: [], textContent: '', value: '',
     classList: {
       add: name => classes.add(name),
       remove: name => classes.delete(name),
@@ -29,13 +37,20 @@ function element(id) {
 function harness(width = 768) {
   const elements = Object.fromEntries([
     'equipmentChart', 'equipmentCanvasArea', 'equipmentChartWrapper',
-    'equipmentEmptyState', 'equipmentValueFallback', 'equipmentPaceExplanation'
+    'equipmentEmptyState', 'equipmentValueFallback', 'equipmentPaceExplanation',
+    'equipmentColorSchemeControl', 'equipmentColorScheme'
   ].map(id => [id, element(id)]));
   const text = [];
+  const gradients = [];
   const ctx = {
     save() {}, restore() {},
     measureText: value => ({ width: String(value).length * 7 }),
-    fillText: (value, x, y) => text.push({ value, x, y })
+    fillText: (value, x, y) => text.push({ value, x, y }),
+    createLinearGradient(...coordinates) {
+      const gradient = { coordinates, stops: [], addColorStop(position, color) { this.stops.push([position, color]); } };
+      gradients.push(gradient);
+      return gradient;
+    }
   };
   elements.equipmentCanvasArea.clientWidth = width;
   elements.equipmentChart.getContext = () => ctx;
@@ -48,13 +63,22 @@ function harness(width = 768) {
       this.plugins = config.plugins;
       this.width = width;
       this.chartArea = { left: 0, right: width - config.options.layout.padding.right };
+      this.scales = { x: { getPixelForValue: value => this.chartArea.left + value * (this.chartArea.right - this.chartArea.left) } };
+      this.bars = this.data.labels.map((_, index) => ({
+        x: this.chartArea.right, y: 50 + index * 56,
+        options: { backgroundColor: this.data.datasets[0].backgroundColor[index], borderRadius: 6 }
+      }));
       this.destroy = jest.fn();
       charts.push(this);
     }
     getDatasetMeta() {
-      return { data: this.data.labels.map((_, i) => ({ x: this.chartArea.right, y: 50 + i * 56 })) };
+      return { data: this.bars };
     }
-    draw() { this.plugins[0].afterDatasetsDraw(this); }
+    draw() {
+      this.bars.forEach(bar => { bar.x = this.chartArea.right; });
+      this.plugins.forEach(plugin => { if (plugin.beforeDatasetsDraw) plugin.beforeDatasetsDraw(this); });
+      this.plugins.forEach(plugin => { if (plugin.afterDatasetsDraw) plugin.afterDatasetsDraw(this); });
+    }
     resize(nextWidth) {
       this.width = nextWidth;
       elements.equipmentCanvasArea.clientWidth = nextWidth;
@@ -78,10 +102,53 @@ function harness(width = 768) {
   };
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/dashboard-equipment.js'), 'utf8'), sandbox);
-  return { sandbox, elements, charts, text, draw: () => { text.length = 0; charts.at(-1).draw(); } };
+  return { sandbox, elements, charts, text, gradients, draw: () => { text.length = 0; charts.at(-1).draw(); } };
 }
 
 describe('equipment chart', () => {
+  it('offers session-retained fire/blue selection only in eligible pace views, including empty views', () => {
+    const h = harness();
+    h.sandbox.renderEquipmentChart();
+    expect(h.elements.equipmentColorSchemeControl.classList.contains('hidden')).toBe(true);
+    h.sandbox.setEquipmentMetric('pace');
+    h.sandbox.setEquipmentFilter('Shoes');
+    expect(h.elements.equipmentColorSchemeControl.classList.contains('hidden')).toBe(false);
+    expect(h.elements.equipmentColorScheme.value).toBe('fire');
+    const original = h.charts.at(-1).data;
+    h.sandbox.setEquipmentColorScheme('monochrome-blue');
+    const blue = h.charts.at(-1);
+    expect(blue.data.labels).toEqual(original.labels);
+    expect(blue.data.datasets[0].data).toEqual(original.datasets[0].data);
+    expect(blue.data.datasets[0].backgroundColor).toEqual(['#2563EB', '#2563EB']);
+    for (const filter of ['All', 'Bikes', 'Shoes']) {
+      h.sandbox.setEquipmentFilter(filter);
+      expect(h.elements.equipmentColorScheme.value).toBe('monochrome-blue');
+      expect(h.elements.equipmentColorSchemeControl.classList.contains('hidden')).toBe(filter === 'All');
+    }
+    h.sandbox.setEquipmentMetric('count');
+    expect(h.elements.equipmentColorSchemeControl.classList.contains('hidden')).toBe(true);
+    h.sandbox.setEquipmentMetric('pace');
+    h.sandbox.processedActivities = [];
+    h.sandbox.renderEquipmentChart();
+    expect(h.elements.equipmentColorScheme.value).toBe('monochrome-blue');
+    expect(h.elements.equipmentColorSchemeControl.classList.contains('hidden')).toBe(false);
+    h.sandbox.setEquipmentFilter('All');
+    expect(h.elements.equipmentColorSchemeControl.classList.contains('hidden')).toBe(true);
+    h.sandbox.setEquipmentColorScheme('unsupported');
+    expect(h.elements.equipmentColorScheme.value).toBe('fire');
+  });
+
+  it('builds synthetic shoe, bike and edge-case comparisons in the existing activity shape', () => {
+    for (const [speeds, type] of [
+      [[10, 12, 15], 'Shoes'], [[20, 25, 30], 'Bikes'], [[12], 'Shoes'],
+      [[12, 12], 'Shoes'], [[29.9, 30], 'Bikes'], [[], 'Shoes'], [[NaN, -1, 0], 'Shoes']
+    ]) {
+      const rows = equipmentUtils.buildEquipmentPaceDisplay(equipmentUtils.aggregateEquipmentPace(comparisonActivities(speeds, type), type));
+      expect(rows).toHaveLength(speeds.filter(speed => Number.isFinite(speed) && speed > 0).length);
+      rows.forEach(row => expect(row.speedKmh).toBeGreaterThan(0));
+    }
+  });
+
   it('keeps wrapper, fallback and explanation inside the export capture element', () => {
     const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
     const wrapper = html.match(/<div id="equipmentChartWrapper"[^>]*>([\s\S]*?)\n          <\/div>/)[1];
@@ -182,23 +249,118 @@ describe('equipment chart', () => {
           'Road Slow': '#14B8A6'
         });
       } else {
-        chart.data.labels.forEach((name, index) => {
-          expect(colors[name]).toBe(distributionUtils.getFireGradientColor(values[name]));
-        });
+        expect(chart.bars.every(bar => bar.options.backgroundColor === h.gradients.at(-1))).toBe(true);
       }
     }
   });
 
   it('keeps other metrics and units unchanged', () => {
     const h = harness();
+    h.sandbox.setEquipmentColorScheme('monochrome-blue');
     for (const [metric, label] of [['distance', '10.0 km'], ['count', '1 activities'], ['avgLength', '10.00 km/act']]) {
       h.sandbox.setEquipmentMetric(metric);
       h.draw();
       expect(h.text.map(t => t.value).join(' ')).toContain(label);
       expect(h.charts.at(-1).options.scales.x.max).toBeUndefined();
+      expect(h.charts.at(-1).options.animation).toBeUndefined();
+      expect(h.elements.equipmentColorSchemeControl.classList.contains('hidden')).toBe(true);
       expect(h.charts.at(-1).data.datasets[0].backgroundColor).toEqual(
         h.charts.at(-1).data.labels.map(name => equipmentUtils.getEquipmentType(name) === 'Shoes' ? '#8B5CF6' : '#14B8A6')
       );
+    }
+  });
+
+  it('settles pace immediately for export without applying its palette to the mixed view', () => {
+    const h = harness();
+    h.sandbox.setEquipmentMetric('pace');
+    h.sandbox.setEquipmentFilter('Shoes');
+    expect(h.charts.at(-1).options.animation).toBe(false);
+    h.sandbox.setEquipmentColorScheme('monochrome-blue');
+    h.sandbox.setEquipmentFilter('All');
+    h.draw();
+    expect(h.gradients).toHaveLength(0);
+    expect(h.elements.equipmentColorSchemeControl.classList.contains('hidden')).toBe(true);
+    expect(h.charts.at(-1).data.datasets[0].backgroundColor).toEqual(['#8B5CF6', '#8B5CF6', '#14B8A6', '#14B8A6']);
+    h.sandbox.setEquipmentFilter('Shoes');
+    expect(h.elements.equipmentColorScheme.value).toBe('monochrome-blue');
+  });
+
+  it.each([
+    ['Shoes', [10, 12, 15]], ['Bikes', [20, 25, 30]], ['Bikes', [29.9, 30]]
+  ])('draws one shared visible-range gradient for %s at %j without changing bars', (type, speeds) => {
+    const h = harness();
+    h.sandbox.processedActivities = comparisonActivities(speeds, type);
+    h.sandbox.setEquipmentMetric('pace');
+    h.sandbox.setEquipmentFilter(type);
+    const chart = h.charts.at(-1);
+    const originalData = JSON.stringify(chart.data);
+    const originalOptions = chart.bars.map(bar => bar.options);
+    h.draw();
+    const gradient = h.gradients.at(-1);
+    expect(h.gradients).toHaveLength(1);
+    expect(gradient.coordinates).toEqual([chart.scales.x.getPixelForValue(Math.min(...speeds) / Math.max(...speeds)), 0, chart.scales.x.getPixelForValue(1), 0]);
+    expect(gradient.stops).toEqual([0, 0.5, 1].map(position => [position, distributionUtils.getFireGradientColor(position)]));
+    expect(chart.bars.every(bar => bar.options.backgroundColor === gradient)).toBe(true);
+    expect(originalOptions.every(options => typeof options.backgroundColor === 'string')).toBe(true);
+    expect(chart.bars.every(bar => bar.options.borderRadius === 6)).toBe(true);
+    expect(JSON.stringify(chart.data)).toBe(originalData);
+    chart.resize(375);
+    expect(h.gradients).toHaveLength(2);
+    expect(h.gradients.at(-1).coordinates[2]).toBe(chart.scales.x.getPixelForValue(1));
+    expect(h.gradients.at(-1).coordinates[2]).not.toBe(gradient.coordinates[2]);
+    h.sandbox.setEquipmentColorScheme('monochrome-blue');
+    h.draw();
+    expect(h.gradients).toHaveLength(2);
+    expect(h.charts.at(-1).bars.every(bar => bar.options.backgroundColor === '#2563EB')).toBe(true);
+  });
+
+  it('uses yellow for equal/single values and safe geometry fallback, then recovers on redraw', () => {
+    const h = harness();
+    for (const speeds of [[12], [12, 12]]) {
+      h.sandbox.processedActivities = comparisonActivities(speeds);
+      h.sandbox.setEquipmentMetric('pace');
+      h.sandbox.setEquipmentFilter('Shoes');
+      h.draw();
+      expect(h.gradients).toHaveLength(0);
+      expect(h.charts.at(-1).bars.every(bar => bar.options.backgroundColor === '#FDE047')).toBe(true);
+    }
+    h.sandbox.processedActivities = comparisonActivities();
+    h.sandbox.renderEquipmentChart();
+    const chart = h.charts.at(-1);
+    const scale = chart.scales.x;
+    chart.scales.x = null;
+    h.draw();
+    expect(h.gradients).toHaveLength(0);
+    expect(chart.bars.every(bar => bar.options.backgroundColor === '#FDE047')).toBe(true);
+    chart.scales.x = scale;
+    h.draw();
+    expect(h.gradients).toHaveLength(1);
+    chart.scales.x = { getPixelForValue: () => NaN };
+    h.draw();
+    expect(chart.bars.every(bar => bar.options.backgroundColor === '#FDE047')).toBe(true);
+  });
+
+  it('refreshes the range for the visible type/data and shows empty state after display validation', () => {
+    const h = harness();
+    h.sandbox.processedActivities = comparisonActivities().concat(comparisonActivities([20, 30], 'Bikes'));
+    h.sandbox.setEquipmentMetric('pace');
+    h.sandbox.setEquipmentFilter('Shoes');
+    h.draw();
+    expect(h.gradients.at(-1).coordinates[0]).toBeCloseTo(h.charts.at(-1).chartArea.right * 10 / 15);
+    h.sandbox.setEquipmentFilter('Bikes');
+    h.draw();
+    expect(h.gradients.at(-1).coordinates[0]).toBeCloseTo(h.charts.at(-1).chartArea.right * 20 / 30);
+    h.sandbox.processedActivities = comparisonActivities([25, 30], 'Bikes');
+    h.sandbox.renderEquipmentChart();
+    h.draw();
+    expect(h.gradients.at(-1).coordinates[0]).toBeCloseTo(h.charts.at(-1).chartArea.right * 25 / 30);
+    for (const data of [[], comparisonActivities([NaN, -1, 0], 'Bikes')]) {
+      h.sandbox.processedActivities = data;
+      const count = h.charts.length;
+      h.sandbox.renderEquipmentChart();
+      expect(h.charts).toHaveLength(count);
+      expect(h.elements.equipmentEmptyState.classList.contains('hidden')).toBe(false);
+      expect(h.elements.equipmentChart.classList.contains('hidden')).toBe(true);
     }
   });
 });

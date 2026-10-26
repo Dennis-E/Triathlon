@@ -1214,6 +1214,14 @@
                 <button onclick="setEquipmentFilter('Bikes')" id="equipmentBtnBikes" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Bikes</button>
               </div>
 
+              <label id="equipmentColorSchemeControl" data-filter-summary data-filter-label="Colour scheme" class="hidden flex items-center gap-2 text-xs text-slate-400">
+                <span>Color scheme</span>
+                <select id="equipmentColorScheme" onchange="setEquipmentColorScheme(this.value)" class="rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-300">
+                  <option value="fire" selected>On fire</option>
+                  <option value="monochrome-blue">Monochrome blue</option>
+                </select>
+              </label>
+
               <button type="button" onclick="exportVisualizationTab('equipment')" aria-label="Export for Insta / Strava: Equipment mileage" class="viz-export-button inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
                 <img src="assets/Strava_Logo.svg" alt="Strava" class="h-5 w-8 object-contain">
                 Export for Insta / Strava

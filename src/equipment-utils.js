@@ -75,6 +75,18 @@ function buildEquipmentPaceDisplay(entries) {
   }));
 }
 
+function getEquipmentPaceColorRange(rows) {
+  let minSpeedKmh = Infinity;
+  let maxSpeedKmh = -Infinity;
+  for (const row of rows) {
+    const speed = row && row.speedKmh;
+    if (!Number.isFinite(speed) || speed <= 0) continue;
+    minSpeedKmh = Math.min(minSpeedKmh, speed);
+    maxSpeedKmh = Math.max(maxSpeedKmh, speed);
+  }
+  return Number.isFinite(minSpeedKmh) ? { minSpeedKmh, maxSpeedKmh } : null;
+}
+
 function aggregateEquipmentActivityCount(activities, filter = 'All') {
   const counts = activities
     .filter(activity => {
@@ -221,6 +233,7 @@ if (typeof module !== 'undefined' && module.exports) {
     aggregateEquipmentDistance,
     aggregateEquipmentPace,
     buildEquipmentPaceDisplay,
+    getEquipmentPaceColorRange,
     aggregateEquipmentActivityCount,
     aggregateEquipmentAvgLength,
     aggregateEquipmentTimeline,
@@ -235,6 +248,7 @@ if (typeof window !== 'undefined') {
     aggregateEquipmentDistance,
     aggregateEquipmentPace,
     buildEquipmentPaceDisplay,
+    getEquipmentPaceColorRange,
     aggregateEquipmentActivityCount,
     aggregateEquipmentAvgLength,
     aggregateEquipmentTimeline,

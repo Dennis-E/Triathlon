@@ -85,6 +85,42 @@ function createDownloadRuntime({ showSaveFilePicker } = {}) {
 }
 
 describe('dashboard export download destination', () => {
+  it.each([
+    ['fire', true], ['monochrome-blue', true], ['fire', false], ['monochrome-blue', false]
+  ])('preserves Equipment %s preview/download through the existing capture flow (hasData=%s)', async (scheme, hasData) => {
+    const runtime = createDownloadRuntime();
+    const context = runtime.context;
+    const wrapper = { id: 'equipmentChartWrapper', scheme };
+    const getOriginalElement = context.document.getElementById;
+    const elements = {
+      equipmentChartWrapper: wrapper,
+      equipmentEmptyState: { classList: { contains: () => hasData } }
+    };
+    context.window.exportUtils = require('../src/export-utils');
+    context.chartInstance = null;
+    context.document.getElementById = id => elements[id] || getOriginalElement(id);
+    context.document.querySelectorAll = () => [];
+    context.html2canvas = jest.fn().mockResolvedValue({ width: 400, height: 300 });
+    vm.runInContext(`
+      waitForChartRenderSettle = async () => {};
+      loadExportAssets = async () => ({});
+      drawExportComposition = () => 'data:image/png;base64,aGVsbG8=';
+      showExportPreviewModal = dataUrl => { this.previewForTest = dataUrl; };
+      this.exportEquipmentForTest = () => exportVisualizationTab('equipment');
+    `, context);
+
+    await context.exportEquipmentForTest();
+    if (!hasData) {
+      expect(context.html2canvas).not.toHaveBeenCalled();
+      expect(runtime.toast.textContent).toContain('Nothing to export');
+      return;
+    }
+    expect(context.html2canvas).toHaveBeenCalledWith(wrapper, expect.objectContaining({ useCORS: true }));
+    await runtime.download();
+    expect(runtime.downloadLinks[0].href).toBe(context.previewForTest);
+    expect(runtime.downloadLinks[0].download).toMatch(/^trianalytica-equipment-/);
+  });
+
   it.each([true, false])('captures only an exportable Swim heatmap and preserves its preview (hasData=%s)', async hasData => {
     const runtime = createDownloadRuntime();
     const context = runtime.context;

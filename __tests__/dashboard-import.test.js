@@ -201,7 +201,7 @@ function loadRuntimeTrainingPeaksImportStatus(importResult) {
 }
 
 describe('runtime import success status copy', () => {
-  it('uses concise TrainingPeaks status during dataset application and preserves Strava wording', () => {
+  it('uses source-only success labels for both import sources', () => {
     const runtime = loadRuntimeDatasetApplicator();
     const trainingPeaksDataset = {
       rawCsvData: [],
@@ -222,7 +222,11 @@ describe('runtime import success status copy', () => {
     delete stravaDataset.importedFileCount;
     runtime.applyDataset(stravaDataset);
 
-    expect(runtime.context.updateStatusBadge).toHaveBeenLastCalledWith('success', 'Imported Strava history: 2 activities');
+    expect(runtime.context.updateStatusBadge).toHaveBeenLastCalledWith('success', 'Imported Strava history');
+
+    runtime.applyDataset({ ...stravaDataset, activities: [] });
+
+    expect(runtime.context.updateStatusBadge).toHaveBeenLastCalledWith('success', 'Imported Strava history');
   });
 
   it('uses concise TrainingPeaks status after import completion with skipped items', async () => {

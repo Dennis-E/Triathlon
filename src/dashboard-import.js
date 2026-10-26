@@ -206,12 +206,7 @@
       hideHeatmapActivityTooltip();
 
       const importLabel = dataset.sourceLabel === 'TrainingPeaks ZIP import' ? 'Imported TrainingPeaks history' : 'Imported Strava history';
-      const fileCountLabel = Number.isSafeInteger(dataset.importedFileCount) && dataset.importedFileCount > 0
-        ? ` from ${dataset.importedFileCount} ZIP archive(s)` : '';
-      const statusMessage = dataset.sourceLabel === 'TrainingPeaks ZIP import'
-        ? importLabel
-        : `${importLabel}${fileCountLabel}: ${processedActivities.length} activities`;
-      updateStatusBadge('success', statusMessage);
+      updateStatusBadge('success', importLabel);
 
       document.getElementById('previewCardsContainer').classList.remove('hidden');
       document.getElementById('enterDashboardContainer').classList.remove('hidden');

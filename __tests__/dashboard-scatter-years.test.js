@@ -49,7 +49,7 @@ function harness(years = [2020, 2021, 2022, 2023, 2024, 2025]) {
         .filter(a => a.sport === sport && a.metric === metric && (!minDate || a.date >= minDate) && (!maxDate || a.date <= maxDate))
         .map(a => ({ ...a, x: 5, y: 150, duration: 3600, distance: 10 })),
       buildYearlyRegressionDatasets: points => [...new Set(points.map(point => point.year))]
-        .map(year => ({ type: 'line', year, borderColor: '#fff', data: [] })),
+        .map((year, index) => ({ type: 'line', year, borderColor: ['#f00', '#0f0', '#00f'][index % 3], data: [] })),
       calculateBubbleRadius: () => 5
     } },
     processedActivities: activities, Chart,
@@ -89,6 +89,24 @@ function harness(years = [2020, 2021, 2022, 2023, 2024, 2025]) {
 }
 
 describe('Pace vs years controls', () => {
+  it('exposes visible, non-empty year bubble series with their matching colors for export', () => {
+    const h = harness([2023, 2024]);
+
+    expect(h.sandbox.window.paceMetricsDashboard.getExportSeries()).toEqual([
+      { label: '2023', color: '#f00' },
+      { label: '2024', color: '#0f0' }
+    ]);
+
+    h.click(2023);
+    expect(h.sandbox.window.paceMetricsDashboard.getExportSeries()).toEqual([
+      { label: '2024', color: '#0f0' }
+    ]);
+
+    h.sandbox.processedActivities = [];
+    h.sandbox.renderPaceMetricsChart();
+    expect(h.sandbox.window.paceMetricsDashboard.getExportSeries()).toEqual([]);
+  });
+
   it('applies date/year/trend selections atomically and derives years from the candidate prefix', () => {
     const h = harness([2025, 2026]);
     h.sandbox.window.dashboardTabNavigation = require('../src/tab-navigation');

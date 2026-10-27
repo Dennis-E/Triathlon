@@ -105,7 +105,7 @@ function createDownloadRuntime({ showSaveFilePicker, decodeError, imageWidth = 1
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/dashboard-power-pb.js'), 'utf8'), context);
   vm.runInContext('renderPbDetailChart = () => {}; this.__openPb = openPbDetail; this.__closePb = closePbDetail; this.__pbOpening = () => typeof pbDetailOpening === "undefined" ? null : pbDetailOpening;', context);
   vm.runInContext(
-    `${dashboardExportSource}\nthis.__downloadExportedImage = downloadExportedImage; this.__setLastExportedImage = value => { lastExportedImage = value; }; this.__prepare = (...args) => prepareExportImage(...args); this.__close = closeExportPreviewModal; this.__show = showExportPreviewModal; this.__image = () => lastExportedImage; this.__capture = exportVisualizationTarget; this.__mockCapture = dataUrl => { waitForChartRenderSettle = () => Promise.resolve(); loadExportAssets = () => Promise.resolve({}); drawExportComposition = () => dataUrl; };`,
+    `${dashboardExportSource}\nthis.__downloadExportedImage = downloadExportedImage; this.__setLastExportedImage = value => { lastExportedImage = value; }; this.__prepare = (...args) => prepareExportImage(...args); this.__close = closeExportPreviewModal; this.__show = showExportPreviewModal; this.__image = () => lastExportedImage; this.__capture = exportVisualizationTarget; this.__targetForTest = getTabExportTarget; this.__drawExportComposition = drawExportComposition; this.__mockCapture = dataUrl => { waitForChartRenderSettle = () => Promise.resolve(); loadExportAssets = () => Promise.resolve({}); drawExportComposition = () => dataUrl; };`,
     context,
     { filename: 'src/dashboard-export.js' }
   );
@@ -144,6 +144,82 @@ function createDownloadRuntime({ showSaveFilePicker, decodeError, imageWidth = 1
 }
 
 describe('dashboard export download destination', () => {
+  it('uses the visible Pace vs bubble years and their colors in the export legend', () => {
+    const runtime = createDownloadRuntime();
+    const context = runtime.context;
+    context.chartInstance = null;
+    const selectedButton = label => ({
+      disabled: false,
+      textContent: label,
+      classList: { contains: value => value === 'bg-indigo-600' },
+      getAttribute: () => null
+    });
+    const elements = {
+      paceMetricsChartWrapper: { id: 'paceMetricsChartWrapper' },
+      paceMetricsEmptyState: { classList: { contains: () => true } },
+      paceMetricsSportBtnRun: selectedButton('Run'),
+      paceMetricsMetricBtnheartRate: selectedButton('Average heart rate'),
+      scatterRangeLabel: { textContent: '2023 - 2024' }
+    };
+    const getOriginalElement = context.document.getElementById;
+    context.document.getElementById = id => elements[id] || getOriginalElement(id);
+    context.document.querySelectorAll = () => [];
+    context.window.paceMetricsDashboard = {
+      getExportSeries: () => [
+        { label: '2023', color: '#f00' },
+        { label: '2024', color: '#0f0' }
+      ]
+    };
+
+    expect(context.__targetForTest('paceMetrics').legend).toEqual({
+      title: 'Years',
+      items: [
+        { label: '2023', color: '#f00' },
+        { label: '2024', color: '#0f0' }
+      ]
+    });
+  });
+
+  it('draws the filter summary below the branded header and before the visualization', () => {
+    const runtime = createDownloadRuntime();
+    const context = runtime.context;
+    const events = [];
+    const drawingContext = {
+      fillRect(...args) { events.push(['fillRect', ...args]); },
+      drawImage(...args) { events.push(['drawImage', ...args]); },
+      fillText(...args) { events.push(['fillText', ...args]); },
+      measureText: text => ({ width: String(text).length * 8 })
+    };
+    const canvas = {
+      getContext: () => drawingContext,
+      toDataURL: () => PNG_DATA_URL
+    };
+    const originalCreateElement = context.document.createElement;
+    context.document.createElement = tagName => tagName === 'canvas' ? canvas : originalCreateElement(tagName);
+    const captured = { width: 960, height: 500 };
+    const target = context.window.exportUtils.createExportTarget({
+      kind: 'tab',
+      key: 'paceMetrics',
+      title: 'Pace vs ...',
+      targetElementId: 'paceMetricsChartWrapper',
+      hasData: true,
+      filters: [{ label: 'Sport', value: 'Run' }],
+      legend: { title: 'Years', items: [{ label: '2023', color: '#f00' }] }
+    });
+
+    context.__drawExportComposition(captured, target, {
+      logo: { naturalWidth: 100, naturalHeight: 100 },
+      qrCode: {}
+    });
+
+    const filterIndex = events.findIndex(event => event[0] === 'fillText' && event[1] === 'Sport: Run');
+    const chartIndex = events.findIndex(event => event[0] === 'drawImage' && event[1] === captured);
+    expect(filterIndex).toBeGreaterThan(-1);
+    expect(filterIndex).toBeLessThan(chartIndex);
+    expect(events[filterIndex][3]).toBeGreaterThan(190);
+    expect(events[chartIndex][3]).toBeGreaterThan(events[filterIndex][3] + 32);
+  });
+
   it('uses the native save picker when the browser supports it', async () => {
     const write = jest.fn().mockResolvedValue(undefined);
     const close = jest.fn().mockResolvedValue(undefined);
@@ -268,7 +344,7 @@ describe('dashboard export download destination', () => {
   it.each([true, false])('captures only an exportable Swim heatmap and preserves its preview (hasData=%s)', async hasData => {
     const runtime = createDownloadRuntime();
     const context = runtime.context;
-    const map = { id: 'heatmapMapContainer' };
+    const map = { id: 'heatmapMapContainer', style: { width: '100%', height: '480px' } };
     const getOriginalElement = context.document.getElementById;
     context.chartInstance = null;
     const elements = {
@@ -316,12 +392,19 @@ describe('dashboard export download destination', () => {
     expect(runtime.downloadLinks[0].download).toMatch(/^trianalytica-heatmap-/);
   });
 
-  it('darkens only the cloned tile layer for Black + Fire exports', async () => {
+  it('removes zoom controls and darkens only the cloned Black + Fire heatmap', async () => {
     const runtime = createDownloadRuntime();
     const context = runtime.context;
-    const map = { id: 'heatmapMapContainer' };
+    const map = { id: 'heatmapMapContainer', style: { width: '100%', height: '480px' } };
     const tileLayer = { style: { filter: 'invert(1) hue-rotate(180deg) brightness(0.8)', opacity: '' } };
-    const clonedMap = { style: { backgroundColor: '' }, querySelector: jest.fn(() => tileLayer) };
+    const liveZoomControl = { remove: jest.fn() };
+    const clonedZoomControl = { remove: jest.fn() };
+    map.querySelectorAll = jest.fn(() => [liveZoomControl]);
+    const clonedMap = {
+      style: { backgroundColor: '' },
+      querySelector: jest.fn(() => tileLayer),
+      querySelectorAll: jest.fn(() => [clonedZoomControl])
+    };
     const clonedDocument = {
       getElementById: id => id === 'heatmapMapContainer' ? clonedMap : (id === 'heatmapColorScheme' ? { value: 'black-fire' } : null)
     };
@@ -350,7 +433,186 @@ describe('dashboard export download destination', () => {
     expect(tileLayer.style.filter).toBe('');
     expect(tileLayer.style.opacity).toBe('0.45');
     expect(clonedMap.style.backgroundColor).toBe('rgb(2, 6, 23)');
+    expect(clonedMap.style).toMatchObject({ width: '960px', height: '500px', maxWidth: 'none' });
+    expect(clonedZoomControl.remove).toHaveBeenCalledTimes(1);
+    expect(liveZoomControl.remove).not.toHaveBeenCalled();
+    expect(map.style).toEqual({ width: '100%', height: '480px' });
     expect(runtime.context.previewForTest).toBe(PNG_DATA_URL);
+  });
+
+  it.each([
+    ['totalDistance', 'totalDistanceChartWrapper'],
+    ['distributions', 'distributionsChartWrapper'],
+    ['workoutTime', 'workoutTimeChartWrapper']
+  ])('resizes only the cloned %s capture to the export plot region', async (key, targetElementId) => {
+    const runtime = createDownloadRuntime();
+    const context = runtime.context;
+    const liveTarget = { id: targetElementId, style: { width: '100%', height: '420px' } };
+    const clonedCanvas = { style: { width: '1120px', height: '420px' } };
+    const clonedTarget = {
+      style: {},
+      querySelectorAll: jest.fn(() => [clonedCanvas])
+    };
+    context.document.getElementById = id => id === targetElementId ? liveTarget : null;
+    context.__mockCapture(PNG_DATA_URL);
+    context.html2canvas = jest.fn(async (_target, options) => {
+      options.onclone({ getElementById: id => id === targetElementId ? clonedTarget : null });
+      return { width: 960, height: 500 };
+    });
+    const target = context.window.exportUtils.createExportTarget({
+      kind: 'tab',
+      key,
+      title: key,
+      targetElementId,
+      hasData: true
+    });
+
+    await context.__capture(target);
+
+    expect(context.html2canvas).toHaveBeenCalledWith(liveTarget, expect.objectContaining({ useCORS: true }));
+    expect(clonedTarget.style).toMatchObject({ width: '960px', height: '500px', maxWidth: 'none' });
+    expect(clonedCanvas.style).toMatchObject({ width: '100%', height: '100%' });
+    expect(liveTarget.style).toEqual({ width: '100%', height: '420px' });
+  });
+
+  it('replaces the cloned Pie canvas with a square export render and keeps the live summary intact', async () => {
+    const runtime = createDownloadRuntime();
+    const context = runtime.context;
+    const liveSummary = { style: { display: '' } };
+    const liveChartContainer = { style: { maxWidth: '520px', height: '520px' } };
+    const liveCanvas = { style: { width: '100%', height: '100%' }, parentElement: liveChartContainer };
+    const liveTarget = { id: 'pieChartsCaptureArea' };
+    const clonedSummary = { style: { display: '' } };
+    const clonedGrid = { style: {} };
+    const clonedChartContainer = { style: {}, parentElement: clonedGrid };
+    const clonedCanvas = {
+      replaceWith: jest.fn()
+    };
+    const clonedLegendSpans = [{ style: {} }, { style: {} }];
+    const clonedLegend = {
+      style: {},
+      querySelectorAll: selector => selector === 'li span' ? clonedLegendSpans : []
+    };
+    const clonedImage = { style: {} };
+    const clonedElements = {
+      '#pieChartsSummary': clonedSummary,
+      '#pieChartsCanvas': clonedCanvas,
+      '#pieChartsLegend': clonedLegend
+    };
+    const clonedTarget = { style: {}, querySelector: selector => clonedElements[selector] || null };
+    context.document.getElementById = id => id === 'pieChartsCaptureArea' ? liveTarget : null;
+    context.window.pieChartsDashboard = { getExportChartImage: jest.fn(() => PNG_DATA_URL) };
+    context.__mockCapture(PNG_DATA_URL);
+    context.html2canvas = jest.fn(async (_target, options) => {
+      options.onclone({
+        getElementById: id => id === 'pieChartsCaptureArea' ? clonedTarget : null,
+        createElement: tagName => tagName === 'img' ? clonedImage : null
+      });
+      return { width: 960, height: 600 };
+    });
+    const target = context.window.exportUtils.createExportTarget({
+      kind: 'tab',
+      key: 'pieCharts',
+      title: 'Pie Charts',
+      targetElementId: 'pieChartsCaptureArea',
+      hasData: true
+    });
+
+    await context.__capture(target);
+
+    expect(clonedSummary.style.display).toBe('none');
+    expect(clonedTarget.style).toMatchObject({ width: '960px', maxWidth: 'none' });
+    expect(context.window.pieChartsDashboard.getExportChartImage).toHaveBeenCalledWith(560);
+    expect(clonedCanvas.replaceWith).toHaveBeenCalledWith(clonedImage);
+    expect(clonedImage).toMatchObject({ src: PNG_DATA_URL, alt: 'Pie chart' });
+    expect(clonedLegend.style.fontSize).toBe('22px');
+    expect(clonedLegendSpans.every(span => span.style.fontSize === '22px')).toBe(true);
+    expect(liveSummary.style.display).toBe('');
+    expect(liveChartContainer.style).toEqual({ maxWidth: '520px', height: '520px' });
+    expect(liveCanvas.style).toEqual({ width: '100%', height: '100%' });
+  });
+
+  it('fits a selected PB detail inside its content bounds without distorting or changing identity', () => {
+    const runtime = createDownloadRuntime();
+    const context = runtime.context;
+    const events = [];
+    const drawingContext = {
+      fillRect(...args) { events.push(['fillRect', ...args]); },
+      drawImage(...args) { events.push(['drawImage', ...args]); },
+      fillText(...args) { events.push(['fillText', ...args]); },
+      measureText: text => ({ width: String(text).length * 8 })
+    };
+    const canvas = {
+      getContext: () => drawingContext,
+      toDataURL: () => PNG_DATA_URL
+    };
+    const originalCreateElement = context.document.createElement;
+    context.document.createElement = tagName => tagName === 'canvas' ? canvas : originalCreateElement(tagName);
+    const captured = { width: 1200, height: 680 };
+    const target = context.window.exportUtils.createExportTarget({
+      kind: 'pb-tile',
+      key: 'run-5km',
+      title: 'Run 5 km',
+      targetElementId: 'pbDetailCaptureTarget',
+      hasData: true,
+      detailKey: 'run-5km',
+      filters: [{ label: 'Metric', value: 'Pace' }]
+    });
+
+    context.__drawExportComposition(captured, target, {
+      logo: { naturalWidth: 100, naturalHeight: 100 },
+      qrCode: {}
+    });
+
+    const chartDraw = events.find(event => event[0] === 'drawImage' && event[1] === captured);
+    expect(target.detailKey).toBe('run-5km');
+    expect(events).toContainEqual(['fillText', 'Run 5 km', 194, 68]);
+    expect(chartDraw[2]).toBeGreaterThanOrEqual(24);
+    expect(chartDraw[2] + chartDraw[4]).toBeLessThanOrEqual(1056);
+    expect(chartDraw[3]).toBeGreaterThan(190);
+    expect(chartDraw[3] + chartDraw[5]).toBeLessThanOrEqual(790);
+    expect(chartDraw[4] / chartDraw[5]).toBeCloseTo(1200 / 680);
+    expect(chartDraw[4] / 1032).toBeGreaterThanOrEqual(0.85);
+  });
+
+  it('resizes only the cloned PB detail capture and preserves its SVG viewBox', async () => {
+    const runtime = createDownloadRuntime();
+    const context = runtime.context;
+    const liveSvg = { style: { width: '100%', height: '100%' }, viewBox: '0 0 1200 680', preserveAspectRatio: 'xMidYMid meet' };
+    const liveTarget = { id: 'pbDetailCaptureTarget', style: { width: '720px', height: '480px' }, querySelector: () => liveSvg };
+    const clonedSvg = { style: {}, viewBox: '0 0 1200 680', preserveAspectRatio: 'xMidYMid meet' };
+    const clonedTarget = { style: {}, querySelector: () => clonedSvg };
+    context.document.getElementById = id => id === 'pbDetailCaptureTarget' ? liveTarget : null;
+    context.__mockCapture(PNG_DATA_URL);
+    context.html2canvas = jest.fn(async (_target, options) => {
+      options.onclone({ getElementById: id => id === 'pbDetailCaptureTarget' ? clonedTarget : null });
+      return { width: 1032, height: 560 };
+    });
+    const target = context.window.exportUtils.createExportTarget({
+      kind: 'pb-tile',
+      key: 'run-5km',
+      title: 'Run 5 km',
+      targetElementId: 'pbDetailCaptureTarget',
+      hasData: true,
+      detailKey: 'run-5km'
+    });
+
+    await context.__capture(target);
+
+    expect(context.html2canvas).toHaveBeenCalledWith(liveTarget, expect.objectContaining({ useCORS: true }));
+    expect(clonedTarget.style).toMatchObject({
+      flex: 'none',
+      width: '1032px',
+      height: '560px',
+      minHeight: '560px',
+      maxHeight: '560px',
+      maxWidth: 'none'
+    });
+    expect(clonedSvg.style).toMatchObject({ width: '100%', height: '100%', maxWidth: 'none' });
+    expect(clonedSvg.viewBox).toBe('0 0 1200 680');
+    expect(clonedSvg.preserveAspectRatio).toBe('xMidYMid meet');
+    expect(liveTarget.style).toEqual({ width: '720px', height: '480px' });
+    expect(liveSvg.style).toEqual({ width: '100%', height: '100%' });
   });
 
   it('passes the current PNG bytes and suggested filename to the browser unchanged', async () => {

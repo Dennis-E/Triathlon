@@ -1,6 +1,7 @@
 const {
   computeSquareFit,
   computeContainFit,
+  computeExportContentFit,
   computeExportMetadataLayout,
   computeFilterRowLayout,
   getTabDisplayTitle,
@@ -212,6 +213,44 @@ describe('export-utils', () => {
     });
   });
 
+  describe('computeExportContentFit', () => {
+    it('uses at least 85% of both plot dimensions when source and content aspect ratios match', () => {
+      const fit = computeExportContentFit(960, 500, 960, 500);
+
+      expect(fit).toMatchObject({
+        drawWidth: 960,
+        drawHeight: 500,
+        offsetX: 0,
+        offsetY: 0,
+        widthUtilization: 1,
+        heightUtilization: 1
+      });
+      expect(fit.widthUtilization).toBeGreaterThanOrEqual(0.85);
+      expect(fit.heightUtilization).toBeGreaterThanOrEqual(0.85);
+    });
+
+    it('preserves aspect ratio and reports when one dimension cannot reach 85%', () => {
+      const fit = computeExportContentFit(1920, 500, 960, 500);
+
+      expect(fit.drawWidth).toBe(960);
+      expect(fit.drawHeight).toBe(250);
+      expect(fit.widthUtilization).toBe(1);
+      expect(fit.heightUtilization).toBe(0.5);
+      expect(fit.drawWidth / fit.drawHeight).toBe(1920 / 500);
+    });
+
+    it('returns zero utilization for invalid dimensions', () => {
+      expect(computeExportContentFit(960, 500, 0, 500)).toEqual({
+        drawWidth: 0,
+        drawHeight: 0,
+        offsetX: 0,
+        offsetY: 0,
+        widthUtilization: 0,
+        heightUtilization: 0
+      });
+    });
+  });
+
   describe('computeExportMetadataLayout', () => {
     it('places each metadata block after the previous block', () => {
       const layout = computeExportMetadataLayout({
@@ -346,7 +385,7 @@ describe('export-utils', () => {
         label: 'Views',
         controls: [{ label: 'Pace vs ...', selected: true }]
       }]);
-      expect(target.legend.items.map(item => item.label)).toEqual(['Selected metric', 'Pace or speed']);
+      expect(target.legend).toBeNull();
     });
 
     it('rejects incomplete or unsupported targets', () => {
@@ -371,7 +410,7 @@ describe('export-utils', () => {
     });
 
     it('provides only applicable legends', () => {
-      expect(getExportLegend('paceMetrics').items).toHaveLength(2);
+      expect(getExportLegend('paceMetrics')).toBeNull();
       expect(getExportLegend('totalDistance')).toBeNull();
       expect(getExportLegend('personalBests')).toBeNull();
     });

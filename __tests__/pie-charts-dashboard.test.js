@@ -48,6 +48,17 @@ describe('Pie Charts dashboard contract', () => {
     expect(captureArea[0]).toContain('id="pieChartsSummary"');
   });
 
+  it('keeps the activity summary in the dashboard and defines an export-only readable pie layout', () => {
+    expect(pieDashboard).toContain('summary.textContent = formatPieSummary(result);');
+    expect(pieDashboard).toContain('getExportChartImage');
+    expect(dashboardExport).toMatch(/target\.key === 'pieCharts'[\s\S]*?summary\.style\.display = 'none'/);
+    expect(dashboardExport).toContain("clonedTarget.style.width = '960px'");
+    expect(dashboardExport).toContain("grid.style.gridTemplateColumns = 'minmax(0, 1fr) 18rem'");
+    expect(dashboardExport).toContain("legend.querySelectorAll('li span')");
+    expect(dashboardExport).toContain("span.style.fontSize = '22px'");
+    expect(dashboardExport).toContain("chartContainer.style.maxWidth = 'none'");
+  });
+
   it('registers Share/Export with data and no-data behaviour', () => {
     expect(html).toContain(`onclick="exportVisualizationTab('pieCharts')"`);
     expect(html).toContain('aria-label="Export for Insta / Strava: Pie Charts"');

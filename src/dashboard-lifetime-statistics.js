@@ -43,13 +43,16 @@
     const cardClass = exportMode
       ? 'min-w-0 rounded-2xl border border-slate-700 bg-slate-900 p-8'
       : 'min-w-0 rounded-xl border border-slate-800 bg-slate-950 p-4 sm:p-5';
+    const labelClass = exportMode
+      ? 'text-base font-medium uppercase tracking-wide text-slate-400'
+      : 'text-xs font-medium uppercase tracking-wide text-slate-400';
     const valueClass = exportMode && prominent
       ? 'mt-5 break-words text-5xl font-bold leading-tight tabular-nums text-white'
       : exportMode
         ? 'mt-3 break-words text-3xl font-bold leading-tight tabular-nums text-white'
       : 'mt-2 break-words text-2xl font-semibold tabular-nums text-white';
     return `<article class="${cardClass}">
-      <h3 class="text-xs font-medium uppercase tracking-wide text-slate-400">${escapeHtml(label)}</h3>
+      <h3 class="${labelClass}">${escapeHtml(label)}</h3>
       <p class="${valueClass}">${escapeHtml(metricValue(metric, formatter, unit))}</p>
       ${metricStatusMarkup(metric)}
     </article>`;
@@ -73,16 +76,25 @@
     const valueClass = exportMode
       ? 'mt-3 break-words text-3xl font-bold tabular-nums text-white'
       : 'mt-2 break-words text-xl font-semibold tabular-nums text-white';
+    const labelClass = exportMode
+      ? 'text-base font-medium uppercase tracking-wide text-slate-400'
+      : 'text-xs font-medium uppercase tracking-wide text-slate-400';
     return `<article class="${cardClass}">
-      <h3 class="text-xs font-medium uppercase tracking-wide text-slate-400">${escapeHtml(label)}</h3>
+      <h3 class="${labelClass}">${escapeHtml(label)}</h3>
       <p class="${valueClass}">${formatNumber(value, 0)}</p>
     </article>`;
   }
 
-  function renderActivityMilestone(label, activity, formatter, unit) {
+  function renderActivityMilestone(label, activity, formatter, unit, exportMode = false) {
+    const cardClass = exportMode
+      ? 'min-w-0 rounded-xl border border-slate-700 bg-slate-900 p-6'
+      : 'min-w-0 rounded-xl border border-slate-800 bg-slate-950 p-4';
+    const labelClass = exportMode
+      ? 'text-base font-medium uppercase tracking-wide text-slate-400'
+      : 'text-xs font-medium uppercase tracking-wide text-slate-400';
     if (!activity) {
-      return `<article class="min-w-0 rounded-xl border border-slate-800 bg-slate-950 p-4">
-        <h3 class="text-xs font-medium uppercase tracking-wide text-slate-400">${escapeHtml(label)}</h3>
+      return `<article class="${cardClass}">
+        <h3 class="${labelClass}">${escapeHtml(label)}</h3>
         <p class="mt-2 text-xl font-semibold text-slate-300">Not available</p>
         <p class="mt-2 text-xs text-slate-400">No activity has a usable recorded value</p>
       </article>`;
@@ -92,11 +104,11 @@
       ? activity.date.toLocaleDateString()
       : 'Date unavailable';
     const value = `${formatter(activity.value)}${unit ? ` ${unit}` : ''}`;
-    return `<article class="min-w-0 rounded-xl border border-slate-800 bg-slate-950 p-4">
-      <h3 class="text-xs font-medium uppercase tracking-wide text-slate-400">${escapeHtml(label)}</h3>
+    return `<article class="${cardClass}">
+      <h3 class="${labelClass}">${escapeHtml(label)}</h3>
       <p class="mt-2 break-words text-xl font-semibold tabular-nums text-white">${escapeHtml(value)}</p>
       <p class="mt-2 break-words text-sm text-slate-300">${escapeHtml(activity.name)}</p>
-      <p class="mt-1 text-xs text-slate-500">${escapeHtml(activityDate)}</p>
+      <p class="mt-1 ${exportMode ? 'text-sm' : 'text-xs'} text-slate-500">${escapeHtml(activityDate)}</p>
     </article>`;
   }
 
@@ -105,12 +117,12 @@
       ? 'grid min-w-0 grid-cols-4 gap-3'
       : 'grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4';
     return `<section aria-labelledby="lifetimeMilestonesHeading" class="space-y-3">
-      <h3 id="lifetimeMilestonesHeading" class="text-sm font-semibold text-white">Lifetime milestones</h3>
+      <h3 id="lifetimeMilestonesHeading" class="${exportMode ? 'text-lg' : 'text-sm'} font-semibold text-white">Lifetime milestones</h3>
       <div class="${gridClass}">
         ${renderPrimaryMetric('Elevation gain', summary.elevationGain, value => formatNumber(value / 1000), 'km', exportMode, false)}
         ${renderCountMilestone('Active days', summary.activeDayCount, exportMode)}
-        ${renderActivityMilestone('Longest distance', summary.longestByDistance, value => formatNumber(value, 0), 'km')}
-        ${renderActivityMilestone('Longest moving time', summary.longestByMovingTime, formatMovingTime, '')}
+        ${renderActivityMilestone('Longest distance', summary.longestByDistance, value => formatNumber(value, 0), 'km', exportMode)}
+        ${renderActivityMilestone('Longest moving time', summary.longestByMovingTime, formatMovingTime, '', exportMode)}
       </div>
     </section>`;
   }
@@ -158,8 +170,11 @@
     const valueClass = exportMode
       ? 'mt-3 break-words text-3xl font-bold tabular-nums text-white'
       : 'mt-2 break-words text-xl font-semibold tabular-nums text-white';
+    const labelClass = exportMode
+      ? 'text-base font-medium uppercase tracking-wide text-slate-400'
+      : 'text-xs font-medium uppercase tracking-wide text-slate-400';
     return `<article aria-label="Countries visited" class="${cardClass}">
-      <h3 class="text-xs font-medium uppercase tracking-wide text-slate-400">Countries visited</h3>
+      <h3 class="${labelClass}">Countries visited</h3>
       <p class="${valueClass}">${escapeHtml(value)}</p>
       <p class="mt-2 break-words text-sm text-slate-200">${escapeHtml(namesText)}</p>
       ${coverageText ? `<p class="mt-1 break-words text-xs text-slate-500">${escapeHtml(coverageText)}</p>` : ''}

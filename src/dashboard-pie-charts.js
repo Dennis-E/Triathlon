@@ -172,7 +172,6 @@
         }
       );
       currentPieResult = result;
-
       if (result.slices.length === 0) {
         destroyPieChart();
         legend.replaceChildren();
@@ -229,4 +228,35 @@
       });
     }
 
-    window.pieChartsDashboard = { render: renderPieCharts };
+    function getExportChartImage(size = 560) {
+      if (!currentPieResult || currentPieResult.slices.length === 0 || !(size > 0)) return null;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const exportChart = new Chart(canvas, {
+        type: 'pie',
+        data: {
+          labels: currentPieResult.slices.map(slice => slice.label),
+          datasets: [{
+            data: currentPieResult.slices.map(slice => slice.value),
+            backgroundColor: currentPieResult.slices.map(slice => slice.color),
+            borderColor: '#020617',
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: false,
+          maintainAspectRatio: true,
+          animation: false,
+          layout: { padding: 16 },
+          plugins: { legend: { display: false } }
+        },
+        plugins: [piePercentageLabelPlugin]
+      });
+      const image = canvas.toDataURL('image/png');
+      exportChart.destroy();
+      return image;
+    }
+
+    window.pieChartsDashboard = { render: renderPieCharts, getExportChartImage };

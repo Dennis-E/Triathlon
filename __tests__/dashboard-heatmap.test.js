@@ -34,6 +34,7 @@ function harness({ realGeometry = false } = {}) {
     zoom: 8,
     getCenter() { return this.center; },
     getZoom() { return this.zoom; },
+    setView(center, zoom) { this.center = center; this.zoom = zoom; return this; },
     fitBounds(bounds, options) {
       boundsFits.push({ bounds, options });
       this.center = [0, 0];
@@ -123,6 +124,56 @@ describe('heatmap viewport lifecycle', () => {
     expect(h.renders).toHaveLength(1);
     expect(Object.keys(h.renders[0].segments)).toEqual(['bike1']);
     expect(h.renders[0].scheme).toBe('yellow-red');
+  });
+
+  it('captures the map at export size and restores its original dimensions and viewport', async () => {
+    const h = harness();
+    h.setDataset({ id: 'export-size' }, { run1: 'Run' });
+    await h.render();
+    h.elements.heatmapMapContainer.style.width = '';
+    h.elements.heatmapMapContainer.style.height = '';
+    h.elements.heatmapMapContainer.style.maxWidth = '';
+    const originalCenter = h.map.getCenter();
+    const originalZoom = h.map.getZoom();
+    const invalidationCount = h.sizeInvalidations.length;
+    let capturedLayout;
+
+    const result = await h.sandbox.window.heatmapDashboard.captureAtExportSize(async () => {
+      capturedLayout = {
+        width: h.elements.heatmapMapContainer.style.width,
+        height: h.elements.heatmapMapContainer.style.height,
+        center: h.map.getCenter(),
+        zoom: h.map.getZoom()
+      };
+      return 'captured';
+    });
+
+    expect(result).toBe('captured');
+    expect(capturedLayout).toEqual({ width: '960px', height: '500px', center: originalCenter, zoom: originalZoom });
+    expect(h.elements.heatmapMapContainer.style.width).toBe('');
+    expect(h.elements.heatmapMapContainer.style.height).toBe('');
+    expect(h.map.getCenter()).toBe(originalCenter);
+    expect(h.map.getZoom()).toBe(originalZoom);
+    expect(h.sizeInvalidations).toHaveLength(invalidationCount + 2);
+  });
+
+  it('restores map dimensions and viewport when capture rejects', async () => {
+    const h = harness();
+    h.setDataset({ id: 'export-failure' }, { run1: 'Run' });
+    await h.render();
+    h.elements.heatmapMapContainer.style.width = '';
+    h.elements.heatmapMapContainer.style.height = '';
+    h.elements.heatmapMapContainer.style.maxWidth = '';
+    const originalCenter = h.map.getCenter();
+    const originalZoom = h.map.getZoom();
+
+    await expect(h.sandbox.window.heatmapDashboard.captureAtExportSize(() => Promise.reject(new Error('capture failed'))))
+      .rejects.toThrow('capture failed');
+
+    expect(h.elements.heatmapMapContainer.style.width).toBe('');
+    expect(h.elements.heatmapMapContainer.style.height).toBe('');
+    expect(h.map.getCenter()).toBe(originalCenter);
+    expect(h.map.getZoom()).toBe(originalZoom);
   });
 
   it('retains the selected palette through sport changes and rerenders', async () => {

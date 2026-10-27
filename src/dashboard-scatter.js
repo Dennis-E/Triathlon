@@ -375,3 +375,18 @@ function renderPaceMetricsChart() {
   });
   updatePaceMetricsChartVisibility();
 }
+
+function getPaceMetricsExportSeries() {
+  if (!paceMetricsChartInstance) return [];
+
+  return paceMetricsChartInstance.data.datasets
+    .filter(dataset => dataset.type === 'bubble'
+      && Array.isArray(dataset.data)
+      && dataset.data.length > 0
+      && !disabledPaceMetricsYears.has(dataset.year))
+    .map(dataset => ({ label: String(dataset.year), color: dataset.borderColor }));
+}
+
+window.paceMetricsDashboard = {
+  getExportSeries: getPaceMetricsExportSeries
+};

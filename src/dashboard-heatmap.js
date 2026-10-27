@@ -547,3 +547,53 @@
       setTimeout(fitToDemoBounds, 0);
       window.addEventListener('resize', fitToDemoBounds);
     }
+
+    async function captureAtExportSize(capture) {
+      const container = document.getElementById('heatmapMapContainer');
+      if (!container || !heatmapMapInstance || typeof capture !== 'function') {
+        return typeof capture === 'function' ? capture() : null;
+      }
+
+      const originalStyle = {
+        width: container.style.width,
+        height: container.style.height,
+        maxWidth: container.style.maxWidth
+      };
+      const center = heatmapMapInstance.getCenter();
+      const zoom = heatmapMapInstance.getZoom();
+
+      try {
+        container.style.width = '960px';
+        container.style.height = '500px';
+        container.style.maxWidth = 'none';
+        heatmapMapInstance.invalidateSize({ pan: false, animate: false });
+        await new Promise(resolve => {
+          let settled = false;
+          let timeoutId = null;
+          const finish = () => {
+            if (settled) return;
+            settled = true;
+            if (timeoutId !== null) clearTimeout(timeoutId);
+            if (heatmapTileLayerInstance && typeof heatmapTileLayerInstance.off === 'function') {
+              heatmapTileLayerInstance.off('load', finish);
+            }
+            resolve();
+          };
+          if (heatmapTileLayerInstance && typeof heatmapTileLayerInstance.once === 'function') {
+            heatmapTileLayerInstance.once('load', finish);
+            if (!settled) timeoutId = setTimeout(finish, 1000);
+          } else {
+            finish();
+          }
+        });
+        return await capture();
+      } finally {
+        container.style.width = originalStyle.width;
+        container.style.height = originalStyle.height;
+        container.style.maxWidth = originalStyle.maxWidth;
+        heatmapMapInstance.invalidateSize({ pan: false, animate: false });
+        heatmapMapInstance.setView(center, zoom, { animate: false });
+      }
+    }
+
+    window.heatmapDashboard = { captureAtExportSize };

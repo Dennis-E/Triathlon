@@ -114,6 +114,10 @@ describe('lifetime statistics dashboard', () => {
     expect(elements.lifetimeStatisticsExportArea.innerHTML).not.toContain('lifetimeSportBreakdownHeading');
     expect(elements.lifetimeStatisticsExportArea.innerHTML).not.toContain('No supported sport categories');
     expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain('text-5xl');
+    expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain('text-base');
+    expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain('text-lg');
+    expect(elements.lifetimeStatisticsExportArea.innerHTML).not.toContain('text-xs font-medium uppercase tracking-wide text-slate-400');
+    expect(elements.lifetimeStatisticsCaptureArea.innerHTML).toContain('text-xs font-medium uppercase tracking-wide text-slate-400');
     expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain('0,3 km');
     expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain('grid-cols-4');
     expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain('Lifetime milestones');

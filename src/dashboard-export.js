@@ -217,7 +217,12 @@
         hasData: flags[tabName],
         filters: getExportContext(tabName),
         availableControls: getAvailableControlContext(tabName),
-        legend: window.exportUtils.getExportLegend(tabName),
+        legend: tabName === 'paceMetrics' && window.paceMetricsDashboard
+          ? {
+            title: 'Years',
+            items: window.paceMetricsDashboard.getExportSeries()
+          }
+          : window.exportUtils.getExportLegend(tabName),
         contentFit: tabName === 'lifetimeStatistics' ? 'lifetime-kpis' : undefined
       });
     }
@@ -348,32 +353,49 @@
       ctx.drawImage(assets.qrCode, 930, 28, 120, 120);
 
       const isLifetimeKpiExport = target.contentFit === 'lifetime-kpis';
+      const filterText = target.filters.map(filter => `${filter.label}: ${filter.value}`).join('  |  ');
+      const filterLayout = filterText && !isLifetimeKpiExport
+        ? drawWrappedText(ctx, filterText, 60, 220, 960, 32, 2)
+        : null;
       const contentWidth = target.contentFit === 'pb-tight' || isLifetimeKpiExport ? 1032 : 960;
-      const contentHeight = target.contentFit === 'pb-tight' ? 560 : isLifetimeKpiExport ? 840 : 500;
-      const scale = Math.min(contentWidth / captured.width, contentHeight / captured.height);
-      const drawWidth = captured.width * scale;
-      const drawHeight = captured.height * scale;
+      const requestedContentHeight = target.contentFit === 'pb-tight' ? 560 : isLifetimeKpiExport ? 840 : 500;
+      const contentY = isLifetimeKpiExport
+        ? 190
+        : filterLayout
+          ? Math.max(250, filterLayout.bottom + 16)
+          : 205;
+      const contentHeight = isLifetimeKpiExport
+        ? requestedContentHeight
+        : Math.min(requestedContentHeight, Math.max(0, 790 - contentY));
+      const contentFit = window.exportUtils.computeExportContentFit(
+        captured.width,
+        captured.height,
+        contentWidth,
+        contentHeight
+      );
       const contentX = target.kind === 'pb-tile' ? 24 : isLifetimeKpiExport ? 24 : 60;
-      const contentY = isLifetimeKpiExport ? 190 : 205;
-      ctx.drawImage(captured, contentX + (contentWidth - drawWidth) / 2, contentY + (contentHeight - drawHeight) / 2, drawWidth, drawHeight);
+      ctx.drawImage(
+        captured,
+        contentX + contentFit.offsetX,
+        contentY + contentFit.offsetY,
+        contentFit.drawWidth,
+        contentFit.drawHeight
+      );
 
       if (isLifetimeKpiExport) return finalCanvas.toDataURL('image/png');
 
       ctx.fillStyle = '#cbd5e1';
       ctx.font = '600 24px system-ui, -apple-system, "Segoe UI", sans-serif';
-      const filterText = target.filters.map(filter => `${filter.label}: ${filter.value}`).join('  |  ');
-      const filterHeight = filterText ? 64 : 0;
       const controlsHeight = Math.max(42, (target.availableControls || []).length * 56);
       const legendHeight = target.legend ? 42 : 0;
       const metadataLayout = window.exportUtils.computeExportMetadataLayout({
         startY: 790,
-        filterHeight,
+        filterHeight: 0,
         controlsHeight,
         legendHeight,
         footerStart: 1070,
         spacing: 18
       });
-      if (filterText) drawWrappedText(ctx, filterText, 60, metadataLayout.filters.y, 960, 32, 2);
       const controlsBottom = drawAvailableControls(
         ctx,
         target.availableControls || [],
@@ -387,13 +409,20 @@
         ctx.font = '600 22px system-ui, -apple-system, "Segoe UI", sans-serif';
         const legendY = Math.max(metadataLayout.legend.y, controlsBottom + 12);
         ctx.fillText(target.legend.title, 60, legendY);
+        let itemX = 170;
+        let itemY = legendY;
         target.legend.items.forEach((item, index) => {
-          const x = 170 + index * 180;
-          ctx.fillStyle = item.color;
-          ctx.fillRect(x, legendY - 18, 18, 18);
-          ctx.fillStyle = '#cbd5e1';
           ctx.font = '500 22px system-ui, -apple-system, "Segoe UI", sans-serif';
-          ctx.fillText(item.label, x + 22, legendY);
+          const itemWidth = 42 + ctx.measureText(item.label).width;
+          if (itemX + itemWidth > 1020 && itemX > 170) {
+            itemX = 170;
+            itemY += 32;
+          }
+          ctx.fillStyle = item.color;
+          ctx.fillRect(itemX, itemY - 18, 18, 18);
+          ctx.fillStyle = '#cbd5e1';
+          ctx.fillText(item.label, itemX + 24, itemY);
+          itemX += itemWidth + 18;
         });
       }
 
@@ -588,19 +617,90 @@
         }
         const assets = await loadExportAssets();
 
-        const captured = await html2canvas(targetEl, {
+        const captureOptions = {
           backgroundColor: '#020617',
           useCORS: true,
           logging: false,
+          windowWidth: ['pieCharts', 'heatmap'].includes(target.key) ? Math.max(window.innerWidth || 0, 1200) : undefined,
           onclone: clonedDocument => {
             const clonedTarget = clonedDocument.getElementById(target.targetElementId);
             if (!clonedTarget) return;
-            if (target.key === 'heatmap' && document.getElementById('heatmapColorScheme')?.value === 'black-fire') {
-              const tileLayer = clonedTarget.querySelector('.leaflet-tile-pane .leaflet-layer');
-              if (tileLayer) {
-                tileLayer.style.filter = '';
-                tileLayer.style.opacity = '0.45';
-                clonedTarget.style.backgroundColor = 'rgb(2, 6, 23)';
+            if (['totalDistance', 'distributions', 'workoutTime'].includes(target.key)) {
+              clonedTarget.style.width = '960px';
+              clonedTarget.style.height = '500px';
+              clonedTarget.style.maxWidth = 'none';
+              clonedTarget.querySelectorAll?.('canvas').forEach(canvas => {
+                canvas.style.width = '100%';
+                canvas.style.height = '100%';
+              });
+              return;
+            }
+            if (target.kind === 'pb-tile') {
+              clonedTarget.style.flex = 'none';
+              clonedTarget.style.width = '1032px';
+              clonedTarget.style.height = '560px';
+              clonedTarget.style.minHeight = '560px';
+              clonedTarget.style.maxHeight = '560px';
+              clonedTarget.style.maxWidth = 'none';
+              const svg = clonedTarget.querySelector('svg');
+              if (svg) {
+                svg.style.width = '100%';
+                svg.style.height = '100%';
+                svg.style.maxWidth = 'none';
+              }
+              return;
+            }
+            if (target.key === 'pieCharts') {
+              clonedTarget.style.width = '960px';
+              clonedTarget.style.maxWidth = 'none';
+              const summary = clonedTarget.querySelector('#pieChartsSummary');
+              if (summary) summary.style.display = 'none';
+              const chart = clonedTarget.querySelector('#pieChartsCanvas');
+              const chartContainer = chart && chart.parentElement;
+              if (chartContainer) {
+                chartContainer.style.maxWidth = 'none';
+                chartContainer.style.height = '560px';
+                chartContainer.style.width = '560px';
+                chartContainer.style.margin = '0 auto';
+                const grid = chartContainer.parentElement;
+                if (grid) {
+                  grid.style.display = 'grid';
+                  grid.style.gridTemplateColumns = 'minmax(0, 1fr) 18rem';
+                  grid.style.gap = '24px';
+                  grid.style.alignItems = 'center';
+                }
+              }
+              if (chart && window.pieChartsDashboard && typeof window.pieChartsDashboard.getExportChartImage === 'function') {
+                const image = clonedDocument.createElement('img');
+                image.src = window.pieChartsDashboard.getExportChartImage(560);
+                image.alt = 'Pie chart';
+                image.style.width = '560px';
+                image.style.height = '560px';
+                image.style.display = 'block';
+                chart.replaceWith(image);
+              }
+              const legend = clonedTarget.querySelector('#pieChartsLegend');
+              if (legend) {
+                legend.style.width = '288px';
+                legend.style.fontSize = '22px';
+                legend.querySelectorAll('li span').forEach(span => {
+                  span.style.fontSize = '22px';
+                });
+              }
+              return;
+            }
+            if (target.key === 'heatmap') {
+              clonedTarget.style.width = '960px';
+              clonedTarget.style.height = '500px';
+              clonedTarget.style.maxWidth = 'none';
+              clonedTarget.querySelectorAll?.('.leaflet-control-zoom').forEach(control => control.remove());
+              if (document.getElementById('heatmapColorScheme')?.value === 'black-fire') {
+                const tileLayer = clonedTarget.querySelector('.leaflet-tile-pane .leaflet-layer');
+                if (tileLayer) {
+                  tileLayer.style.filter = '';
+                  tileLayer.style.opacity = '0.45';
+                  clonedTarget.style.backgroundColor = 'rgb(2, 6, 23)';
+                }
               }
               return;
             }
@@ -615,7 +715,12 @@
             clonedTarget.style.width = `${captureWidth}px`;
             clonedTarget.style.maxWidth = 'none';
           }
-        });
+        };
+        const captured = target.key === 'heatmap'
+          && window.heatmapDashboard
+          && typeof window.heatmapDashboard.captureAtExportSize === 'function'
+          ? await window.heatmapDashboard.captureAtExportSize(() => html2canvas(targetEl, captureOptions))
+          : await html2canvas(targetEl, captureOptions);
         const dataUrl = drawExportComposition(captured, target, assets);
         lastExportedImage = await prepareExportImage(dataUrl, target, pbOpening);
 

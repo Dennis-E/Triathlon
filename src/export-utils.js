@@ -40,16 +40,6 @@ const EXPORT_ASSET_PATHS = {
   qrCode: 'assets/QR Code webpage.png'
 };
 
-const EXPORT_LEGENDS = {
-  paceMetrics: {
-    title: 'Measures',
-    items: [
-      { label: 'Selected metric', color: '#EF4444' },
-      { label: 'Pace or speed', color: '#06B6D4' }
-    ]
-  }
-};
-
 const EXPORT_BRAND_CONFIG = {
   domain: 'https://dennis-e.github.io/Triathlon/'
 };
@@ -81,6 +71,15 @@ function computeContainFit(sourceWidth, sourceHeight, boxWidth, boxHeight) {
     drawHeight,
     offsetX: (boxWidth - drawWidth) / 2,
     offsetY: (boxHeight - drawHeight) / 2
+  };
+}
+
+function computeExportContentFit(sourceWidth, sourceHeight, boxWidth, boxHeight) {
+  const fit = computeContainFit(sourceWidth, sourceHeight, boxWidth, boxHeight);
+  return {
+    ...fit,
+    widthUtilization: boxWidth > 0 ? fit.drawWidth / boxWidth : 0,
+    heightUtilization: boxHeight > 0 ? fit.drawHeight / boxHeight : 0
   };
 }
 
@@ -189,12 +188,7 @@ function summarizeAvailableControls(groups) {
 }
 
 function getExportLegend(tabName) {
-  const legend = EXPORT_LEGENDS[tabName];
-  if (!legend) return null;
-  return {
-    title: legend.title,
-    items: legend.items.map(item => ({ ...item }))
-  };
+  return null;
 }
 
 function getExportAssetPaths() {
@@ -309,6 +303,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     computeSquareFit,
     computeContainFit,
+    computeExportContentFit,
     computeExportMetadataLayout,
     computeFilterRowLayout,
     getTabDisplayTitle,
@@ -331,6 +326,7 @@ if (typeof window !== 'undefined') {
   window.exportUtils = {
     computeSquareFit,
     computeContainFit,
+    computeExportContentFit,
     computeExportMetadataLayout,
     computeFilterRowLayout,
     getTabDisplayTitle,

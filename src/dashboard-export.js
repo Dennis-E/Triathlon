@@ -158,6 +158,7 @@
       const contexts = {
         totalDistance: [
           { label: 'Sport', value: getActiveButtonText(['sportBtnAll', 'sportBtnRun', 'sportBtnBike', 'sportBtnSwim']) },
+          { label: 'Aggregation', value: getActiveButtonText(['aggBtnDaily', 'aggBtnWeekly', 'aggBtnMonthly', 'aggBtnYearly']) },
           { label: 'Timeframe', value: getActiveButtonText(Array.from(document.querySelectorAll('#timeframeSelector button')).map(button => button.id)) }
         ],
         paceMetrics: [
@@ -348,44 +349,55 @@
       ctx.drawImage(assets.qrCode, 930, 28, 120, 120);
 
       const isLifetimeKpiExport = target.contentFit === 'lifetime-kpis';
-      const contentWidth = target.contentFit === 'pb-tight' || isLifetimeKpiExport ? 1032 : 960;
-      const contentHeight = target.contentFit === 'pb-tight' ? 560 : isLifetimeKpiExport ? 840 : 500;
-      const scale = Math.min(contentWidth / captured.width, contentHeight / captured.height);
-      const drawWidth = captured.width * scale;
-      const drawHeight = captured.height * scale;
-      const contentX = target.kind === 'pb-tile' ? 24 : isLifetimeKpiExport ? 24 : 60;
-      const contentY = isLifetimeKpiExport ? 190 : 205;
-      ctx.drawImage(captured, contentX + (contentWidth - drawWidth) / 2, contentY + (contentHeight - drawHeight) / 2, drawWidth, drawHeight);
+      const contentX = target.kind === 'pb-tile' || isLifetimeKpiExport ? 24 : 60;
+      const contentWidth = target.kind === 'pb-tile' || isLifetimeKpiExport ? 1032 : 960;
+      const filterText = (target.filters || []).map(filter => `${filter.label}: ${filter.value}`).join('  |  ');
+      const contextY = isLifetimeKpiExport ? 190 : 205;
+      let contextLineCount = 0;
+      if (filterText && !isLifetimeKpiExport) {
+        ctx.fillStyle = '#cbd5e1';
+        ctx.font = '600 24px system-ui, -apple-system, "Segoe UI", sans-serif';
+        contextLineCount = drawWrappedText(
+          ctx,
+          filterText,
+          contentX,
+          contextY,
+          contentWidth,
+          32,
+          Number.POSITIVE_INFINITY
+        ).lineCount;
+      }
+
+      const layout = window.exportUtils.computeExportContentLayout({
+        canvasWidth: targetSize,
+        canvasHeight: targetSize,
+        headerHeight: 190,
+        marginX: contentX,
+        topGap: isLifetimeKpiExport ? 0 : 15,
+        bottomMargin: isLifetimeKpiExport ? 50 : target.legend ? 76 : 24,
+        contextGap: 12,
+        contextHeight: contextLineCount * 32
+      });
+      const fit = window.exportUtils.computeContainFit(
+        captured.width,
+        captured.height,
+        layout.visualization.width,
+        layout.visualization.height
+      );
+      ctx.drawImage(
+        captured,
+        layout.visualization.x + (layout.visualization.width - fit.drawWidth) / 2,
+        layout.visualization.y + (layout.visualization.height - fit.drawHeight) / 2,
+        fit.drawWidth,
+        fit.drawHeight
+      );
 
       if (isLifetimeKpiExport) return finalCanvas.toDataURL('image/png');
 
-      ctx.fillStyle = '#cbd5e1';
-      ctx.font = '600 24px system-ui, -apple-system, "Segoe UI", sans-serif';
-      const filterText = target.filters.map(filter => `${filter.label}: ${filter.value}`).join('  |  ');
-      const filterHeight = filterText ? 64 : 0;
-      const controlsHeight = Math.max(42, (target.availableControls || []).length * 56);
-      const legendHeight = target.legend ? 42 : 0;
-      const metadataLayout = window.exportUtils.computeExportMetadataLayout({
-        startY: 790,
-        filterHeight,
-        controlsHeight,
-        legendHeight,
-        footerStart: 1070,
-        spacing: 18
-      });
-      if (filterText) drawWrappedText(ctx, filterText, 60, metadataLayout.filters.y, 960, 32, 2);
-      const controlsBottom = drawAvailableControls(
-        ctx,
-        target.availableControls || [],
-        60,
-        metadataLayout.controls.y,
-        960,
-        metadataLayout.legend.y - 18
-      );
       if (target.legend) {
+        const legendY = layout.visualization.y + layout.visualization.height + 28;
         ctx.fillStyle = '#94a3b8';
         ctx.font = '600 22px system-ui, -apple-system, "Segoe UI", sans-serif';
-        const legendY = Math.max(metadataLayout.legend.y, controlsBottom + 12);
         ctx.fillText(target.legend.title, 60, legendY);
         target.legend.items.forEach((item, index) => {
           const x = 170 + index * 180;

@@ -29,6 +29,13 @@ function createDownloadRuntime({ showSaveFilePicker, decodeError, imageWidth = 1
   const anchors = [];
   const downloadLinks = [];
   const pickerCalls = [];
+  const canvasCalls = { text: [], images: [], fills: [], canvases: [] };
+  const canvasContext = {
+    measureText(text) { return { width: String(text).length * 12 }; },
+    fillText(text) { canvasCalls.text.push(String(text)); },
+    drawImage(...args) { canvasCalls.images.push(args); },
+    fillRect(...args) { canvasCalls.fills.push(args); }
+  };
   const elements = { exportToast: toast };
   let focused = null;
   for (const id of ['exportPreviewModal', 'exportPreviewImage', 'exportPreviewError', 'exportPreviewDownloadBtn', 'pbDetailOverlay', 'pbDetailTitle', 'pbDetailSubtitle', 'pbDetailExport', 'pbDetailClose']) {
@@ -85,6 +92,16 @@ function createDownloadRuntime({ showSaveFilePicker, decodeError, imageWidth = 1
         }
       },
       createElement(tagName) {
+        if (tagName === 'canvas') {
+          const canvas = {
+            width: 0,
+            height: 0,
+            getContext() { return canvasContext; },
+            toDataURL() { return PNG_DATA_URL; }
+          };
+          canvasCalls.canvases.push(canvas);
+          return canvas;
+        }
         if (tagName !== 'a') throw new Error(`Unexpected element: ${tagName}`);
         return {
           click() {
@@ -105,7 +122,7 @@ function createDownloadRuntime({ showSaveFilePicker, decodeError, imageWidth = 1
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/dashboard-power-pb.js'), 'utf8'), context);
   vm.runInContext('renderPbDetailChart = () => {}; this.__openPb = openPbDetail; this.__closePb = closePbDetail; this.__pbOpening = () => typeof pbDetailOpening === "undefined" ? null : pbDetailOpening;', context);
   vm.runInContext(
-    `${dashboardExportSource}\nthis.__downloadExportedImage = downloadExportedImage; this.__setLastExportedImage = value => { lastExportedImage = value; }; this.__prepare = (...args) => prepareExportImage(...args); this.__close = closeExportPreviewModal; this.__show = showExportPreviewModal; this.__image = () => lastExportedImage; this.__capture = exportVisualizationTarget; this.__mockCapture = dataUrl => { waitForChartRenderSettle = () => Promise.resolve(); loadExportAssets = () => Promise.resolve({}); drawExportComposition = () => dataUrl; };`,
+    `${dashboardExportSource}\nthis.__downloadExportedImage = downloadExportedImage; this.__setLastExportedImage = value => { lastExportedImage = value; }; this.__prepare = (...args) => prepareExportImage(...args); this.__close = closeExportPreviewModal; this.__show = showExportPreviewModal; this.__image = () => lastExportedImage; this.__capture = exportVisualizationTarget; this.__drawComposition = drawExportComposition; this.__mockCapture = dataUrl => { waitForChartRenderSettle = () => Promise.resolve(); loadExportAssets = () => Promise.resolve({}); drawExportComposition = () => dataUrl; };`,
     context,
     { filename: 'src/dashboard-export.js' }
   );
@@ -124,6 +141,7 @@ function createDownloadRuntime({ showSaveFilePicker, decodeError, imageWidth = 1
     toast,
     elements,
     timers,
+    canvasCalls,
     context,
     prepare: context.__prepare,
     closePreview: context.__close,
@@ -142,6 +160,80 @@ function createDownloadRuntime({ showSaveFilePicker, decodeError, imageWidth = 1
     getFocus: () => focused
   };
 }
+
+describe('dashboard export composition', () => {
+  it('renders only the active context and expands the chart within the square canvas', () => {
+    const runtime = createDownloadRuntime();
+    const captured = { width: 900, height: 600 };
+    const target = {
+      kind: 'tab',
+      key: 'totalDistance',
+      title: 'Distance',
+      filters: [
+        { label: 'Sport', value: 'Run' },
+        { label: 'Aggregation', value: 'Yearly' },
+        { label: 'Year', value: '2026' }
+      ],
+      availableControls: [{
+        label: 'Views',
+        controls: [
+          { label: 'Distance option', selected: true },
+          { label: 'Weekly option', selected: false }
+        ]
+      }]
+    };
+
+    const result = runtime.context.__drawComposition(captured, target, {
+      logo: { naturalWidth: 120, naturalHeight: 60 },
+      qrCode: { naturalWidth: 120, naturalHeight: 120 }
+    });
+    const renderedText = runtime.canvasCalls.text.join(' ');
+    const chartDraw = runtime.canvasCalls.images.find(args => args[0] === captured);
+
+    expect(result).toBe(PNG_DATA_URL);
+    expect(runtime.canvasCalls.canvases[0]).toMatchObject({ width: 1080, height: 1080 });
+    expect(renderedText).toContain('Sport: Run');
+    expect(renderedText).toContain('Aggregation: Yearly');
+    expect(renderedText).toContain('Year: 2026');
+    expect(renderedText).not.toContain('Views');
+    expect(renderedText).not.toContain('Distance option');
+    expect(renderedText).not.toContain('Weekly option');
+    expect(chartDraw).toBeDefined();
+    expect(chartDraw[4]).toBeGreaterThan(500);
+    expect(chartDraw[2] + chartDraw[4]).toBeLessThanOrEqual(1080);
+  });
+
+  it('includes the active aggregation in the Distance export context', () => {
+    const runtime = createDownloadRuntime();
+    const context = runtime.context;
+    const originalGetElementById = context.document.getElementById;
+    const button = (textContent, selected) => ({
+      textContent,
+      disabled: false,
+      classList: { contains: name => selected && name === 'bg-indigo-600' },
+      getAttribute: () => null
+    });
+    const elements = {
+      totalDistanceChartWrapper: {},
+      sportBtnRun: button('Run', true),
+      aggBtnYearly: button('Yearly', true),
+      timeframe2026: button('2026', true)
+    };
+    context.window.exportUtils = require('../src/export-utils');
+    context.chartInstance = {};
+    context.document.getElementById = id => elements[id] || originalGetElementById(id);
+    context.document.querySelectorAll = selector => selector === '#timeframeSelector button'
+      ? [{ id: 'timeframe2026' }]
+      : [];
+    vm.runInContext('this.__distanceTarget = () => getTabExportTarget("totalDistance");', context);
+
+    expect(context.__distanceTarget().filters).toEqual([
+      { label: 'Sport', value: 'Run' },
+      { label: 'Aggregation', value: 'Yearly' },
+      { label: 'Timeframe', value: '2026' }
+    ]);
+  });
+});
 
 describe('dashboard export download destination', () => {
   it('uses the native save picker when the browser supports it', async () => {

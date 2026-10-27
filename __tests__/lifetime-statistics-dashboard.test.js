@@ -216,5 +216,6 @@ describe('lifetime statistics dashboard', () => {
     expect(elements.lifetimeStatisticsCaptureArea.innerHTML).not.toContain('Road bike');
     expect(elements.lifetimeStatisticsCaptureArea.innerHTML).not.toContain('Other bike');
     expect(elements.lifetimeStatisticsCaptureArea.innerHTML).not.toContain('Bike equipment');
+    expect(elements.lifetimeStatisticsCaptureArea.innerHTML).not.toContain('Counts are based on distinct gear labels');
   });
 });

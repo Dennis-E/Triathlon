@@ -149,13 +149,9 @@
         : countryNames.length > 0
           ? countryNames.join(', ')
           : 'No countries identified';
-    const coverageText = !countrySummary
+    const coverageText = !countrySummary || unavailable || countrySummary.status === 'partial'
       ? ''
-      : unavailable
-        ? ''
-        : countrySummary.status === 'partial'
-          ? `Based on ${formatNumber(countrySummary.trackedActivityCount, 0)} of ${formatNumber(countrySummary.totalActivityCount, 0)} activities`
-          : `All ${formatNumber(countrySummary.totalActivityCount, 0)} activities included`;
+      : `All ${formatNumber(countrySummary.totalActivityCount, 0)} activities included`;
     const cardClass = exportMode
       ? 'min-w-0 rounded-xl border border-slate-700 bg-slate-900 p-6'
       : 'min-w-0 rounded-xl border border-slate-800 bg-slate-950 p-4 sm:p-5';

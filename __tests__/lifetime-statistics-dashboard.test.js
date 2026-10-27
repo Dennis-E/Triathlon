@@ -119,7 +119,7 @@ describe('lifetime statistics dashboard', () => {
     expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain('Lifetime milestones');
   });
 
-  it('shows visited country names and neutral coverage context in the lifetime tile and export', () => {
+  it('shows visited country names without a partial coverage note in the lifetime tile and export', () => {
     const countrySummary = {
       status: 'partial',
       countryCount: 2,
@@ -139,8 +139,33 @@ describe('lifetime statistics dashboard', () => {
       expect(html).toContain('Countries visited');
       expect(html).toContain('France');
       expect(html).toContain('Germany');
-      expect(html).toContain('Based on 3 of 4 activities');
+      expect(html).toContain('>2</p>');
+      expect(html).not.toContain('Based on 3 of 4 activities');
       expect(html).not.toContain('GPS routes');
+    }
+  });
+
+  it('preserves the full coverage message in the lifetime tile and export', () => {
+    const countrySummary = {
+      status: 'complete',
+      countryCount: 2,
+      countryNames: ['France', 'Germany'],
+      trackedActivityCount: 4,
+      totalActivityCount: 4
+    };
+    const { context, elements } = createDashboardContext(
+      createLifetimeBaselineActivities(),
+      coreSummary,
+      countrySummary
+    );
+
+    context.window.lifetimeStatisticsDashboard.render();
+
+    for (const html of [elements.lifetimeStatisticsCaptureArea.innerHTML, elements.lifetimeStatisticsExportArea.innerHTML]) {
+      expect(html).toContain('All 4 activities included');
+      expect(html).toContain('France');
+      expect(html).toContain('Germany');
+      expect(html).toContain('>2</p>');
     }
   });
 

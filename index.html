@@ -46,6 +46,7 @@
   <!-- Workout Time chart helpers -->
   <script src="./src/workout-time-utils.js"></script>
   <script src="./src/equipment-utils.js"></script>
+  <script src="./src/tooltip-selection-utils.js"></script>
   <script src="./src/export-utils.js"></script>
   <!-- Bike power personal-best helpers -->
   <script src="./src/power-pb-utils.js"></script>
@@ -226,6 +227,12 @@
       cursor: pointer;
       box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35);
     }
+    .visualization-detail-tooltip { background: #0f172a; color: #e2e8f0; border: 1px solid #64748b; border-radius: 6px; padding: 12px; box-shadow: 0 8px 24px #0006; font-size: 12px; line-height: 1.5; overflow: auto; overflow-wrap: anywhere; pointer-events: auto; }
+    .visualization-detail-tooltip strong { display: block; padding-right: 44px; margin-bottom: 6px; }
+    .visualization-detail-status { color: #5eead4; font-weight: 600; margin-bottom: 4px; }
+    .visualization-detail-dismiss { position: absolute; right: 8px; top: 8px; padding: 4px; cursor: pointer; }
+    .visualization-detail-tooltip button:focus-visible, [data-tooltip-inspector]:focus-visible { outline: 2px solid #2dd4bf; outline-offset: 3px; }
+    .visualization-detail-body > div { margin-top: 3px; }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 h-full flex flex-col font-sans antialiased">
@@ -2172,6 +2179,7 @@
       });
 
       document.addEventListener('keydown', (event) => {
+        if (event.defaultPrevented) return;
         if (event.key === 'Escape') {
           if (privacyModal && !privacyModal.classList.contains('hidden')) {
             closePrivacyModal();
@@ -2309,6 +2317,7 @@
   <script src="./src/import-experience-catalog.js"></script>
   <script src="./src/country-count-utils.js"></script>
   <script src="./src/dashboard-state.js"></script>
+  <script src="./src/dashboard-tooltips.js"></script>
   <script src="./src/dashboard-core.js"></script>
   <script src="./src/dashboard-import.js"></script>
   <script src="./src/dashboard-equipment.js"></script>

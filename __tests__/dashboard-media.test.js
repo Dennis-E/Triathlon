@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const mediaUtils = require('../src/media-utils');
+const { extractMediaFromZip } = require('../src/zip-importer');
+const { createMediaZipFixture } = require('./fixtures/strava-media-export');
 
 const dashboardMediaSource = fs.readFileSync(path.join(__dirname, '../src/dashboard-media.js'), 'utf8');
 
@@ -54,6 +56,32 @@ function loadDashboardMedia() {
 }
 
 describe('dashboard media gallery', () => {
+  it('pins media without opening it and invalidates before filters or collage selection change', async () => {
+    const runtime = loadDashboardMedia();
+    const api = { registerAdapter: jest.fn(), readContext: jest.fn(), show: jest.fn(), invalidate: jest.fn(),
+      send: jest.fn(), getPinned: jest.fn(), refreshAnchor: jest.fn() };
+    runtime.window.dashboardTooltips = api;
+    const caption = '<unsafe> full caption';
+    const library = { assets: [{ key: 'photo.jpg', filename: 'photo.jpg', caption, mediaType: 'photo', status: 'readable', activityIds: ['run'] }],
+      activityOptions: [{ id: 'run', name: 'Morning Run', sport: 'Run', date: '2025-01-02' }], getObjectUrl: jest.fn() };
+    runtime.render(library);
+    expect(runtime.nodes.mediaGalleryGrid.innerHTML).toContain('data-media-pin-key="photo.jpg"');
+    const button = { dataset: { mediaPinKey: 'photo.jpg' }, getBoundingClientRect: () => ({ left: 30, top: 40, width: 20, height: 20 }) };
+    await runtime.nodes.mediaGalleryGrid.onclick({ target: { closest: selector => selector === '[data-media-pin-key]' ? button : null } });
+    expect(library.getObjectUrl).not.toHaveBeenCalled();
+    expect(api.show).toHaveBeenCalledWith('mediaGallery', expect.objectContaining({ selectionKey: 'mediaGallery:photo.jpg',
+      content: expect.objectContaining({ title: caption }), anchor: expect.objectContaining({ kind: 'media-item' }) }), true, button);
+    expect(JSON.stringify(api.show.mock.calls[0][1].content)).toContain('Morning Run');
+    api.invalidate.mockClear();
+    runtime.render(library);
+    expect(api.invalidate).not.toHaveBeenCalled();
+    runtime.nodes.mediaGalleryYearFilter.onchange();
+    expect(api.invalidate).toHaveBeenCalled();
+    api.invalidate.mockClear();
+    runtime.nodes.mediaGalleryGrid.onchange({ target: { closest: () => ({ dataset: { mediaSelectKey: 'photo.jpg' }, checked: true }) } });
+    expect(api.invalidate).toHaveBeenCalled();
+  });
+
   it('renders readable media and an explicit unassigned status', () => {
     const runtime = loadDashboardMedia();
 
@@ -219,6 +247,7 @@ describe('dashboard media gallery', () => {
 
     await runtime.nodes.mediaGalleryCreateCollage.onclick();
     expect(runtime.nodes.mediaGalleryExportArea.innerHTML).toContain('blob:local-photo');
+    expect(runtime.nodes.mediaGalleryExportArea.innerHTML).toContain('data-export-asset-key="run-photo.jpg"');
     expect(runtime.nodes.mediaGalleryExportArea.innerHTML).not.toContain('<svg');
     expect(runtime.window.exportVisualizationTab).toHaveBeenCalledWith('mediaGallery');
 
@@ -247,5 +276,161 @@ describe('dashboard media gallery', () => {
     expect(asset.status).toBe('corrupt');
     expect(library.hasReadableMedia).toBe(false);
     expect(runtime.nodes.mediaGalleryStatus.textContent).toMatch(/could not be read/i);
+  });
+
+  describe('request-owned export capture', () => {
+    let validUrls;
+    let createUrl;
+    let revokeUrl;
+
+    beforeEach(() => {
+      validUrls = new Set();
+      createUrl = jest.spyOn(URL, 'createObjectURL').mockImplementation(() => {
+        const url = `blob:capture-${createUrl.mock.calls.length}`;
+        validUrls.add(url);
+        return url;
+      });
+      revokeUrl = jest.spyOn(URL, 'revokeObjectURL').mockImplementation(url => validUrls.delete(url));
+    });
+
+    afterEach(() => jest.restoreAllMocks());
+
+    function target(images) {
+      return { querySelectorAll: selector => selector === 'img[data-export-asset-key]' ? images : [] };
+    }
+
+    function image(key, src) {
+      return { dataset: { exportAssetKey: key }, src, getAttribute(name) { return this[name]; } };
+    }
+
+    async function imported(count = 1) {
+      const filenames = Array.from({ length: count }, (_, index) => `photo-${index}.jpg`);
+      const fixture = createMediaZipFixture({
+        activityRows: [{ id: 'run', sport: 'Run', date: '2025-03-01', media: filenames.join(';') }],
+        mediaRows: filenames.map(filename => ({ filename, caption: `Original ${filename}` })),
+        mediaFiles: Object.fromEntries(filenames.map(filename => [`media/${filename}`, { content: filename }]))
+      });
+      return { fixture, library: await extractMediaFromZip(fixture.zip, fixture.activityCsv) };
+    }
+
+    it('synchronously retains only rendered A sources and prepares the existing clone after import B', async () => {
+      const runtime = loadDashboardMedia();
+      const { library, fixture } = await imported(2);
+      runtime.render(library);
+      await runtime.nodes.mediaGalleryCreateCollage.onclick();
+      const asset = library.assets[0];
+      const oldUrl = await library.getObjectUrl(asset);
+      const original = image(asset.key, oldUrl);
+      const thumbnail = image('rendered-video.mp4', 'data:image/jpeg;base64,ORIGINALFRAME');
+      const fallback = image('fallback-video.mp4', 'data:image/svg+xml,ORIGINALFALLBACK');
+      const cloneImages = [original, thumbnail, fallback].map(item => image(item.dataset.exportAssetKey, item.src));
+      const clonedTarget = target(cloneImages);
+      clonedTarget.context = { title: 'Original A', caption: 'Original photo-0.jpg' };
+      const acquire = jest.spyOn(library, 'acquireExportSources');
+      const capture = runtime.window.mediaGalleryDashboard.acquireExportCapture(target([original, thumbnail, fallback]));
+      expect(capture).not.toBeInstanceOf(Promise);
+      expect(acquire).toHaveBeenCalledTimes(1);
+      expect(Array.from(acquire.mock.calls[0][0])).toEqual([asset.key]);
+      let finishRead;
+      fixture.zip.files['media/photo-0.jpg'].async = jest.fn(() => new Promise(resolve => { finishRead = resolve; }));
+      const preparing = capture.prepare(clonedTarget);
+      library.release();
+      runtime.window.mediaGalleryDashboard.clear();
+      const { library: replacement } = await imported();
+      runtime.render(replacement);
+      const replacementUrl = await replacement.getObjectUrl(replacement.assets[0]);
+      original.src = replacementUrl;
+      thumbnail.src = 'data:image/jpeg;base64,NEWFRAME';
+      expect(validUrls.has(oldUrl)).toBe(false);
+      expect(library.assets.every(item => item.readContent === null)).toBe(true);
+      finishRead(new Uint8Array([65]));
+      await preparing;
+      expect(validUrls.has(cloneImages[0].src)).toBe(true);
+      expect(cloneImages[0].src).not.toBe(oldUrl);
+      expect(cloneImages[0].src).not.toBe(replacementUrl);
+      expect(cloneImages[1].src).toBe('data:image/jpeg;base64,ORIGINALFRAME');
+      expect(cloneImages[2].src).toBe('data:image/svg+xml,ORIGINALFALLBACK');
+      expect(clonedTarget.context).toEqual({ title: 'Original A', caption: 'Original photo-0.jpg' });
+      const ownedUrl = cloneImages[0].src;
+      capture.release();
+      capture.release();
+      expect(revokeUrl.mock.calls.filter(([url]) => url === ownedUrl)).toHaveLength(1);
+      expect(revokeUrl).not.toHaveBeenCalledWith(replacementUrl);
+      expect(validUrls.has(replacementUrl)).toBe(true);
+    });
+
+    it('can prepare after the live library and gallery have already been released', async () => {
+      const runtime = loadDashboardMedia();
+      const { library } = await imported();
+      runtime.render(library);
+      const asset = library.assets[0];
+      const oldUrl = await library.getObjectUrl(asset);
+      const capture = runtime.window.mediaGalleryDashboard.acquireExportCapture(target([image(asset.key, oldUrl)]));
+      library.release();
+      runtime.window.mediaGalleryDashboard.clear();
+      const clonedImage = image(asset.key, oldUrl);
+      await capture.prepare(target([clonedImage]));
+      expect(validUrls.has(oldUrl)).toBe(false);
+      expect(validUrls.has(clonedImage.src)).toBe(true);
+      capture.release();
+    });
+
+    it.each(['failure', 'cancel'])('cleans owned URLs exactly once on %s and leaves B untouched', async mode => {
+      const runtime = loadDashboardMedia();
+      const { library, fixture } = await imported(2);
+      runtime.render(library);
+      const originals = await Promise.all(library.assets.map(async asset => image(asset.key, await library.getObjectUrl(asset))));
+      const clonedImages = originals.map(item => image(item.dataset.exportAssetKey, item.src));
+      let finishRead;
+      let failRead;
+      fixture.zip.files['media/photo-1.jpg'].async = jest.fn(() => new Promise((resolve, reject) => {
+        finishRead = resolve;
+        failRead = reject;
+      }));
+      const capture = runtime.window.mediaGalleryDashboard.acquireExportCapture(target(originals));
+      const preparing = capture.prepare(target(clonedImages));
+      const rejected = expect(preparing).rejects.toThrow(mode === 'failure' ? /synthetic failure/i : /released/i);
+      await Promise.resolve();
+      const ownedUrl = createUrl.mock.results[createUrl.mock.results.length - 1].value;
+      expect(originals.map(item => item.src)).not.toContain(ownedUrl);
+      library.release();
+      const { library: replacement } = await imported();
+      runtime.render(replacement);
+      const replacementUrl = await replacement.getObjectUrl(replacement.assets[0]);
+      const callsBeforeCompletion = createUrl.mock.calls.length;
+      if (mode === 'cancel') {
+        capture.release();
+        finishRead(new Uint8Array([65]));
+      } else {
+        failRead(new Error('Synthetic failure'));
+      }
+      await rejected;
+      capture.release();
+      capture.release();
+      expect(createUrl).toHaveBeenCalledTimes(callsBeforeCompletion);
+      expect(revokeUrl.mock.calls.filter(([url]) => url === ownedUrl)).toHaveLength(1);
+      expect(revokeUrl).not.toHaveBeenCalledWith(replacementUrl);
+      expect(validUrls.has(replacementUrl)).toBe(true);
+      expect(clonedImages.map(item => item.src)).toEqual(originals.map(item => item.src));
+    });
+
+    it('preserves ready data thumbnails without acquiring or regenerating video sources', async () => {
+      const runtime = loadDashboardMedia();
+      const { library } = await imported();
+      runtime.render(library);
+      const acquire = jest.spyOn(library, 'acquireExportSources');
+      const thumbnail = image('video.mp4', 'data:image/jpeg;base64,READY');
+      const capture = runtime.window.mediaGalleryDashboard.acquireExportCapture(target([thumbnail]));
+      library.release();
+      runtime.window.mediaGalleryDashboard.clear();
+      const clonedImage = image('video.mp4', 'data:image/jpeg;base64,CHANGED');
+      await capture.prepare(target([clonedImage]));
+      expect(clonedImage.src).toBe('data:image/jpeg;base64,READY');
+      expect(acquire.mock.calls.flat(2)).not.toContain('video.mp4');
+      capture.release();
+      capture.release();
+      expect(createUrl).not.toHaveBeenCalled();
+      expect(revokeUrl).not.toHaveBeenCalled();
+    });
   });
 });

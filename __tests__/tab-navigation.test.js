@@ -17,6 +17,48 @@ const {
   handleVisualizationTabKeydown
 } = require('../src/tab-navigation');
 
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+describe('tooltip inspection navigation ownership', () => {
+  it('keeps the existing tab IDs and order identical to the shared tooltip registry', () => {
+    expect(require('../src/tooltip-selection-utils').TAB_IDS).toEqual(TAB_ORDER);
+    expect(Object.keys(TAB_BUTTON_IDS)).toEqual(TAB_ORDER);
+    expect(Object.keys(TAB_PANEL_IDS)).toEqual(TAB_ORDER);
+  });
+
+  it('does not consume arrows owned by a tooltip inspector', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../src/dashboard-tabs.js'), 'utf8');
+    const start = source.indexOf('function handleDashboardArrowKeydown(');
+    const end = source.indexOf('function invalidateDashboardFilterEvent(', start);
+    const target = {};
+    const ownsKeyboard = jest.fn(() => true);
+    const navigationContext = jest.fn();
+    const context = { window: { dashboardTooltips: { ownsKeyboard } }, getDashboardNavigationContext: navigationContext };
+    vm.runInNewContext(source.slice(start, end) + ';this.handle = handleDashboardArrowKeydown;', context);
+    const event = { key: 'ArrowRight', target, preventDefault: jest.fn() };
+    context.handle(event);
+    expect(ownsKeyboard).toHaveBeenCalledWith(target);
+    expect(navigationContext).not.toHaveBeenCalled();
+    expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it('clears detail before the tab dispatcher can change panels', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../src/dashboard-tabs.js'), 'utf8');
+    const start = source.indexOf('function setVisualizationTab(');
+    const end = source.indexOf('function handleVisualizationTabKeydown(', start);
+    const events = [];
+    const context = { availableVisualizationTabs: TAB_ORDER, window: {
+      dashboardTooltips: { invalidate: () => events.push('clear') },
+      dashboardTabNavigation: { setVisualizationTab: () => { events.push('dispatch'); return null; } }
+    } };
+    vm.runInNewContext(source.slice(start, end) + ';this.changeTab = setVisualizationTab;', context);
+    context.changeTab('heatmap');
+    expect(events).toEqual(['clear', 'dispatch']);
+  });
+});
+
 function createMockElement() {
   const attributes = {};
   const classes = new Set();

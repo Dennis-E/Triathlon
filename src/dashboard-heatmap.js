@@ -7,6 +7,18 @@
      let leafletLoadPromise = null;
     let heatmapViewportDataset = null;
     let heatmapInitialFitPending = false;
+    let heatmapDisplayedData = null;
+
+    function syncHeatmapDisplayedData(overrides = {}) {
+      const next = { dataset: importedDataset, tracks: gpsTracksByActivityId, summaries: heatmapActivitySummaryIndex, dataRevision: typeof dashboardDataRevision === 'number' ? dashboardDataRevision : 0, sport: selectedHeatmapSportFilter, palette: selectedHeatmapColorScheme, ...overrides };
+      if (heatmapDisplayedData && Object.keys(next).some(key => next[key] !== heatmapDisplayedData[key])) {
+        window.dashboardTooltips?.invalidate?.();
+        heatmapTooltipSegmentKey = null;
+        heatmapTooltipModel = null;
+        hideHeatmapActivityTooltip();
+      }
+      heatmapDisplayedData = next;
+    }
 
     function updateHeatmapTilePresentation() {
       const tileContainer = heatmapTileLayerInstance && heatmapTileLayerInstance.getContainer();
@@ -67,25 +79,136 @@
           this._canvas.style.position = 'absolute';
           map.getPanes().overlayPane.appendChild(this._canvas);
           map.on('moveend zoomend resize', this._reset, this);
-          map.on('movestart zoomstart', hideHeatmapActivityTooltip);
+          this._movementStart = () => {
+            this._pointerDragged = true;
+            this._mapMoving = true;
+            this._pointerReady = false;
+            if (this._hoverFrame) cancelAnimationFrame(this._hoverFrame);
+            this._hoverFrame = null;
+            hideHeatmapActivityTooltip();
+          };
+          map.on('movestart zoomstart', this._movementStart);
           this._mouseMoveHandler = event => {
             if (this._hoverFrame) cancelAnimationFrame(this._hoverFrame);
             this._hoverFrame = requestAnimationFrame(() => this._handlePointerMove(event));
           };
-          this._mouseLeaveHandler = hideHeatmapActivityTooltip;
+          this._mouseLeaveHandler = () => {
+            if (this._hoverFrame) cancelAnimationFrame(this._hoverFrame);
+            this._hoverFrame = null;
+            hideHeatmapActivityTooltip();
+          };
           map.getContainer().addEventListener('mousemove', this._mouseMoveHandler);
           map.getContainer().addEventListener('mouseleave', this._mouseLeaveHandler);
+          this._installInspector();
           this._reset();
         },
 
         onRemove: function (map) {
           L.DomUtil.remove(this._canvas);
           map.off('moveend zoomend resize', this._reset, this);
-          map.off('movestart zoomstart', hideHeatmapActivityTooltip);
+          map.off('movestart zoomstart', this._movementStart);
           map.getContainer().removeEventListener('mousemove', this._mouseMoveHandler);
           map.getContainer().removeEventListener('mouseleave', this._mouseLeaveHandler);
           if (this._hoverFrame) cancelAnimationFrame(this._hoverFrame);
+          this._disposeInspector?.();
           hideHeatmapActivityTooltip();
+          this._map = null;
+        },
+
+        _installInspector: function () {
+          const controller = window.dashboardTooltips;
+          if (!controller?.registerAdapter) return;
+          const container = this._map.getContainer();
+          container.tabIndex = 0;
+          const removers = [];
+          const listen = (name, handler) => {
+            container.addEventListener(name, handler);
+            removers.push(() => container.removeEventListener(name, handler));
+          };
+          const releaseKeyboard = () => {
+            this._inspectorOwnsFocus = false;
+            delete container.dataset.tooltipInspector;
+          };
+          const inspect = (hit, point, pinned = true) => {
+            if (hit) showHeatmapActivityTooltip(hit.segment, point, container.getBoundingClientRect(), pinned, container);
+          };
+          controller.registerAdapter('heatmap', {
+            readContext: () => controller.readContext('heatmap'),
+            resolveItem: event => this._hitForEvent(event),
+            projectAnchor: selection => this._projectInspectionAnchor(selection.anchor),
+            snapshotCapture: () => {
+              const canvas = document.createElement('canvas');
+              canvas.width = this._canvas.width;
+              canvas.height = this._canvas.height;
+              canvas.getContext('2d').drawImage(this._canvas, 0, 0);
+              return { canvas, sourceCanvas: this._canvas, selection: controller.getPinned('heatmap'), model: heatmapTooltipModel ? JSON.parse(JSON.stringify(heatmapTooltipModel)) : null, palette: this._colorScheme };
+            },
+            dispose: () => { removers.forEach(remove => remove()); releaseKeyboard(); }
+          });
+          this._disposeInspector = () => { removers.forEach(remove => remove()); releaseKeyboard(); };
+          listen('pointerdown', event => {
+            this._pointerStart = { x: event.clientX, y: event.clientY, id: event.pointerId };
+            this._pointerDragged = false;
+            this._pointerReady = false;
+          });
+          listen('pointermove', event => {
+            if (this._pointerStart && Math.hypot(event.clientX - this._pointerStart.x, event.clientY - this._pointerStart.y) > 5) this._pointerDragged = true;
+          });
+          listen('pointerup', event => {
+            const start = this._pointerStart;
+            this._pointerReady = !!start && start.id === event.pointerId && !this._pointerDragged && Math.hypot(event.clientX - start.x, event.clientY - start.y) <= 5;
+            this._pointerStart = null;
+          });
+          listen('pointercancel', () => { this._pointerStart = null; this._pointerReady = false; });
+          listen('click', event => {
+            if (!this._pointerReady) return;
+            this._pointerReady = false;
+            const resolved = this._hitForEvent(event);
+            if (resolved) inspect(resolved.hit, resolved.point);
+          });
+          listen('blur', releaseKeyboard);
+          listen('keydown', event => {
+            if (event.target !== container) return;
+            if (this._inspectorOwnsFocus && !controller.getPinned('heatmap')) releaseKeyboard();
+            if (!this._inspectorOwnsFocus && !['Enter', ' '].includes(event.key)) return;
+            if (event.key === 'Escape') {
+              event.preventDefault(); event.stopPropagation();
+              controller.dismiss();
+              releaseKeyboard();
+              return;
+            }
+            const direction = ['ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : ['ArrowRight', 'ArrowDown'].includes(event.key) ? 1 : 0;
+            if (!direction && !['Enter', ' '].includes(event.key)) return;
+            const entries = this._inspectionEntries || [];
+            if (!entries.length) return;
+            event.preventDefault(); event.stopPropagation();
+            this._inspectorOwnsFocus = true;
+            container.dataset.tooltipInspector = 'true';
+            this._inspectionIndex = this._inspectionIndex == null ? 0 : (this._inspectionIndex + direction + entries.length) % entries.length;
+            const entry = entries[this._inspectionIndex % entries.length];
+            if (direction && controller.getPinned('heatmap')?.anchor.itemId === String(entry.key)) return;
+            inspect(entry, [(entry.p1[0] + entry.p2[0]) / 2, (entry.p1[1] + entry.p2[1]) / 2]);
+          });
+        },
+
+        _projectInspectionAnchor: function (anchor) {
+          if (!this._map || !anchor.geoPoint) return anchor;
+          const point = this._map.latLngToContainerPoint(anchor.geoPoint);
+          const rect = this._map.getContainer().getBoundingClientRect();
+          const size = this._map.getSize();
+          return { ...anchor,
+            normalizedPoint: { x: (rect.left + point.x) / (window.innerWidth || 800), y: (rect.top + point.y) / (window.innerHeight || 600) },
+            capturePoint: { x: point.x / (size.x || 1), y: point.y / (size.y || 1) },
+            visibility: point.x >= 0 && point.y >= 0 && point.x <= size.x && point.y <= size.y ? 'visible' : 'outside-view'
+          };
+        },
+
+        _hitForEvent: function (event) {
+          if (!this._map || !this._screenSegmentIndex) return null;
+          const rect = this._map.getContainer().getBoundingClientRect();
+          const point = [event.clientX - rect.left, event.clientY - rect.top];
+          const hit = window.heatmapUtils.hitTestScreenSegmentIndex(this._screenSegmentIndex, point);
+          return hit ? { hit, point, rect } : null;
         },
 
         // Replace the segments this layer draws (called on every renderHeatmap(), e.g.
@@ -117,7 +240,9 @@
           this._canvas.width = size.x;
           this._canvas.height = size.y;
           this._origin = topLeft;
+          this._mapMoving = false;
           this._draw();
+          window.dashboardTooltips?.refreshAnchor?.();
         },
 
         _draw: function () {
@@ -126,6 +251,7 @@
           ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
           if (!this._segments.length) {
             this._screenSegmentIndex = window.heatmapUtils.buildScreenSegmentIndex([]);
+            this._inspectionEntries = [];
             return;
           }
 
@@ -216,19 +342,25 @@
           }
           ctx.globalAlpha = 1;
           this._screenSegmentIndex = window.heatmapUtils.buildScreenSegmentIndex(screenEntries);
+          const seen = new Set();
+          this._inspectionEntries = screenEntries.filter(entry => {
+            if (seen.has(entry.key)) return false;
+            const midpoint = entry.p1.map((value, index) => (value + entry.p2[index]) / 2);
+            if (!midpoint.every((value, index) => value >= 0 && value <= (index ? this._canvas.height : this._canvas.width))) return false;
+            seen.add(entry.key);
+            return true;
+          });
         },
 
         _handlePointerMove: function (event) {
           this._hoverFrame = null;
-          if (!this._map || !this._screenSegmentIndex) return;
-          const rect = this._map.getContainer().getBoundingClientRect();
-          const point = [event.clientX - rect.left, event.clientY - rect.top];
-          const hit = window.heatmapUtils.hitTestScreenSegmentIndex(this._screenSegmentIndex, point);
-          if (!hit) {
+          if (this._pointerStart || this._mapMoving) return;
+          const resolved = this._hitForEvent(event);
+          if (!resolved) {
             hideHeatmapActivityTooltip();
             return;
           }
-          showHeatmapActivityTooltip(hit.segment, point, rect);
+          showHeatmapActivityTooltip(resolved.hit.segment, resolved.point, resolved.rect);
         }
       });
 
@@ -254,6 +386,7 @@
           return null;
         },
         values => {
+          syncHeatmapDisplayedData({ sport: values.sport, palette: HEATMAP_COLOR_SCHEMES.includes(values.palette) ? values.palette : 'blue-red' });
           selectedHeatmapColorScheme = HEATMAP_COLOR_SCHEMES.includes(values.palette) ? values.palette : 'blue-red';
           const selector = document.getElementById('heatmapColorScheme');
           if (selector) selector.value = selectedHeatmapColorScheme;
@@ -263,6 +396,7 @@
     }
 
     function setHeatmapSportFilter(sport) {
+      syncHeatmapDisplayedData({ sport });
       hideHeatmapActivityTooltip();
       selectedHeatmapSportFilter = sport;
       setHeatmapSportBtnActive(`heatmapSportBtn${sport}`);
@@ -270,6 +404,7 @@
     }
 
     function setHeatmapColorScheme(scheme) {
+      syncHeatmapDisplayedData({ palette: HEATMAP_COLOR_SCHEMES.includes(scheme) ? scheme : 'blue-red' });
       selectedHeatmapColorScheme = HEATMAP_COLOR_SCHEMES.includes(scheme) ? scheme : 'blue-red';
       const selector = document.getElementById('heatmapColorScheme');
       if (selector) selector.value = selectedHeatmapColorScheme;
@@ -279,13 +414,15 @@
     function hideHeatmapActivityTooltip() {
       const tooltip = document.getElementById('heatmapActivityTooltip');
       if (tooltip) tooltip.classList.add('hidden');
-      heatmapTooltipSegmentKey = null;
-      heatmapTooltipModel = null;
+      const controller = window.dashboardTooltips;
+      if (!controller?.getState || controller.getState()?.context.tabId === 'heatmap') controller?.send?.({ type: 'leave' });
     }
 
-    function showHeatmapActivityTooltip(segment, point, mapRect) {
+    function showHeatmapActivityTooltip(segment, point, mapRect, pinned = false, target = null) {
       const tooltip = document.getElementById('heatmapActivityTooltip');
       if (!tooltip || !segment) return;
+      const controller = window.dashboardTooltips;
+      if (!pinned && controller?.getPinned?.('heatmap')) return;
       if (heatmapTooltipSegmentKey !== segment.key) {
         heatmapTooltipSegmentKey = segment.key;
         heatmapTooltipModel = window.heatmapUtils.buildActivityTooltipModel(
@@ -323,6 +460,25 @@
           row.append(title, details);
           rows.appendChild(row);
         }
+      }
+
+      if (controller?.show && heatmapMapInstance?.containerPointToLatLng) {
+        const model = heatmapTooltipModel;
+        const itemLabel = String(segment.key);
+        const geoPoint = heatmapMapInstance.containerPointToLatLng(point);
+        const anchor = routeCanvasLayerInstance._projectInspectionAnchor({ kind: 'map-location', itemId: itemLabel, geoPoint: { lat: geoPoint.lat, lng: geoPoint.lng }, associationLabel: itemLabel });
+        const showCount = Number.isFinite(model.totalCount) && model.totalCount > 10;
+        const title = showCount ? `# of tracks: ${model.totalCount}` : model.activities[0]?.name || itemLabel;
+        controller.show('heatmap', { selectionKey: `heatmap:${itemLabel}`, anchor, content: {
+          title, itemLabel,
+          sections: [
+            ...(showCount && model.sampled ? [{ heading: model.heading, rows: [] }] : []),
+            ...model.activities.map(activity => ({ heading: activity.name, rows: [{ label: '', value: `${activity.dateLabel} · ${activity.sport} · ${activity.distanceLabel} · ${activity.durationLabel}` }] }))
+          ],
+          footerLines: [], notes: model.availabilityNote ? [model.availabilityNote] : []
+        } }, pinned, target);
+        tooltip.classList.add('hidden');
+        return;
       }
 
       tooltip.classList.remove('hidden');
@@ -390,6 +546,7 @@
       const container = document.getElementById('heatmapMapContainer');
       const emptyState = document.getElementById('heatmapEmptyState');
       if (!container) return;
+      syncHeatmapDisplayedData();
       const revision = ++heatmapRenderRevision;
       const token = captureDashboardRenderToken('heatmap', selectedHeatmapSportFilter);
       const dataset = importedDataset;

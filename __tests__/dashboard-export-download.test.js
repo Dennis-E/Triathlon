@@ -553,7 +553,8 @@ describe('PNG preparation', () => {
     expect(runtime.pickerCalls).toHaveLength(0);
     runtime.mockCapture(PNG_DATA_URL);
     await runtime.capture(target);
-    expect(runtime.getImage().target).toBe(target);
+    expect(runtime.getImage().target).not.toBe(target);
+    expect(runtime.getImage().target).toMatchObject(target);
     expect(runtime.elements.exportPreviewModal.classList.contains('hidden')).toBe(false);
   });
 
@@ -612,6 +613,77 @@ describe('download attempt outcomes', () => {
 });
 
 describe('owned export surface lifecycle', () => {
+  it('accepts a loaded PNG when the browser decode promise does not settle', async () => {
+    const runtime = createDownloadRuntime();
+    runtime.context.Image = class {
+      constructor() { this.naturalWidth = 1080; this.naturalHeight = 1080; }
+      set src(value) { Promise.resolve().then(() => this.onload?.()); }
+      decode() { return new Promise(() => {}); }
+    };
+    const image = await runtime.prepare(PNG_DATA_URL, { key: 'totalDistance' });
+    expect(image.width).toBe(1080);
+    expect(image.blob.size).toBeGreaterThan(0);
+  });
+
+  it.each(require('../src/tooltip-selection-utils').TAB_IDS)('does not capture or fabricate an empty %s view', async key => {
+    const runtime = createDownloadRuntime();
+    runtime.context.html2canvas = jest.fn();
+    await runtime.capture({ key, hasData: false, targetElementId: 'missing' });
+    expect(runtime.context.html2canvas).not.toHaveBeenCalled();
+    expect(runtime.toast.textContent).toContain('Nothing to export');
+  });
+
+  it('scales private chart pixels to the physical canvas size at non-unit device pixel ratios', async () => {
+    const runtime = createDownloadRuntime();
+    runtime.mockCapture(PNG_DATA_URL);
+    const drawImage = jest.fn();
+    const source = { tagName: 'CANVAS', width: 970, height: 525, getContext: () => ({ drawImage }) };
+    const clean = { width: 776, height: 420 };
+    runtime.elements.captureTarget = source;
+    runtime.context.window.dashboardTooltips = { getPinned: () => null, adapters: new Map([['totalDistance', { snapshotCapture: () => ({ canvas: clean, sourceCanvas: source }) }]]) };
+    await runtime.capture({ key: 'totalDistance', hasData: true, targetElementId: 'captureTarget' });
+    expect(drawImage).toHaveBeenCalledWith(clean, 0, 0, 970, 525);
+  });
+
+  it('isolates source, pin and metadata before delayed assets and never restores stale live state', async () => {
+    const runtime = createDownloadRuntime();
+    runtime.mockCapture(PNG_DATA_URL);
+    const gate = deferredValue();
+    const copiedSource = { id: 'snapshot', style: {}, content: 'original pixels', querySelectorAll: () => [] };
+    const source = { id: 'captureTarget', content: 'original pixels', cloneNode: () => ({ ...copiedSource }), querySelectorAll: () => [], getBoundingClientRect: () => ({ width: 800, height: 400 }) };
+    runtime.elements.captureTarget = source;
+    let pin = { content: { title: 'Original selection' }, anchor: { visibility: 'visible' } };
+    runtime.context.window.dashboardTooltips = { getPinned: () => pin, adapters: new Map() };
+    runtime.context.assetGate = gate;
+    vm.runInContext('loadExportAssets = () => assetGate.promise; drawExportComposition = (canvas, target) => { this.capturedTarget = target; return "' + PNG_DATA_URL + '"; };', runtime.context);
+    const target = { key: 'totalDistance', hasData: true, targetElementId: 'captureTarget', filters: [{ label: 'Sport', value: 'Run' }] };
+    const pending = runtime.capture(target);
+    source.content = 'replacement pixels';
+    target.filters[0].value = 'Bike';
+    pin = { content: { title: 'New selection' } };
+    gate.resolve({});
+    await pending;
+    const capturedSource = runtime.context.html2canvas.mock.calls[0][0];
+    expect(capturedSource).not.toBe(source);
+    expect(capturedSource.content).toBe('original pixels');
+    expect(runtime.context.capturedTarget.filters[0].value).toBe('Run');
+    expect(runtime.context.capturedTarget.pinnedSelection.content.title).toBe('Original selection');
+    expect(pin.content.title).toBe('New selection');
+  });
+
+  it('releases its independent media source exactly once when capture fails', async () => {
+    const runtime = createDownloadRuntime();
+    runtime.mockCapture(PNG_DATA_URL);
+    const lease = { prepare: jest.fn().mockResolvedValue(), release: jest.fn() };
+    runtime.context.window.mediaGalleryDashboard = { acquireExportCapture: jest.fn(() => lease) };
+    runtime.context.html2canvas.mockRejectedValue(new Error('Capture failed'));
+    await runtime.capture({ key: 'mediaGallery', hasData: true, targetElementId: 'captureTarget' });
+    expect(runtime.context.window.mediaGalleryDashboard.acquireExportCapture).toHaveBeenCalledTimes(1);
+    expect(lease.prepare).toHaveBeenCalledTimes(1);
+    expect(lease.release).toHaveBeenCalledTimes(1);
+    expect(runtime.toast.textContent).toContain('Capture failed');
+  });
+
   it('uses a fresh image for each intentional export after native-picker fallback', async () => {
     const picker = jest.fn().mockRejectedValue(Object.assign(new Error('Restricted'), { name: 'SecurityError' }));
     const runtime = createDownloadRuntime({ showSaveFilePicker: picker });

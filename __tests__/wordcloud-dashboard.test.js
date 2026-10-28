@@ -9,6 +9,123 @@ const wordcloudDashboard = fs.readFileSync(path.join(ROOT, 'src', 'dashboard-wor
 const dashboardExport = fs.readFileSync(path.join(ROOT, 'src', 'dashboard-export.js'), 'utf8');
 
 describe('Wordcloud dashboard contract', () => {
+  it('pins real frequencies through cloud hits and independent ranked-list buttons', () => {
+    const nodes = new Map();
+    const makeNode = tag => ({ tag, value: '50', style: {}, children: [], listeners: {},
+      parentElement: { clientWidth: 640 }, classList: { contains: () => false, toggle() {} },
+      append(...children) { this.children.push(...children); }, appendChild(child) { this.children.push(child); },
+      replaceChildren() { this.children = []; }, setAttribute(name, value) { this[name] = value; },
+      getBoundingClientRect: () => ({ left: 40, top: 60, width: 640, height: 400 }),
+      addEventListener(type, handler) { this.listeners[type] = handler; }, removeEventListener() {} });
+    const api = { registerAdapter: jest.fn(), readContext: jest.fn(() => ({ tabId: 'wordcloud' })),
+      show: jest.fn(), send: jest.fn(), invalidate: jest.fn(), refreshAnchor: jest.fn(), getPinned: jest.fn() };
+    const WordCloud = jest.fn();
+    WordCloud.isSupported = true;
+    const context = vm.createContext({ window: { dashboardTooltips: api, wordcloudUtils: require('../src/wordcloud-utils'),
+      WordCloud, addEventListener() {}, innerWidth: 1000, innerHeight: 800 },
+      document: { createElement: makeNode, getElementById(id) { if (!nodes.has(id)) nodes.set(id, makeNode('div')); return nodes.get(id); } },
+      processedActivities: [{ name: 'Alpha Alpha Bravo' }], Map, Set });
+    vm.runInContext(wordcloudDashboard, context);
+    context.window.renderWordcloud();
+    expect(api.registerAdapter).toHaveBeenCalledWith('wordcloud', expect.objectContaining({ dispose: expect.any(Function) }));
+    const options = WordCloud.mock.calls[0][1];
+    options.click(['alpha', 0.2], { x: 10, y: 20, w: 30, h: 10 }, { clientX: 70, clientY: 90 });
+    expect(api.show).toHaveBeenLastCalledWith('wordcloud', expect.objectContaining({ selectionKey: 'wordcloud:alpha',
+      content: expect.objectContaining({ sections: [{ heading: '', rows: [{ label: 'Occurrences', value: '2' }] }] }) }), true, expect.anything());
+    const adapter = api.registerAdapter.mock.calls[0][1];
+    const selected = api.show.mock.calls.at(-1)[1];
+    expect(adapter.projectAnchor(selected).normalizedPoint).toEqual(selected.anchor.normalizedPoint);
+    options.hover(null);
+    expect(api.send).toHaveBeenCalledWith({ type: 'leave' });
+    const row = nodes.get('wordcloudWordList').children[0];
+    const pin = row.children.find(child => child.tag === 'button');
+    expect(pin['aria-label']).toBe('Pin details for alpha');
+    pin.listeners.click();
+    expect(api.show.mock.calls.at(-1)[2]).toBe(true);
+    api.invalidate.mockClear();
+    context.window.renderWordcloud();
+    expect(api.invalidate).not.toHaveBeenCalled();
+    row.children[0].children[0].listeners.change();
+    expect(api.invalidate).toHaveBeenCalled();
+    adapter.dispose();
+    api.show.mockClear();
+    options.click(['alpha', 0.1]);
+    pin.listeners.click();
+    expect(api.show).not.toHaveBeenCalled();
+  });
+
+  it('provides keyboard SVG record targets and date-key calendar activation', () => {
+    const calendar = fs.readFileSync(path.join(ROOT, 'src/dashboard-training-calendar.js'), 'utf8');
+    const power = fs.readFileSync(path.join(ROOT, 'src/dashboard-power-pb.js'), 'utf8');
+    expect(calendar).toContain('pinTrainingCalendarDayByKey');
+    expect(calendar).toContain("kind: 'calendar-day'");
+    expect(power).toContain("kind: 'svg-item'");
+    expect(power).toContain("'keydown'");
+    expect(power).toContain("'data-tooltip-inspector'");
+  });
+
+  it('pins full SVG record details from keyboard and keeps overview/detail identities aligned', () => {
+    const nodes = new Map();
+    const createNode = tag => ({ tag, style: {}, attributes: {}, listeners: {}, children: [],
+      classList: { add: jest.fn(), remove() {} }, setAttribute(name, value) { this.attributes[name] = value; },
+      appendChild(child) { this.children.push(child); return child; },
+      addEventListener(type, handler) { (this.listeners[type] ||= []).push(handler); }, removeEventListener() {},
+      getBoundingClientRect: () => ({ left: 40, top: 60, width: 20, height: 20 }) });
+    const api = { registerAdapter: jest.fn(), readContext: jest.fn(), show: jest.fn(), send: jest.fn(), refreshAnchor: jest.fn(), getPinned: jest.fn() };
+    const context = vm.createContext({ window: { dashboardTooltips: api, powerPbUtils: require('../src/power-pb-utils') },
+      document: { createElementNS: (namespace, tag) => createNode(tag), getElementById(id) { if (!nodes.has(id)) nodes.set(id, createNode('div')); return nodes.get(id); } },
+      formatPerformanceValue: () => '4:00 /km', Date });
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'src/dashboard-power-pb.js'), 'utf8'), context);
+    const record = { name: '<full untruncated activity title with many words>', date: new Date('2025-01-02'),
+      distance: 5, duration: 1200, metricValue: 4, metricType: 'pace_run', sourceDistance: 12, isInterimEstimated: true, effortSource: 'modeled' };
+    const overview = createNode('line');
+    context.registerPbTooltipAdapter();
+    context.bindPbTooltipTarget(overview, record, { scope: 'Run-5km', rank: 2, total: 3 });
+    overview.listeners.click[0]({});
+    const overviewKey = api.show.mock.calls.at(-1)[1].selectionKey;
+    context.renderPbDetailChart({ exportKey: 'Run-5km', color: '#ffffff', axisLabel: 'Time', direction: 'down',
+      formatValue: context.formatDurationHms, records: [{ date: record.date, value: record.duration, title: record.name, record }] });
+    const target = nodes.get('pbDetailChart').children.find(node => node.tag === 'rect');
+    const preventDefault = jest.fn();
+    target.listeners.keydown[0]({ key: 'Enter', preventDefault });
+    expect(preventDefault).toHaveBeenCalled();
+    const selected = api.show.mock.calls.at(-1)[1];
+    expect(selected.selectionKey).toBe(overviewKey);
+    expect(selected.content.title).toBe(record.name);
+    expect(selected.content.notes).toContain('Estimated from 12.00 km activity');
+    expect(selected.content.sections[0].rows).toContainEqual({ label: 'Pace', value: '4:00 /km' });
+    expect(selected.anchor.normalizedPoint.x).toBeGreaterThan(0);
+    target.listeners.blur[0]();
+    expect(api.send).toHaveBeenLastCalledWith({ type: 'leave' });
+  });
+
+  it('pins every calendar activity and keeps native focus, leave and palette changes non-destructive', () => {
+    const api = { show: jest.fn(), send: jest.fn(), invalidate: jest.fn(), getPinned: jest.fn(() => ({})) };
+    const tooltip = { classList: { add: jest.fn() }, setAttribute() {} };
+    const context = vm.createContext({ window: { dashboardTooltips: api, trainingCalendarUtils: require('../src/training-calendar-utils') },
+      document: { getElementById: () => tooltip, querySelectorAll: () => [] }, Date });
+    const calendar = fs.readFileSync(path.join(ROOT, 'src/dashboard-training-calendar.js'), 'utf8');
+    vm.runInContext(calendar, context);
+    const day = { date: new Date('2025-01-02'), dateKey: '2025-01-02', activityCount: 20, intensityLevel: 3,
+      tooltipActivities: Array.from({ length: 20 }, (_, index) => ({ name: `Full activity ${index}`, sport: 'Run', durationSeconds: 600, distanceKm: 2 })) };
+    context.day = day;
+    vm.runInContext('trainingCalendarModel = { years: [{ days: [day] }] };', context);
+    const target = { getBoundingClientRect: () => ({ left: 20, top: 30, width: 14, height: 14 }) };
+    expect(context.createTrainingCalendarCell(day, 'green')).toContain('onclick="pinTrainingCalendarDayByKey');
+    context.pinTrainingCalendarDayByKey(day.dateKey, target);
+    expect(api.show.mock.calls[0][1].content.sections).toHaveLength(20);
+    expect(api.show.mock.calls[0][1].selectionKey).toBe('trainingCalendar:2025-01-02');
+    expect(api.show.mock.calls[0][2]).toBe(true);
+    context.showTrainingCalendarTooltip(day, target);
+    context.closeTrainingCalendarTooltip();
+    expect(api.send).toHaveBeenLastCalledWith({ type: 'leave' });
+    vm.runInContext('renderTrainingCalendar = () => {};', context);
+    context.setTrainingCalendarPalette('blue');
+    expect(api.invalidate).not.toHaveBeenCalled();
+    context.setTrainingCalendarSportFilter('Run');
+    expect(api.invalidate).toHaveBeenCalledTimes(1);
+  });
+
   it('traverses real word checkboxes and rejects stale async completion', async () => {
     const elements = new Map();
     let revision = 0;
@@ -95,8 +212,9 @@ describe('Wordcloud dashboard contract', () => {
     expect(html).toMatch(/id="wordcloudCanvas"/);
     expect(dashboardExport.includes("wordcloud: 'wordcloudCanvas'")).toBe(true);
     expect(dashboardExport.includes('wordcloud: !!(window.wordcloudDashboard && window.wordcloudDashboard.canRequestExport())')).toBe(true);
-    expect(dashboardExport.includes('await window.wordcloudDashboard.waitForCurrentRender()')).toBe(true);
-    expect(dashboardExport.includes("target.key === 'wordcloud' && !window.wordcloudDashboard.hasExportableCloud()")).toBe(true);
+    expect(dashboardExport.includes('await window.wordcloudDashboard.waitForCurrentRender()')).toBe(false);
+    expect(dashboardExport.includes('if (!window.wordcloudDashboard.hasExportableCloud())')).toBe(true);
+    expect(dashboardExport.includes('snapshot = createExportCaptureSnapshot(targetEl, tabId)')).toBe(true);
     expect(wordcloudDashboard.includes('hasExportableCloud')).toBe(true);
     expect(wordcloudDashboard.includes('waitForCurrentRender')).toBe(true);
   });

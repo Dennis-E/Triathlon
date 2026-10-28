@@ -17,6 +17,7 @@ werden, sonst schlagen `ReferenceError`s zur Laufzeit fehl.
 <script src="./src/lifetime-statistics-utils.js"></script>
 <script src="./src/workout-time-utils.js"></script>
 <script src="./src/equipment-utils.js"></script>
+<script src="./src/tooltip-selection-utils.js"></script>
 <script src="./src/export-utils.js"></script>
 <script src="./src/power-pb-utils.js"></script>
 <script src="./src/media-utils.js"></script>
@@ -28,6 +29,7 @@ werden, sonst schlagen `ReferenceError`s zur Laufzeit fehl.
 
 <!-- NEU: Dashboard-Orchestrierung, in dieser exakten Reihenfolge -->
 <script src="./src/dashboard-state.js"></script>
+<script src="./src/dashboard-tooltips.js"></script>
 <script src="./src/dashboard-core.js"></script>
 <script src="./src/dashboard-import.js"></script>
 <script src="./src/dashboard-equipment.js"></script>
@@ -54,7 +56,9 @@ werden, sonst schlagen `ReferenceError`s zur Laufzeit fehl.
 1. **`dashboard-state.js`** darf keine Funktionen aus anderen `dashboard-*.js`-Dateien aufrufen
    (nur Variablendeklarationen, keine Logik) — es ist die einzige Datei ohne eingehende
    Abhängigkeit auf andere neue Dateien.
-2. **`dashboard-core.js`** darf nur auf `dashboard-state.js` und die bereits bestehenden
+2. **`dashboard-tooltips.js`** registriert die gemeinsame Tooltip-Steuerung nach State und vor
+   den Renderern; Renderer werden erst bei ihrer Initialisierung registriert.
+   **`dashboard-core.js`** darf auf diese Steuerung, `dashboard-state.js` und die bereits bestehenden
    `src/*.js`-Utility-Module zugreifen.
 3. Jede Chart-Domänen-Datei (`dashboard-equipment.js`, `dashboard-distributions.js`,
    `dashboard-scatter.js`, `dashboard-heatmap.js`, `dashboard-power-pb.js`) darf auf

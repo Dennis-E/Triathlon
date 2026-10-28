@@ -92,7 +92,8 @@ function computeExportContentLayout({
   topGap = 15,
   bottomMargin = 24,
   contextGap = 12,
-  contextHeight = 0
+  contextHeight = 0,
+  annotationHeight = 0
 } = {}) {
   const width = Math.max(0, canvasWidth - marginX * 2);
   const contextY = headerHeight + topGap;
@@ -103,16 +104,118 @@ function computeExportContentLayout({
   const visualizationY = context
     ? context.y + context.height + contextGap
     : contextY;
+  const availableHeight = Math.max(0, canvasHeight - bottomMargin - visualizationY);
+  const safeAnnotationHeight = Math.max(0, annotationHeight);
+  if (safeAnnotationHeight > availableHeight) {
+    throw new RangeError('Export annotation cannot fit below the visualization and context');
+  }
 
-  return {
+  const layout = {
     context,
     visualization: {
       x: marginX,
       y: visualizationY,
       width,
-      height: Math.max(0, canvasHeight - bottomMargin - visualizationY)
+      height: availableHeight - safeAnnotationHeight
     }
   };
+  if (safeAnnotationHeight > 0) {
+    layout.annotation = {
+      x: marginX,
+      y: visualizationY + layout.visualization.height,
+      width,
+      height: safeAnnotationHeight
+    };
+  }
+  return layout;
+}
+
+function computeTooltipAnnotationLayout({
+  content,
+  maxWidth,
+  maxHeight,
+  measureText,
+  fontSize = 18,
+  lineHeight = 24,
+  padding = 12,
+  associationNote
+}) {
+  const safeFontSize = Math.max(18, fontSize);
+  const safeLineHeight = Math.max(safeFontSize, lineHeight);
+  const safePadding = Math.max(0, padding);
+  const availableWidth = maxWidth - safePadding * 2;
+  const text = value => String(value ?? '').trim();
+  const title = text(content.title) || text(content.itemLabel) || 'Selected item';
+  const itemLabel = text(content.itemLabel);
+  const association = text(associationNote);
+  const headline = [title, ...(association ? [association] : [])];
+  const full = [
+    title,
+    ...(itemLabel && itemLabel !== title ? [itemLabel] : []),
+    ...(content.sections || []).flatMap(section => [
+      text(section.heading),
+      ...(section.rows || []).map(row => {
+        const label = text(row.label);
+        const value = [text(row.value), text(row.unit)].filter(Boolean).join(' ');
+        return [label, value].filter(Boolean).join(': ');
+      })
+    ]),
+    ...(content.footerLines || []).map(text),
+    ...(content.notes || []).map(text),
+    ...(association ? [association] : [])
+  ].filter(Boolean);
+  const widthOf = value => {
+    const measured = measureText(value, safeFontSize);
+    const width = typeof measured === 'number' ? measured : measured.width;
+    if (!Number.isFinite(width) || width < 0) {
+      throw new TypeError('Tooltip annotation measureText must return a finite nonnegative width');
+    }
+    return width;
+  };
+  const wrap = entries => {
+    const lines = [];
+    for (const entry of entries) {
+      for (const paragraph of entry.split(/\r\n|\r|\n/)) {
+        let line = '';
+        for (const word of paragraph.trim().split(/\s+/).filter(Boolean)) {
+          const candidate = line ? `${line} ${word}` : word;
+          if (widthOf(candidate) <= availableWidth) {
+            line = candidate;
+            continue;
+          }
+          if (line) lines.push(line);
+          line = '';
+          for (const character of Array.from(word)) {
+            if (widthOf(character) > availableWidth) return null;
+            if (line && widthOf(line + character) > availableWidth) {
+              lines.push(line);
+              line = character;
+            } else {
+              line += character;
+            }
+          }
+        }
+        lines.push(line);
+        if (lines.length * safeLineHeight + safePadding * 2 > maxHeight) return null;
+      }
+    }
+    return lines;
+  };
+  for (const [mode, entries] of [['full', full], ['headline', headline]]) {
+    const lines = wrap(entries);
+    if (lines && availableWidth >= 0) {
+      return {
+        mode,
+        lines,
+        width: Math.max(...lines.map(widthOf)) + safePadding * 2,
+        height: lines.length * safeLineHeight + safePadding * 2,
+        fontSize: safeFontSize,
+        lineHeight: safeLineHeight,
+        padding: safePadding
+      };
+    }
+  }
+  throw new RangeError('Tooltip annotation cannot fit the complete headline and required association');
 }
 
 // "Contain"/letterbox fit: scales the source to fully fit inside a
@@ -260,6 +363,14 @@ function getExportTargetSlug(targetOrTabName) {
   return TAB_FILENAME_SLUGS[key] || null;
 }
 
+function copyExportMetadata(value) {
+  if (Array.isArray(value)) return value.map(copyExportMetadata);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, copyExportMetadata(entry)]));
+  }
+  return value;
+}
+
 function createExportTarget(input) {
   if (!input || (input.kind !== 'tab' && input.kind !== 'pb-tile')) {
     throw new Error('Unsupported export target');
@@ -282,7 +393,7 @@ function createExportTarget(input) {
     hasData: input.hasData,
     filters: summarizeFilters(input.filters),
     availableControls: summarizeAvailableControls(input.availableControls),
-    legend: input.legend || null,
+    legend: input.legend ? copyExportMetadata(input.legend) : null,
     metricLabel: input.metricLabel ? String(input.metricLabel) : null,
     detailKey: input.detailKey ? String(input.detailKey) : null,
     contentFit: input.contentFit || (input.kind === 'pb-tile' ? 'pb-tight' : 'standard')
@@ -341,6 +452,7 @@ if (typeof module !== 'undefined' && module.exports) {
     computeSquareFit,
     computeContainFit,
     computeExportContentLayout,
+    computeTooltipAnnotationLayout,
     computeExportMetadataLayout,
     computeFilterRowLayout,
     getTabDisplayTitle,
@@ -364,6 +476,7 @@ if (typeof window !== 'undefined') {
     computeSquareFit,
     computeContainFit,
     computeExportContentLayout,
+    computeTooltipAnnotationLayout,
     computeExportMetadataLayout,
     computeFilterRowLayout,
     getTabDisplayTitle,

@@ -129,6 +129,10 @@ function getScatterDateBounds() {
 function setScatterDateRange(boundary, value) {
   const parsed = Number.parseInt(value, 10);
   if (Number.isNaN(parsed)) return;
+  const next = boundary === 'start'
+    ? Math.max(0, Math.min(parsed, scatterDateRange.end))
+    : Math.min(scatterDateCandidates.length - 1, Math.max(parsed, scatterDateRange.start));
+  if (next !== scatterDateRange[boundary === 'start' ? 'start' : 'end']) window.dashboardTooltips?.invalidate();
   if (boundary === 'start') {
     scatterDateRange.start = Math.max(0, Math.min(parsed, scatterDateRange.end));
   } else {
@@ -142,12 +146,14 @@ function setScatterDateRange(boundary, value) {
 }
 
 function setPaceMetricsSport(sport) {
+  if (sport !== selectedPaceMetricsSport) window.dashboardTooltips?.invalidate();
   selectedPaceMetricsSport = sport;
   renderPaceMetricsControlButtons();
   renderPaceMetricsChart();
 }
 
 function setPaceMetric(metric) {
+  if (metric !== selectedPaceMetric) window.dashboardTooltips?.invalidate();
   selectedPaceMetric = metric;
   renderPaceMetricsControlButtons();
   renderPaceMetricsChart();
@@ -159,6 +165,7 @@ function synchronizePaceMetricsYears(points) {
 }
 
 function setPaceMetricsYearEnabled(year, enabled) {
+  if (disabledPaceMetricsYears.has(year) === enabled) window.dashboardTooltips?.invalidate();
   if (enabled) disabledPaceMetricsYears.delete(year);
   else disabledPaceMetricsYears.add(year);
   const checkbox = paceMetricsYearCheckboxes.get(year);
@@ -171,6 +178,7 @@ function handlePaceMetricsYearClick(year, checked, shiftKey) {
   const years = hasVisibleAnchor
     ? visiblePaceMetricsYears.filter(value => value >= Math.min(year, paceMetricsYearAnchor) && value <= Math.max(year, paceMetricsYearAnchor))
     : [year];
+  if (years.some(value => disabledPaceMetricsYears.has(value) === checked)) window.dashboardTooltips?.invalidate();
   years.forEach(value => {
     if (checked) disabledPaceMetricsYears.delete(value);
     else disabledPaceMetricsYears.add(value);
@@ -181,6 +189,7 @@ function handlePaceMetricsYearClick(year, checked, shiftKey) {
 }
 
 function setPaceMetricsTrendLinesVisible(visible) {
+  if (visible !== paceMetricsShowTrendLines) window.dashboardTooltips?.invalidate();
   paceMetricsShowTrendLines = visible;
   updatePaceMetricsChartVisibility();
 }
@@ -271,6 +280,10 @@ function getPaceMetricsKeyboardAdapter() {
       return null;
     },
     values => {
+      if (values.sport !== selectedPaceMetricsSport || values.metric !== selectedPaceMetric ||
+          values.start !== scatterDateRange.start || values.end !== scatterDateRange.end ||
+          (typeof values.trendline === 'boolean' && values.trendline !== paceMetricsShowTrendLines) ||
+          Object.entries(values).some(([id, enabled]) => id.startsWith('year:') && disabledPaceMetricsYears.has(Number(id.slice(5))) === enabled)) window.dashboardTooltips?.invalidate();
       selectedPaceMetricsSport = values.sport;
       selectedPaceMetric = values.metric;
       scatterDateRange = { start: values.start, end: values.end };
@@ -374,4 +387,5 @@ function renderPaceMetricsChart() {
     }
   });
   updatePaceMetricsChartVisibility();
+  window.dashboardTooltips?.attachChart('paceMetrics', paceMetricsChartInstance);
 }

@@ -1,12 +1,13 @@
 <!--
 Sync Impact Report
-- Version change: 1.0.1 → 1.1.0
-- Modified principles: III. Narrowest-Scope Test-First Verification — newly introduced visualization tabs must provide Share/Export using the established local preview/download flow unless a feature specification documents a justified exception; capture target, data availability, wiring and tests are part of the tab change.
+- Version change: 1.1.0 -> 1.1.1
+- Modified principles: III. Narrowest-Scope Test-First Verification - clarify that every tab change requires consistency verification and relevant tests, while constants, IDs, markup and dispatch require coordinated edits only when their contract changes. Behavior-only changes do not require artificial ID renaming.
 - Historical clarification retained: II. Dual-Target Reusable Modules — scope the CommonJS + `window.*` bridge to reusable utilities and exempt DOM-orchestration scripts.
 - Added sections: none
 - Removed sections: none
-- Templates requiring follow-up: none found referencing outdated principle text
-- Follow-up TODOs: TODO(RATIFICATION_DATE) — still unset, unchanged from prior version
+- Deferred synchronization: AGENTS.md still contains the previous unconditional tab-update wording and must be aligned in a separate documentation change; this constitution takes precedence until then.
+- Deferred feature remediation: update feature 073's dependency graph and specify independently owned export media resources and their revocation-race tests in its design/task artifacts. No feature artifacts were changed by this constitution workflow.
+- Follow-up TODOs: TODO(RATIFICATION_DATE) - still unset, unchanged from prior version
 -->
 
 # TriAnalytica Constitution
@@ -41,9 +42,14 @@ non-modular global scripts, provided they contain no independently reusable busi
 Every change to reusable modules or dashboard behavior MUST be validated by running the
 narrowest relevant test command before considering the work done: root tests via
 `npm test` (Jest, `node` environment, not `jsdom`), and API tests from `services/api`
-via `npm test` when `services/api` code changes. Changing a dashboard tab MUST update,
-in the same change, the tab constants/IDs in `src/tab-navigation.js`, the matching
-markup and inline dispatch logic in `index.html`, and the related tab-navigation tests.
+via `npm test` when `services/api` code changes. Every dashboard tab change MUST verify
+consistency between the tab constants/IDs in `src/tab-navigation.js`, the matching
+markup and dispatch logic owned by `index.html`, and the related tab-navigation tests.
+When a tab is added, removed, renamed, reordered, or its ID/navigation contract changes,
+the affected constants/IDs, markup, dispatch logic and tests MUST be updated together
+in the same change. Behavior-only changes MUST preserve existing tab IDs and ordering
+unless the feature explicitly requires a navigation-contract change; unchanged wiring
+MUST be verified and relevant behavior tests added or updated, not artificially renamed.
 Rationale: the absence of a jsdom environment and the split test suites make it easy to
 silently break the other surface; explicit, scoped verification is the only guard.
 
@@ -110,4 +116,4 @@ clarifications and wording fixes. Reviewers MUST treat a pull request that viola
 Core Principle as blocking unless the constitution is amended first; complexity or
 deviation MUST be justified in the PR description.
 
-**Version**: 1.1.0 | **Ratified**: TODO(RATIFICATION_DATE): original adoption date not recorded | **Last Amended**: 2026-10-05
+**Version**: 1.1.1 | **Ratified**: TODO(RATIFICATION_DATE): original adoption date not recorded | **Last Amended**: 2026-10-28

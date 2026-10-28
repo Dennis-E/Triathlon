@@ -1,6 +1,49 @@
 let selectedTrainingCalendarSport = 'All';
 let selectedTrainingCalendarPalette = 'green';
 let trainingCalendarModel = null;
+let trainingCalendarTooltipAdapter = null;
+let trainingCalendarActivitySource = null;
+
+function trainingCalendarAnchor(dateKey, target) {
+  const rect = target?.getBoundingClientRect?.();
+  return { kind: 'calendar-day', itemId: dateKey, normalizedPoint: {
+    x: Number.isFinite(rect?.left) ? (rect.left + (rect.width || 0) / 2) / (window.innerWidth || 800) : 0.5,
+    y: Number.isFinite(rect?.top) ? (rect.top + (rect.height || 0) / 2) / (window.innerHeight || 600) : 0.5
+  }, visibility: 'visible', associationLabel: dateKey };
+}
+
+function registerTrainingCalendarTooltipAdapter() {
+  const api = window.dashboardTooltips;
+  if (!api?.registerAdapter || trainingCalendarTooltipAdapter) return;
+  const adapter = {
+    readContext: () => api.readContext('trainingCalendar'),
+    projectAnchor: selection => {
+      const target = Array.from(document.querySelectorAll?.('[data-date-key]') || []).find(button => button.dataset.dateKey === selection.anchor.itemId);
+      return target ? trainingCalendarAnchor(selection.anchor.itemId, target) : selection.anchor;
+    },
+    dispose() { closeTrainingCalendarTooltip(); trainingCalendarTooltipAdapter = null; }
+  };
+  api.registerAdapter('trainingCalendar', adapter);
+  trainingCalendarTooltipAdapter = adapter;
+}
+
+function pinTrainingCalendarDayByKey(dateKey, target) {
+  const day = selectTrainingCalendarDayByKey(dateKey);
+  const api = window.dashboardTooltips;
+  if (!day || !api?.show) return;
+  closeTrainingCalendarTooltip();
+  const title = formatTrainingCalendarDay(day);
+  api.show('trainingCalendar', { selectionKey: `trainingCalendar:${dateKey}`,
+    content: { title, itemLabel: title, sections: day.tooltipActivities.map(activity => ({
+      heading: activity.name, rows: [
+        { label: 'Sport', value: activity.sport },
+        { label: 'Duration', value: Number.isFinite(activity.durationSeconds) ? formatTrainingCalendarDuration(activity.durationSeconds) : 'Not available' },
+        { label: 'Distance', value: Number.isFinite(activity.distanceKm) ? `${activity.distanceKm.toFixed(2)} km` : 'Not available' }
+      ]
+    })), footerLines: [], notes: day.activityCount ? [] : ['No activity'] },
+    anchor: trainingCalendarAnchor(dateKey, target)
+  }, true, target);
+}
 
 function getTrainingCalendarKeyboardAdapter() {
   return window.dashboardTabNavigation.createDashboardFilterAdapter(
@@ -9,6 +52,7 @@ function getTrainingCalendarKeyboardAdapter() {
     (prefix, snapshot) => prefix.length === 0 ? { id: 'palette', values: ['green', 'blue', 'fire'] }
       : prefix.length === 1 ? { id: 'sport', values: snapshot.sports } : null,
     values => {
+      if (selectedTrainingCalendarSport !== values.sport) window.dashboardTooltips?.invalidate?.();
       selectedTrainingCalendarPalette = values.palette;
       selectedTrainingCalendarSport = values.sport;
       setTrainingCalendarPaletteButtonActive(values.palette);
@@ -72,6 +116,7 @@ function escapeTrainingCalendarText(value) {
 }
 
 function closeTrainingCalendarTooltip() {
+  window.dashboardTooltips?.send?.({ type: 'leave' });
   const tooltip = document.getElementById('trainingCalendarDayTooltip');
   if (!tooltip) return;
   tooltip.classList.add('hidden');
@@ -79,6 +124,7 @@ function closeTrainingCalendarTooltip() {
 }
 
 function showTrainingCalendarTooltip(day, anchor) {
+  if (window.dashboardTooltips?.getPinned?.('trainingCalendar')) { closeTrainingCalendarTooltip(); return; }
   const tooltip = document.getElementById('trainingCalendarDayTooltip');
   const panel = document.getElementById('vizPanelTrainingCalendar');
   if (!tooltip || !panel || !day || !anchor) return;
@@ -108,7 +154,7 @@ function createTrainingCalendarCell(day, palette) {
   const color = day.intensityLevel === 0
     ? window.trainingCalendarUtils.EMPTY_DAY_COLOR
     : window.trainingCalendarUtils.PALETTES[palette][day.intensityLevel - 1];
-  return `<button type="button" class="h-3.5 w-3.5 rounded-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" style="background-color:${color}" aria-label="${label}" data-date-key="${day.dateKey}" onmouseenter="showTrainingCalendarDayTooltipByKey('${day.dateKey}', this)" onmouseleave="closeTrainingCalendarTooltip()" onfocus="showTrainingCalendarDayTooltipByKey('${day.dateKey}', this)" onblur="closeTrainingCalendarTooltip()"></button>`;
+  return `<button type="button" class="h-3.5 w-3.5 rounded-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" style="background-color:${color}" aria-label="${label}" data-date-key="${day.dateKey}" data-tooltip-inspector="true" onclick="pinTrainingCalendarDayByKey('${day.dateKey}', this)" onmouseenter="showTrainingCalendarDayTooltipByKey('${day.dateKey}', this)" onmouseleave="closeTrainingCalendarTooltip()" onfocus="showTrainingCalendarDayTooltipByKey('${day.dateKey}', this)" onblur="closeTrainingCalendarTooltip()"></button>`;
 }
 
 function renderTrainingCalendarGrid(yearModel, monthHeader, grid) {
@@ -140,6 +186,11 @@ function renderTrainingCalendarLegend(legend) {
 function renderTrainingCalendar() {
   const count = document.getElementById('trainingCalendarActivityCount');
   if (!window.trainingCalendarUtils || typeof processedActivities === 'undefined') return;
+  if (trainingCalendarActivitySource !== processedActivities) {
+    window.dashboardTooltips?.invalidate?.();
+    trainingCalendarActivitySource = processedActivities;
+  }
+  registerTrainingCalendarTooltipAdapter();
   renderTrainingCalendarSportFilters();
   trainingCalendarModel = window.trainingCalendarUtils.buildMultiYearCalendarModel(processedActivities, {
     sport: selectedTrainingCalendarSport
@@ -168,6 +219,7 @@ function renderTrainingCalendar() {
   yearsContainer.appendChild(legend);
   renderTrainingCalendarLegend(legend);
   closeTrainingCalendarTooltip();
+  window.dashboardTooltips?.refreshAnchor?.();
 }
 
 function initTrainingCalendarControls() {
@@ -188,6 +240,7 @@ function setTrainingCalendarPalette(palette) {
 }
 
 function setTrainingCalendarSportFilter(sport) {
+  if (selectedTrainingCalendarSport !== sport) window.dashboardTooltips?.invalidate?.();
   selectedTrainingCalendarSport = sport;
   renderTrainingCalendar();
 }

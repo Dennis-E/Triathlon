@@ -149,6 +149,7 @@
     }
 
     function handleDashboardArrowKeydown(event) {
+      if (window.dashboardTooltips?.ownsKeyboard(event.target)) return;
       if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey ||
           !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
       const context = getDashboardNavigationContext(event.target);
@@ -313,6 +314,7 @@
     }
 
     function setVisualizationTab(tabName, options = {}) {
+      window.dashboardTooltips?.invalidate();
       const nextTab = window.dashboardTabNavigation.setVisualizationTab(tabName, {
         ...options,
         availableTabs: availableVisualizationTabs

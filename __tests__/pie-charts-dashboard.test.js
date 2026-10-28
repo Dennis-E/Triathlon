@@ -8,7 +8,95 @@ const pieDashboard = fs.readFileSync(path.join(ROOT, 'src', 'dashboard-pie-chart
 const dashboardExport = fs.readFileSync(path.join(ROOT, 'src', 'dashboard-export.js'), 'utf8');
 const { getTabDisplayTitle, generateExportFilename } = require('../src/export-utils');
 
+function pieHarness() {
+  function element() {
+    const listeners = {};
+    return {
+      children: [], style: {}, attributes: {}, classList: { add() {}, remove() {} },
+      replaceChildren() { this.children = []; },
+      append(...children) { this.children.push(...children); },
+      appendChild(child) { this.children.push(child); },
+      setAttribute(name, value) { this.attributes[name] = value; },
+      addEventListener(type, handler) { listeners[type] = handler; },
+      click() { listeners.click?.(); }
+    };
+  }
+  const elements = Object.fromEntries(['pieChartsCanvas', 'pieChartsCaptureArea', 'pieChartsEmptyState', 'pieChartsSummary', 'pieChartsLegend'].map(id => [id, element()]));
+  const charts = [];
+  const selectedItem = { selectionKey: 'pieCharts:Run' };
+  const describeItem = jest.fn(() => selectedItem);
+  const tooltips = { attachChart: jest.fn(), invalidate: jest.fn(), adapters: new Map([['pieCharts', { describeItem }]]), show: jest.fn() };
+  const owner = vm.createContext({
+    window: { dashboardTabNavigation: require('../src/tab-navigation'), pieChartUtils: require('../src/pie-chart-utils'), dashboardTooltips: tooltips },
+    document: { getElementById: id => elements[id] || null, createElement: element },
+    processedActivities: [
+      { sport: 'Run', distance: 10, duration: 3600, equipment: 'Nike Fast', avgPower: 220 },
+      { sport: 'Bike', distance: 40, duration: 7200, equipment: 'Road Fast', avgPower: 180 }
+    ],
+    Chart: class {
+      constructor(canvas, config) { this.config = config; this.data = config.data; this.options = config.options; charts.push(this); }
+      destroy() {}
+      getDatasetMeta() { return { data: this.data.labels.map(() => ({ tooltipPosition: () => ({ x: 120, y: 80 }) })) }; }
+    }
+  });
+  vm.runInContext(pieDashboard, owner);
+  return { owner, elements, charts, tooltips, describeItem, selectedItem };
+}
+
 describe('Pie Charts dashboard contract', () => {
+  it.each(['count', 'time', 'distance'])('attaches pie slices with full %s, percentage and count detail', measure => {
+    const h = pieHarness();
+    h.owner.setPieMeasure(measure);
+    const chart = h.charts.at(-1);
+    expect(h.tooltips.attachChart).toHaveBeenLastCalledWith('pieCharts', chart);
+    expect(chart.data.labels).toEqual(['Run', 'Bike']);
+    const slices = h.owner.window.pieChartUtils.computePieSlices(h.owner.processedActivities, { dimension: 'sport', measure, sport: 'All', colorScheme: 'fire' }).slices;
+    slices.forEach((slice, dataIndex) => {
+      const expected = [`${h.owner.window.pieChartUtils.formatPieMeasureValue(measure, slice.value)} · ${slice.percentage.toFixed(1)}%`];
+      if (measure !== 'count') expected.push(h.owner.window.pieChartUtils.formatPieMeasureValue('count', slice.activityCount));
+      expect(chart.options.plugins.tooltip.callbacks.label({ dataIndex })).toEqual(expected);
+    });
+  });
+
+  it('pins the exact slice from an accessible legend button without changing data', () => {
+    const h = pieHarness();
+    h.owner.renderPieCharts();
+    const button = h.elements.pieChartsLegend.children[0].children[0];
+    expect(button.type).toBe('button');
+    expect(button.attributes['aria-label']).toContain('Run');
+    button.click();
+    expect(h.describeItem).toHaveBeenCalledWith([{ datasetIndex: 0, index: 0 }], { x: 120, y: 80 });
+    expect(h.tooltips.show).toHaveBeenCalledWith('pieCharts', h.selectedItem, true, button);
+    expect(h.tooltips.invalidate).not.toHaveBeenCalled();
+  });
+
+  it('invalidates before data-setting commits while preserving palette-only changes', () => {
+    const h = pieHarness();
+    h.owner.renderPieCharts();
+    h.owner.setPieColorScheme('monochrome-blue');
+    const adapter = h.owner.getPieChartsKeyboardAdapter();
+    adapter.applySelection(adapter.readSnapshot().selection.map(choice => choice.id === 'palette' ? { ...choice, value: 'fire' } : choice));
+    expect(h.tooltips.invalidate).not.toHaveBeenCalled();
+    for (const [setter, value, state] of [['setPieDimension', 'equipment', 'selectedPieDimension'], ['setPieMeasure', 'distance', 'selectedPieMeasure'], ['setPieSportFilter', 'Run', 'selectedPieSport']]) {
+      const previous = vm.runInContext(state, h.owner);
+      h.tooltips.invalidate.mockImplementationOnce(() => expect(vm.runInContext(state, h.owner)).toBe(previous));
+      h.owner[setter](value);
+    }
+    expect(h.tooltips.invalidate).toHaveBeenCalledTimes(3);
+  });
+
+  it('attaches all groupings and does not fabricate an empty chart', () => {
+    const h = pieHarness();
+    for (const dimension of ['sport', 'duration', 'pace', 'equipment', 'length', 'power']) {
+      h.owner.setPieDimension(dimension);
+      expect(h.tooltips.attachChart).toHaveBeenLastCalledWith('pieCharts', h.charts.at(-1));
+    }
+    h.owner.processedActivities = [];
+    h.tooltips.attachChart.mockClear();
+    h.owner.renderPieCharts();
+    expect(h.tooltips.attachChart).not.toHaveBeenCalled();
+  });
+
   it('applies grouping, measure, sport and palette as one keyboard view', () => {
     const owner = vm.createContext({ window: { dashboardTabNavigation: require('../src/tab-navigation') }, document: { getElementById: () => null }, processedActivities: [] });
     vm.runInContext(pieDashboard, owner);

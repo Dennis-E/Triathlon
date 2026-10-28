@@ -25,7 +25,24 @@ function harness({ realGeometry = false } = {}) {
     getContainer() { return tileContainer; }
   };
   const emptyState = element('heatmapEmptyState');
-  const elements = { heatmapMapContainer: container, heatmapEmptyState: emptyState };
+  const tooltip = element('heatmapActivityTooltip');
+  tooltip.style = {};
+  tooltip.getBoundingClientRect = () => ({ width: 120, height: 80 });
+  const trackCountHeading = element('heatmapActivityTooltipTrackCount');
+  const activityHeading = element('heatmapActivityTooltipHeading');
+  const availability = element('heatmapActivityTooltipAvailability');
+  const rows = element('heatmapActivityTooltipRows');
+  rows.replaceChildren = jest.fn();
+  rows.appendChild = jest.fn();
+  const elements = {
+    heatmapMapContainer: container,
+    heatmapEmptyState: emptyState,
+    heatmapActivityTooltip: tooltip,
+    heatmapActivityTooltipTrackCount: trackCountHeading,
+    heatmapActivityTooltipHeading: activityHeading,
+    heatmapActivityTooltipAvailability: availability,
+    heatmapActivityTooltipRows: rows
+  };
   const renders = [];
   const boundsFits = [];
   const sizeInvalidations = [];
@@ -50,6 +67,23 @@ function harness({ realGeometry = false } = {}) {
         .filter(([, sport]) => sportFilter === 'All' || sport === sportFilter)
         .map(([id, sport]) => [id, { key: id, sport, count: 1 }])
     ),
+    buildActivityTooltipModel: activityIds => {
+      const totalCount = Array.isArray(activityIds) ? activityIds.length : 0;
+      const sampled = totalCount > 10;
+      return {
+        totalCount,
+        sampled,
+        heading: sampled ? `Random 10 of ${totalCount} activities` : `${totalCount} activities`,
+        availabilityNote: null,
+        activities: [{
+          name: 'Test activity',
+          dateLabel: '2026-01-01',
+          sport: 'Run',
+          distanceLabel: '5.0 km',
+          durationLabel: '30:00'
+        }]
+      };
+    },
     computeRouteFrequencyScale: segments => ({ count: Object.keys(segments).length }),
     computeRouteSegmentBounds: segments => Object.keys(segments).length ? ['bounds', Object.keys(segments)] : null,
     buildFrequencyScaleGuide: () => ({ visible: false }),
@@ -65,6 +99,13 @@ function harness({ realGeometry = false } = {}) {
     window: { heatmapUtils },
     document: {
       getElementById: id => elements[id] || null,
+      createElement: tagName => ({
+        tagName,
+        className: '',
+        textContent: '',
+        children: [],
+        append(...children) { this.children.push(...children); }
+      }),
       querySelectorAll: () => []
     },
     L: {
@@ -79,7 +120,7 @@ function harness({ realGeometry = false } = {}) {
   vm.createContext(sandbox);
   const stateSource = fs.readFileSync(path.join(__dirname, '../src/dashboard-state.js'), 'utf8');
   const heatmapSource = fs.readFileSync(path.join(__dirname, '../src/dashboard-heatmap.js'), 'utf8');
-  vm.runInContext(`${stateSource}\n${heatmapSource}\nselectedVisualizationTab = 'heatmap'; this.heatmapTestApi = { renderHeatmap, setHeatmapSportFilter, setHeatmapColorScheme, getHeatmapKeyboardAdapter };`, sandbox);
+  vm.runInContext(`${stateSource}\n${heatmapSource}\nselectedVisualizationTab = 'heatmap'; this.heatmapTestApi = { renderHeatmap, setHeatmapSportFilter, setHeatmapColorScheme, getHeatmapKeyboardAdapter, showHeatmapActivityTooltip };`, sandbox);
   const api = sandbox.heatmapTestApi;
 
   function setDataset(dataset, tracks) {
@@ -265,5 +306,31 @@ describe('heatmap viewport lifecycle', () => {
     expect(h.boundsFits).toHaveLength(2);
     expect(h.map.getCenter()).toEqual([35.6762, 139.6503]);
     expect(h.map.getZoom()).toBe(14);
+  });
+
+  it('shows the track count only above ten and clears it when hovering a smaller segment', () => {
+    const h = harness();
+    const showTooltip = h.sandbox.heatmapTestApi.showHeatmapActivityTooltip;
+    const mapRect = { width: 400, height: 300 };
+    const point = [20, 20];
+    const activityIds = count => Array.from({ length: count }, (_, index) => String(index));
+
+    showTooltip({ key: 'eleven-tracks', activityIds: activityIds(11) }, point, mapRect);
+    expect(h.elements.heatmapActivityTooltipTrackCount.textContent).toBe('# of tracks: 11');
+    expect(h.elements.heatmapActivityTooltipTrackCount.classList.contains('hidden')).toBe(false);
+    expect(h.elements.heatmapActivityTooltipHeading.textContent).toBe('Random 10 of 11 activities');
+    expect(h.elements.heatmapActivityTooltipHeading.classList.contains('hidden')).toBe(false);
+    expect(h.elements.heatmapActivityTooltipRows.appendChild).toHaveBeenCalledTimes(1);
+    expect(h.elements.heatmapActivityTooltipRows.appendChild.mock.calls[0][0].children.map(child => child.textContent)).toEqual([
+      'Test activity',
+      '2026-01-01 · Run · 5.0 km · 30:00'
+    ]);
+
+    showTooltip({ key: 'ten-tracks', activityIds: activityIds(10) }, point, mapRect);
+    expect(h.elements.heatmapActivityTooltipTrackCount.textContent).toBe('');
+    expect(h.elements.heatmapActivityTooltipTrackCount.classList.contains('hidden')).toBe(true);
+    expect(h.elements.heatmapActivityTooltipHeading.textContent).toBe('');
+    expect(h.elements.heatmapActivityTooltipHeading.classList.contains('hidden')).toBe(true);
+    expect(h.elements.heatmapActivityTooltipRows.appendChild).toHaveBeenCalledTimes(2);
   });
 });

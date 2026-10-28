@@ -293,7 +293,19 @@
           heatmapActivitySummaryIndex,
           { segmentKey: segment.key }
         );
-        document.getElementById('heatmapActivityTooltipHeading').textContent = heatmapTooltipModel.heading;
+        const totalCount = heatmapTooltipModel.totalCount;
+        const showTrackCount = Number.isFinite(totalCount) && totalCount > 10;
+        const trackCountHeading = document.getElementById('heatmapActivityTooltipTrackCount');
+        if (trackCountHeading) {
+          trackCountHeading.textContent = showTrackCount ? `# of tracks: ${totalCount}` : '';
+          trackCountHeading.classList.toggle('hidden', !showTrackCount);
+        }
+        const activityHeading = document.getElementById('heatmapActivityTooltipHeading');
+        const showActivityHeading = showTrackCount && heatmapTooltipModel.sampled;
+        if (activityHeading) {
+          activityHeading.textContent = showActivityHeading ? heatmapTooltipModel.heading : '';
+          activityHeading.classList.toggle('hidden', !showActivityHeading);
+        }
         const availability = document.getElementById('heatmapActivityTooltipAvailability');
         availability.textContent = heatmapTooltipModel.availabilityNote || '';
         availability.classList.toggle('hidden', !heatmapTooltipModel.availabilityNote);

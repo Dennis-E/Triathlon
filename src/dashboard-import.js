@@ -196,6 +196,7 @@
     }
 
     function applyImportedDataset(dataset, options = {}) {
+      window.dashboardTooltips?.invalidate();
       if (importedDataset && importedDataset !== dataset && importedDataset.mediaLibrary &&
           typeof importedDataset.mediaLibrary.release === 'function') {
         if (window.mediaGalleryDashboard && typeof window.mediaGalleryDashboard.clear === 'function') {

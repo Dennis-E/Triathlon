@@ -232,6 +232,7 @@
           }
         }
       });
+      window.dashboardTooltips?.attachChart('equipment', equipmentChartInstance);
     }
 
     function setEquipmentColorScheme(scheme) {
@@ -240,6 +241,7 @@
     }
 
   function setEquipmentFilter(filter, render = true) {
+      if (filter !== selectedEquipmentFilter) window.dashboardTooltips?.invalidate();
       selectedEquipmentFilter = filter;
 
       document.querySelectorAll('[id^="equipmentBtn"]').forEach(btn => {
@@ -255,6 +257,7 @@
     }
 
     function setEquipmentMetric(metric, render = true) {
+      if (metric !== selectedEquipmentMetric) window.dashboardTooltips?.invalidate();
       selectedEquipmentMetric = metric;
 
       document.querySelectorAll('[id^="equipmentMetric"]').forEach(btn => {
@@ -270,6 +273,7 @@
     }
 
     function setEquipmentTimelineFilter(filter, render = true) {
+      if (filter !== selectedEquipmentTimelineFilter) window.dashboardTooltips?.invalidate();
       selectedEquipmentTimelineFilter = filter;
 
       document.querySelectorAll('[id^="equipmentTimelineBtn"]').forEach(btn => {
@@ -285,6 +289,7 @@
     }
 
     function setEquipmentTimelineMode(mode, render = true) {
+      if (mode !== selectedEquipmentTimelineMode) window.dashboardTooltips?.invalidate();
       selectedEquipmentTimelineMode = mode;
 
       const btnContinuous = document.getElementById('equipmentTimelineModeContinuous');
@@ -365,6 +370,9 @@
 
       const ganttLabelPlugin = {
         id: 'ganttLabelsContinuous',
+        afterUpdate(chart) {
+          chart.getDatasetMeta(0).data.forEach(element => { element.skip = true; });
+        },
         afterDatasetsDraw(chart) {
           const { ctx } = chart;
           const barMeta = chart.getDatasetMeta(1);
@@ -404,7 +412,7 @@
         data: {
           labels,
           datasets: [
-            { label: 'spacer', data: spacerData, backgroundColor: 'transparent', borderWidth: 0, borderSkipped: false },
+            { label: '', data: spacerData, backgroundColor: 'transparent', borderWidth: 0, borderSkipped: false },
             { label: 'Active period', data: durationData, backgroundColor: barColors, borderColor: barBorderColors, borderWidth: 1, borderSkipped: false, borderRadius: 4 }
           ]
         },
@@ -419,6 +427,7 @@
               backgroundColor: '#0F172A',
               titleColor: '#F8FAFC',
               bodyColor: '#CBD5E1',
+              filter: context => context.datasetIndex === 1,
               callbacks: {
                 title: ctx => ctx[0] ? labels[ctx[0].dataIndex] : '',
                 label: ctx => {
@@ -518,6 +527,24 @@
       // how the continuous Gantt chart centres its bars.
       const activityBarsPlugin = {
         id: 'activityBars',
+        afterUpdate(chart) {
+          chart.data.datasets.forEach((dataset, datasetIndex) => {
+            chart.getDatasetMeta(datasetIndex).data.forEach((element, index) => {
+              const point = dataset.data[index];
+              element.inRange = (pointerX, pointerY) => {
+                const { x, y } = chart.scales;
+                const centerX = x.getPixelForValue(point.x);
+                const centerY = y.getPixelForValue(point.y);
+                const width = Math.max(2, x.getPixelForValue(point.x + point.widthMs) - centerX);
+                const height = Math.max(10, (y.height / rows.length) * 0.55);
+                return Math.abs(pointerX - centerX) <= width / 2 && Math.abs(pointerY - centerY) <= height / 2;
+              };
+              element.getRange = axis => axis === 'x'
+                ? Math.max(2, chart.scales.x.getPixelForValue(point.x + refWidthMs) - chart.scales.x.getPixelForValue(point.x)) / 2
+                : Math.max(10, (chart.scales.y.height / rows.length) * 0.55) / 2;
+            });
+          });
+        },
         afterDatasetsDraw(chart) {
           const { ctx, scales: { x, y } } = chart;
           // Category band height = total axis height / number of categories
@@ -668,4 +695,5 @@
         _timelineSetCanvasHeight(canvas, wrapper, entries.length);
         equipmentTimelineChartInstance = _renderTimelineContinuous(canvas, entries);
       }
+      window.dashboardTooltips?.attachChart('equipmentTimeline', equipmentTimelineChartInstance);
     }

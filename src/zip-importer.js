@@ -161,6 +161,50 @@ function splitMediaReference(value) {
   return filenameMatches || source.split(/[;,|\n]+/).map(token => token.trim()).filter(Boolean);
 }
 
+function createMediaArchiveReader(entry) {
+  return () => entry.async('uint8array');
+}
+
+function createMediaExportSourceLease(sources) {
+  const objectUrls = new Map();
+  const pending = new Map();
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    objectUrls.forEach(url => URL.revokeObjectURL(url));
+    objectUrls.clear();
+    sources.clear();
+    pending.clear();
+  };
+  return {
+    getObjectUrl: async key => {
+      if (released) throw new Error('Media export sources have been released.');
+      if (objectUrls.has(key)) return objectUrls.get(key);
+      if (pending.has(key)) return pending.get(key);
+      const source = sources.get(key);
+      if (!source) throw new Error('Media export source is unavailable.');
+      const result = (async () => {
+        const bytes = await source.readContent();
+        if (released) throw new Error('Media export sources have been released.');
+        if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
+          throw new Error('Local media export is unavailable in this browser.');
+        }
+        const url = URL.createObjectURL(new Blob([bytes], { type: source.mimeType }));
+        objectUrls.set(key, url);
+        sources.delete(key);
+        return url;
+      })().catch(error => {
+        release();
+        throw error;
+      }).finally(() => pending.delete(key));
+      pending.set(key, result);
+      return result;
+    },
+    release
+  };
+}
+
 async function extractMediaFromZip(zip, activityCsvText) {
   let manifestText = '';
   try {
@@ -201,7 +245,7 @@ async function extractMediaFromZip(zip, activityCsvText) {
       path,
       readable: true,
       byteLength: entry._data && Number.isFinite(entry._data.uncompressedSize) ? entry._data.uncompressedSize : null,
-      readContent: () => entry.async('uint8array')
+      readContent: createMediaArchiveReader(entry)
     }));
   const reconciled = mediaUtils.reconcileMediaReferences({
     activities,
@@ -213,12 +257,27 @@ async function extractMediaFromZip(zip, activityCsvText) {
     .map(reference => String(reference.activityId)));
   const activitiesById = new Map(activities.map(activity => [String(activity.id), activity]));
   const objectUrls = new Map();
+  const exportReaders = new Map(reconciled.assets
+    .filter(asset => typeof asset.readContent === 'function')
+    .map(asset => [asset.key, {
+      readContent: asset.readContent,
+      mimeType: asset.mediaType === 'video' ? 'video/mp4' : 'image/jpeg'
+    }]));
   const library = {
     ...reconciled,
     manifestAvailable: Boolean(manifestText),
     activityOptions: Array.from(linkedActivityIds, id => activitiesById.get(id))
       .filter(Boolean)
       .map(activity => ({ id: String(activity.id), name: activity.name, sport: activity.sport, date: activity.date })),
+    acquireExportSources: assetKeys => {
+      const sources = new Map();
+      for (const key of new Set(assetKeys)) {
+        const source = exportReaders.get(key);
+        if (!source) throw new Error('Media export source is unavailable.');
+        sources.set(key, { ...source });
+      }
+      return createMediaExportSourceLease(sources);
+    },
     getObjectUrl: async asset => {
       if (objectUrls.has(asset.key)) return objectUrls.get(asset.key);
       const bytes = await asset.readContent();
@@ -240,6 +299,7 @@ async function extractMediaFromZip(zip, activityCsvText) {
         objectUrls.forEach(objectUrl => URL.revokeObjectURL(objectUrl));
       }
       objectUrls.clear();
+      exportReaders.clear();
       library.assets.forEach(asset => { asset.readContent = null; });
       library.hasReadableMedia = false;
     }

@@ -39,6 +39,7 @@
 
     function setPieDimension(dimension) {
       if (!PIE_DIMENSION_BUTTON_IDS[dimension]) return;
+      if (dimension !== selectedPieDimension) window.dashboardTooltips?.invalidate();
       selectedPieDimension = dimension;
       setPieButtonGroupActive(PIE_DIMENSION_BUTTON_IDS, dimension);
       renderPieCharts();
@@ -46,6 +47,7 @@
 
     function setPieMeasure(measure) {
       if (!PIE_MEASURE_BUTTON_IDS[measure]) return;
+      if (measure !== selectedPieMeasure) window.dashboardTooltips?.invalidate();
       selectedPieMeasure = measure;
       setPieButtonGroupActive(PIE_MEASURE_BUTTON_IDS, measure);
       renderPieCharts();
@@ -53,6 +55,7 @@
 
     function setPieSportFilter(sport) {
       if (!PIE_SPORT_BUTTON_IDS[sport]) return;
+      if (sport !== selectedPieSport) window.dashboardTooltips?.invalidate();
       selectedPieSport = sport;
       setPieButtonGroupActive(PIE_SPORT_BUTTON_IDS, sport);
       renderPieCharts();
@@ -102,9 +105,21 @@
 
     function renderPieLegend(legend, slices) {
       legend.replaceChildren();
-      slices.forEach(slice => {
+      slices.forEach((slice, index) => {
         const item = document.createElement('li');
         item.className = 'flex min-w-0 items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2';
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'flex w-full min-w-0 items-center gap-3 text-left';
+        button.setAttribute('aria-label', `${slice.label}: ${window.pieChartUtils.formatPieMeasureValue(selectedPieMeasure, slice.value)}, ${slice.percentage.toFixed(1)}%, ${window.pieChartUtils.formatPieMeasureValue('count', slice.activityCount)}`);
+        button.addEventListener('click', () => {
+          const inspector = window.dashboardTooltips;
+          const adapter = inspector?.adapters?.get('pieCharts');
+          const arc = pieChartInstance?.getDatasetMeta(0).data[index];
+          if (!adapter || !arc) return;
+          const selection = adapter.describeItem([{ datasetIndex: 0, index }], arc.tooltipPosition());
+          if (selection) inspector.show('pieCharts', selection, true, button);
+        });
 
         const swatch = document.createElement('span');
         swatch.className = 'h-3.5 w-3.5 shrink-0 rounded-full';
@@ -120,7 +135,8 @@
         value.className = 'shrink-0 text-right tabular-nums text-xs text-slate-400';
         value.textContent = `${window.pieChartUtils.formatPieMeasureValue(selectedPieMeasure, slice.value)} · ${slice.percentage.toFixed(1)}%`;
 
-        item.append(swatch, label, value);
+        button.append(swatch, label, value);
+        item.appendChild(button);
         legend.appendChild(item);
       });
     }
@@ -140,6 +156,8 @@
             : prefix.length === 2 ? { id: 'sport', values: Object.keys(PIE_SPORT_BUTTON_IDS) }
               : prefix.length === 3 ? { id: 'palette', values: ['fire', 'monochrome-blue'] } : null,
         values => {
+          if (values.dimension !== selectedPieDimension || values.measure !== selectedPieMeasure ||
+            values.sport !== selectedPieSport) window.dashboardTooltips?.invalidate();
           selectedPieDimension = values.dimension;
           selectedPieMeasure = values.measure;
           selectedPieSport = values.sport;
@@ -226,6 +244,7 @@
         },
         plugins: [piePercentageLabelPlugin]
       });
+      window.dashboardTooltips?.attachChart('pieCharts', pieChartInstance);
     }
 
     function getExportChartImage(size = 560) {

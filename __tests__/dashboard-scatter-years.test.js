@@ -35,6 +35,7 @@ function harness(years = [2020, 2021, 2022, 2023, 2024, 2025]) {
   class Chart {
     constructor(_context, config) {
       this.data = config.data;
+      this.options = config.options;
       this.visibility = new Map();
       this.setDatasetVisibility = jest.fn((index, visible) => this.visibility.set(index, visible));
       this.update = jest.fn();
@@ -44,7 +45,7 @@ function harness(years = [2020, 2021, 2022, 2023, 2024, 2025]) {
   }
   const sandbox = {
     document: { getElementById: id => elements[id] || null, createElement: element },
-    window: { scatterUtils: {
+    window: { dashboardTooltips: { attachChart: jest.fn(), invalidate: jest.fn() }, scatterUtils: {
       getPaceMetricPoints: (data, { sport, metric, minDate, maxDate }) => data
         .filter(a => a.sport === sport && a.metric === metric && (!minDate || a.date >= minDate) && (!maxDate || a.date <= maxDate))
         .map(a => ({ ...a, x: 5, y: 150, duration: 3600, distance: 10 })),
@@ -55,8 +56,8 @@ function harness(years = [2020, 2021, 2022, 2023, 2024, 2025]) {
     processedActivities: activities, Chart,
     formatDateIso: date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
     formatShortDate: date => date.toISOString().slice(0, 10),
-    getPerformanceMetaForSport: () => ({ axisTitle: 'Pace', metricType: 'pace', reverseXAxis: false }),
-    formatPerformanceValue: () => '', formatDuration: () => ''
+    getPerformanceMetaForSport: () => ({ axisTitle: 'Pace', tooltipLabel: 'Pace', metricType: 'pace', reverseXAxis: false }),
+    formatPerformanceValue: () => '5:00 /km', formatDuration: () => '1h 0m'
   };
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/dashboard-scatter.js'), 'utf8'), sandbox);
@@ -105,6 +106,43 @@ describe('Pace vs years controls', () => {
     h.sandbox.processedActivities = [];
     h.sandbox.renderPaceMetricsChart();
     expect(h.sandbox.window.paceMetricsDashboard.getExportSeries()).toEqual([]);
+  });
+
+  it('attaches the activity and regression chart without losing formatted metric detail', () => {
+    const h = harness([2025]);
+    const chart = h.charts.at(-1);
+    expect(h.sandbox.window.dashboardTooltips.attachChart).toHaveBeenLastCalledWith('paceMetrics', chart);
+    const bubble = chart.data.datasets.find(dataset => dataset.type === 'bubble');
+    const callbacks = chart.options.plugins.tooltip.callbacks;
+    expect(callbacks.title([{ raw: { meta: { name: 'Long activity title' } }, dataset: bubble }])).toBe('Long activity title');
+    expect(callbacks.label({ dataset: bubble, raw: bubble.data[0] })).toEqual([
+      'Pace: 5:00 /km', 'Average heart rate: 150.0 bpm', 'Distance: 10.0 km', 'Duration: 1h 0m', `Date: ${h.sandbox.formatShortDate(bubble.data[0].meta.date)}`
+    ]);
+    expect(callbacks.label({ dataset: { type: 'line', label: '2025 trend' } })).toBe('2025 trend');
+    expect(callbacks.title([{ dataset: { label: '2025 trend' } }])).toBe('2025 trend');
+  });
+
+  it('invalidates before year/trend visibility and direct setting commits, not redraws', () => {
+    const h = harness([2025, 2026]);
+    const tooltips = h.sandbox.window.dashboardTooltips;
+    expect(tooltips.invalidate).not.toHaveBeenCalled();
+    tooltips.invalidate.mockImplementationOnce(() => expect(h.visibility(2025)).toBe(true));
+    h.click(2025);
+    expect(tooltips.invalidate).toHaveBeenCalledTimes(1);
+    h.sandbox.setPaceMetricsTrendLinesVisible(false);
+    h.sandbox.setPaceMetricsYearEnabled(2026, false);
+    expect(tooltips.invalidate).toHaveBeenCalledTimes(3);
+    for (const [setter, value, state] of [
+      ['setPaceMetric', 'distance', 'selectedPaceMetric'],
+      ['setPaceMetricsSport', 'Bike', 'selectedPaceMetricsSport'],
+      ['setScatterDateRange', 1, 'scatterDateRange.start']
+    ]) {
+      const previous = vm.runInContext(state, h.sandbox);
+      tooltips.invalidate.mockImplementationOnce(() => expect(vm.runInContext(state, h.sandbox)).toBe(previous));
+      if (setter === 'setScatterDateRange') h.sandbox[setter]('start', value);
+      else h.sandbox[setter](value);
+    }
+    expect(tooltips.invalidate).toHaveBeenCalledTimes(6);
   });
 
   it('applies date/year/trend selections atomically and derives years from the candidate prefix', () => {

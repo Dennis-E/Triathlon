@@ -248,6 +248,27 @@ describe('runtime import success status copy', () => {
 });
 
 describe('runtime imported dataset availability refresh', () => {
+  it('clears the pinned detail before releasing live media and replacing the dataset', () => {
+    const runtime = loadRuntimeDatasetApplicator();
+    const events = [];
+    let pinned = null;
+    runtime.context.window.dashboardTooltips = { invalidate: jest.fn(() => { pinned = null; events.push('clear'); }) };
+    const first = { rawCsvData: [], activities: [], mediaLibrary: { release: jest.fn(() => {
+      expect(pinned).toBeNull();
+      expect(runtime.context.importedDataset).toBe(first);
+      events.push('release');
+    }) } };
+    const replacement = { rawCsvData: [], activities: [] };
+    runtime.applyDataset(first);
+    pinned = { title: 'Old activity' };
+    events.length = 0;
+    runtime.applyDataset(replacement);
+    expect(events).toEqual(['clear', 'release']);
+    expect(runtime.context.importedDataset).toBe(replacement);
+    expect(pinned).toBeNull();
+    expect(first.mediaLibrary.release).toHaveBeenCalledTimes(1);
+  });
+
   it('refreshes view visibility without modifying imported activity records', () => {
     const runtime = loadRuntimeDatasetApplicator();
     const firstActivities = [{

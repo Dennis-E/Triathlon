@@ -56,6 +56,32 @@ const coreSummary = {
 };
 
 describe('lifetime statistics dashboard', () => {
+  it('offers independent pins for totals, sports and milestones using full semantic detail', () => {
+    const { context, elements, window } = createDashboardContext(createLifetimeBaselineActivities(), coreSummary);
+    const api = { registerAdapter: jest.fn(), readContext: jest.fn(), show: jest.fn(), refreshAnchor: jest.fn(),
+      invalidate: jest.fn(), send: jest.fn(), getPinned: jest.fn() };
+    window.dashboardTooltips = api;
+    window.lifetimeStatisticsDashboard.render();
+    const area = elements.lifetimeStatisticsCaptureArea;
+    expect(area.innerHTML).toContain('data-statistic-pin="Total distance"');
+    expect(area.innerHTML).toContain('data-statistic-pin="sport:Run"');
+    expect(area.innerHTML).toContain('data-statistic-pin="Longest distance"');
+    expect(elements.lifetimeStatisticsExportArea.innerHTML).not.toContain('data-statistic-pin');
+    const button = { dataset: { statisticPin: 'Total distance' }, getBoundingClientRect: () => ({ left: 20, top: 40, width: 10, height: 10 }) };
+    area.onclick({ target: { closest: () => button } });
+    expect(api.show).toHaveBeenCalledWith('lifetimeStatistics', expect.objectContaining({
+      selectionKey: 'lifetimeStatistics:Total distance', content: expect.objectContaining({
+        sections: [{ heading: '', rows: [{ label: 'Total distance', value: '55 km' }] }]
+      }), anchor: expect.objectContaining({ kind: 'statistic' })
+    }), true, button);
+    api.invalidate.mockClear();
+    window.lifetimeStatisticsDashboard.render();
+    expect(api.invalidate).not.toHaveBeenCalled();
+    context.processedActivities = [];
+    window.lifetimeStatisticsDashboard.render();
+    expect(api.invalidate).toHaveBeenCalled();
+  });
+
   it('shows an empty state and hides the capture region when there are no imported activities', () => {
     const { context, elements } = createDashboardContext([], coreSummary);
 

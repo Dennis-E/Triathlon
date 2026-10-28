@@ -105,6 +105,90 @@ describe('extractMediaFromZip', () => {
     expect(asset.readContent).toBeNull();
     expect(library.hasReadableMedia).toBe(false);
   });
+
+  describe('independent export sources', () => {
+    let validUrls;
+    let createUrl;
+    let revokeUrl;
+
+    beforeEach(() => {
+      validUrls = new Set();
+      createUrl = jest.spyOn(URL, 'createObjectURL').mockImplementation(() => {
+        const url = `blob:export-${createUrl.mock.calls.length}`;
+        validUrls.add(url);
+        return url;
+      });
+      revokeUrl = jest.spyOn(URL, 'revokeObjectURL').mockImplementation(url => validUrls.delete(url));
+    });
+
+    afterEach(() => jest.restoreAllMocks());
+
+    async function makeLibrary(count = 1) {
+      const filenames = Array.from({ length: count }, (_, index) => `photo-${index}.jpg`);
+      const fixture = createMediaZipFixture({
+        activityRows: [{ id: 'run', sport: 'Run', media: filenames.join(';') }],
+        mediaRows: filenames.map(filename => ({ filename })),
+        mediaFiles: Object.fromEntries(filenames.map(filename => [`media/${filename}`, { content: filename }]))
+      });
+      return { fixture, library: await extractMediaFromZip(fixture.zip, fixture.activityCsv) };
+    }
+
+    it.each(['release', 'eviction'])('owns sources independently of live %s and replacement B', async mode => {
+      const { library } = await makeLibrary(49);
+      const asset = library.assets[0];
+      const oldUrl = await library.getObjectUrl(asset);
+      const lease = library.acquireExportSources([asset.key, asset.key]);
+      if (mode === 'eviction') {
+        for (const other of library.assets.slice(1)) await library.getObjectUrl(other);
+      }
+      library.release();
+      expect(validUrls.has(oldUrl)).toBe(false);
+      expect(library.assets.every(item => item.readContent === null)).toBe(true);
+      const { library: replacement } = await makeLibrary();
+      const replacementUrl = await replacement.getObjectUrl(replacement.assets[0]);
+      const [source, duplicate] = await Promise.all([lease.getObjectUrl(asset.key), lease.getObjectUrl(asset.key)]);
+      expect(source).toBe(duplicate);
+      expect(source).not.toBe(oldUrl);
+      expect(validUrls.has(source)).toBe(true);
+      lease.release();
+      lease.release();
+      expect(revokeUrl.mock.calls.filter(([url]) => url === source)).toHaveLength(1);
+      expect(validUrls.has(replacementUrl)).toBe(true);
+      expect(revokeUrl).not.toHaveBeenCalledWith(replacementUrl);
+      await expect(lease.getObjectUrl(asset.key)).rejects.toThrow(/released/i);
+    });
+
+    it('does not create URLs for a reader resolving after cancellation', async () => {
+      const { fixture, library } = await makeLibrary();
+      let finishRead;
+      fixture.zip.files['media/photo-0.jpg'].async = jest.fn(() => new Promise(resolve => { finishRead = resolve; }));
+      const lease = library.acquireExportSources([library.assets[0].key]);
+      const pending = lease.getObjectUrl(library.assets[0].key);
+      const rejected = expect(pending).rejects.toThrow(/released/i);
+      library.release();
+      lease.release();
+      lease.release();
+      finishRead(new Uint8Array([1]));
+      await rejected;
+      expect(createUrl).not.toHaveBeenCalled();
+      expect(revokeUrl).not.toHaveBeenCalled();
+    });
+
+    it('cleans earlier owned URLs once on reader failure without mutating the released library', async () => {
+      const { fixture, library } = await makeLibrary(2);
+      fixture.zip.files['media/photo-1.jpg'].async = jest.fn().mockRejectedValue(new Error('export read failed'));
+      const keys = library.assets.map(asset => asset.key);
+      const lease = library.acquireExportSources(keys);
+      library.release();
+      const owned = await lease.getObjectUrl(keys[0]);
+      await expect(lease.getObjectUrl(keys[1])).rejects.toThrow('export read failed');
+      lease.release();
+      lease.release();
+      expect(validUrls.has(owned)).toBe(false);
+      expect(revokeUrl.mock.calls.filter(([url]) => url === owned)).toHaveLength(1);
+      expect(library.assets.every(asset => asset.status === 'readable')).toBe(true);
+    });
+  });
 });
 
 function makeBikeFitRecords(count = 3601) {

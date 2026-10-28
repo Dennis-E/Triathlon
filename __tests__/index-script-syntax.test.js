@@ -283,6 +283,7 @@ describe('workspace arrow dispatch', () => {
 // load order in index.html (contracts/script-load-order.md).
 const DASHBOARD_MODULE_FILES = [
   'dashboard-state.js',
+  'dashboard-tooltips.js',
   'dashboard-core.js',
   'dashboard-import.js',
   'dashboard-equipment.js',
@@ -658,8 +659,9 @@ describe('index.html inline script syntax', () => {
     expect(trainingCalendarCode).toContain('id="trainingCalendarSportBtn${sport}"');
     expect(inlineCode).toContain("getActiveButtonText(Array.from(document.querySelectorAll('#trainingCalendarSportFilters button')).map(button => button.id))");
     expect(inlineCode).toContain("trainingCalendar: typeof processedActivities !== 'undefined' && processedActivities.length > 0");
-    expect(inlineCode).toContain("const tooltip = document.getElementById('trainingCalendarDayTooltip')");
-    expect(inlineCode).toContain("if (tooltipWasVisible) tooltip.classList.add('hidden')");
+    expect(inlineCode).toContain('createExportCaptureSnapshot(targetEl, tabId)');
+    expect(inlineCode).toContain('html2canvas(snapshot.element');
+    expect(inlineCode).not.toContain('if (tooltipWasVisible)');
     expect(inlineCode).toContain("showExportToast('Nothing to export for this selection yet.')");
   });
 

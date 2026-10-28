@@ -74,6 +74,7 @@
             const metricFit = getPbMetricForEffort(sport, km, fitDistanceEffort.durationSec);
             if (!metricFit) return null;
             return {
+              activityId,
               date: a.date,
               metricValue: metricFit.value,
               metricType: metricFit.metricType,
@@ -96,6 +97,7 @@
           const metricModeled = getPbMetricForEffort(sport, km, modeledDuration);
           if (!metricModeled) return null;
           return {
+            activityId,
             date: a.date,
             metricValue: metricModeled.value,
             metricType: metricModeled.metricType,
@@ -137,6 +139,7 @@
 
           if (fitPowerEffort && Number.isFinite(fitPowerEffort.avgPower) && fitPowerEffort.avgPower > 0) {
             return {
+              activityId,
               date: a.date,
               duration: targetSeconds,
               watts: fitPowerEffort.avgPower,
@@ -159,6 +162,7 @@
         if (act.watts > bestWatts) {
           bestWatts = act.watts;
           pbs.push({
+            activityId: act.activityId,
             date: act.date,
             duration: act.duration,
             watts: act.watts,
@@ -186,6 +190,93 @@
     let activePbDetailModel = null;
     let pbDetailReturnFocus = null;
     let pbDetailOpening = null;
+    let pbTooltipAdapter = null;
+    let pbTooltipSource = null;
+    let pbTooltipEffortSource = null;
+    const pbTooltipTargets = new Map();
+    const pbTooltipBindings = [];
+
+    function pbItemAnchor(itemId, target, label) {
+      const rect = target?.getBoundingClientRect?.();
+      return { kind: 'svg-item', itemId, normalizedPoint: {
+        x: Number.isFinite(rect?.left) ? (rect.left + (rect.width || 0) / 2) / (window.innerWidth || 800) : 0.5,
+        y: Number.isFinite(rect?.top) ? (rect.top + (rect.height || 0) / 2) / (window.innerHeight || 600) : 0.5
+      }, visibility: 'visible', associationLabel: label };
+    }
+
+    function registerPbTooltipAdapter() {
+      const api = window.dashboardTooltips;
+      if (!api?.registerAdapter || pbTooltipAdapter) return;
+      const adapter = {
+        readContext: () => api.readContext('personalBests'),
+        projectAnchor: selection => {
+          const targets = pbTooltipTargets.get(selection.anchor.itemId) || [];
+          const target = targets.slice().reverse().find(candidate => candidate.isConnected !== false && !candidate.closest?.('.hidden'));
+          return target ? pbItemAnchor(selection.anchor.itemId, target, selection.content.itemLabel) : selection.anchor;
+        },
+        dispose() {
+          pbTooltipBindings.splice(0).forEach(remove => remove());
+          pbTooltipTargets.clear();
+          document.getElementById('pbTooltip')?.classList.add('hidden');
+          pbTooltipAdapter = null;
+        }
+      };
+      api.registerAdapter('personalBests', adapter);
+      pbTooltipAdapter = adapter;
+    }
+
+    function bindPbTooltipTarget(target, record, options = {}) {
+      if (!window.dashboardTooltips?.show || !target?.addEventListener) return;
+      const pb = record.record || record.activity || record;
+      const title = pb.name || record.title || 'Activity';
+      const date = pb.date || record.date;
+      const itemId = JSON.stringify([options.scope || '', pb.activityId || pb.id || title,
+        date instanceof Date ? date.getTime() : String(date), pb.targetSeconds || record.durationSeconds || pb.distance || '',
+        pb.duration, pb.watts, pb.intervalStartKm, pb.intervalEndKm]);
+      const rows = [{ label: 'Date', value: date?.toLocaleDateString?.('en-GB', { year: 'numeric', month: 'short', day: 'numeric' }) || 'Date unavailable' }];
+      if (options.metricLabel) rows.push({ label: options.metricLabel, value: options.formattedValue });
+      if (Number.isFinite(pb.duration)) rows.push({ label: pb.targetSeconds ? 'Duration' : 'Time', value: formatDurationHms(pb.targetSeconds || pb.duration) });
+      if (Number.isFinite(pb.distance)) rows.push({ label: 'Distance', value: `${pb.distance.toFixed(2)} km` });
+      if (Number.isFinite(pb.metricValue)) rows.push({ label: pb.metricType === 'speed_bike' ? 'Speed' : 'Pace', value: formatPerformanceValue(pb.metricValue, pb.metricType) });
+      if (Number.isFinite(pb.watts)) rows.push({ label: 'Power', value: `${Math.round(pb.watts)} W` });
+      if (pb.metricType === 'speed_bike') rows.push({ label: 'Avg Watts', value: Number.isFinite(pb.avgWatts) && pb.avgWatts > 0 ? `${Math.round(pb.avgWatts)} W` : 'n/a' });
+      if (Number.isFinite(pb.intervalStartKm) && Number.isFinite(pb.intervalEndKm)) {
+        rows.push({ label: 'Window', value: `${pb.intervalStartKm.toFixed(2)} km to ${pb.intervalEndKm.toFixed(2)} km` });
+      } else if (Number.isFinite(pb.watts)) rows.push({ label: 'Window', value: 'n/a' });
+      if (Number.isFinite(pb.intervalStartSec) && Number.isFinite(pb.intervalEndSec)) rows.push({ label: 'Interval', value: `${formatDurationHms(pb.intervalStartSec)} to ${formatDurationHms(pb.intervalEndSec)}` });
+      const notes = [];
+      if (pb.isInterimEstimated) notes.push(`Estimated from ${Number.isFinite(pb.sourceDistance) ? pb.sourceDistance.toFixed(2) + ' km activity' : 'activity average'}`);
+      if (pb.effortSource) notes.push(`Source: ${Number.isFinite(pb.watts) ? 'duration-specific effort' : pb.effortSource}`);
+      const rank = options.rank;
+      const total = options.total;
+      const footerLines = rank ? [rank === total ? 'Current PB' : `PB #${rank} of ${total}`] : [];
+      if (record.durationLabel) footerLines.unshift(record.durationLabel);
+      const content = { title, itemLabel: title, sections: [{ heading: '', rows }], footerLines, notes };
+      const targets = pbTooltipTargets.get(itemId) || [];
+      targets.push(target);
+      pbTooltipTargets.set(itemId, targets);
+      const listen = (type, handler) => {
+        target.addEventListener(type, handler);
+        pbTooltipBindings.push(() => target.removeEventListener?.(type, handler));
+      };
+      const inspect = pinned => {
+        if (pinned) document.getElementById('pbTooltip')?.classList.add('hidden');
+        window.dashboardTooltips.show('personalBests', { selectionKey: `personalBests:${itemId}`, content,
+          anchor: pbItemAnchor(itemId, target, title) }, pinned, target);
+      };
+      target.setAttribute('tabindex', options.focusable === false ? '-1' : '0');
+      target.setAttribute('role', 'button');
+      target.setAttribute('aria-label', `Pin ${title}${options.formattedValue ? ', ' + options.formattedValue : ''}`);
+      target.setAttribute('data-tooltip-inspector', 'true');
+      listen('click', event => { event.stopPropagation?.(); inspect(true); });
+      listen('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation?.(); inspect(true); }
+      });
+      listen('focus', () => inspect(false));
+      listen('blur', () => window.dashboardTooltips?.send?.({ type: 'leave' }));
+      if (options.hover) listen('mouseenter', () => inspect(false));
+      listen('mouseleave', () => window.dashboardTooltips?.send?.({ type: 'leave' }));
+    }
 
     function createSvgElement(tag, attributes = {}) {
       const element = document.createElementNS('http://www.w3.org/2000/svg', tag);
@@ -254,6 +345,7 @@
     function renderPbDetailChart(model) {
       const svg = document.getElementById('pbDetailChart');
       if (!svg || !model) return;
+      registerPbTooltipAdapter();
       svg.innerHTML = '';
       const tooltip = document.getElementById('pbTooltip');
       const ttTitle = document.getElementById('pbTooltipTitle');
@@ -278,6 +370,7 @@
       }
 
       function showDurationProfileTooltip(event, record) {
+        if (window.dashboardTooltips?.getPinned?.('personalBests')) { hideDetailTooltip(); return; }
         const pb = record.record || record;
         ttTitle.textContent = pb.name || record.title || 'Activity';
         ttTitle.style.color = model.color;
@@ -393,6 +486,8 @@
             class: 'profile-measurement-hit-area'
           });
           hit.style.cursor = 'pointer';
+          bindPbTooltipTarget(hit, record, { scope: model.exportKey, rank: 1, total: 1,
+            metricLabel: model.axisLabel, formattedValue: model.formatValue(record.value) });
           hit.addEventListener('mouseenter', event => {
             showDurationProfileTooltip(event, record);
           });
@@ -462,11 +557,14 @@
         const edgeX = layout.side === 'right' ? layout.box.left : layout.box.right;
         const edgeY = Math.max(layout.box.top + 8, Math.min(layout.y, layout.box.bottom - 8));
         svg.appendChild(createSvgElement('line', { x1: layout.x, y1: layout.y, x2: edgeX, y2: edgeY, stroke: '#64748B', 'stroke-width': 1 }));
-        svg.appendChild(createSvgElement('circle', { cx: layout.x, cy: layout.y, r: layout.index === records.length - 1 ? 5 : 4, fill: model.color }));
+        const point = createSvgElement('circle', { cx: layout.x, cy: layout.y, r: layout.index === records.length - 1 ? 5 : 4, fill: model.color });
+        bindPbTooltipTarget(point, layout.record, { scope: model.exportKey, rank: durationProfile ? 1 : layout.index + 1, total: durationProfile ? 1 : records.length,
+          metricLabel: model.axisLabel, formattedValue: layout.labelText, focusable: false, hover: true });
+        svg.appendChild(point);
       });
 
       labelLayouts.forEach(layout => {
-        svg.appendChild(createSvgElement('rect', {
+        const labelTarget = svg.appendChild(createSvgElement('rect', {
           x: layout.box.left,
           y: layout.box.top,
           width: layout.box.right - layout.box.left,
@@ -477,18 +575,23 @@
           stroke: '#334155',
           'stroke-width': 1
         }));
+        bindPbTooltipTarget(labelTarget, layout.record, { scope: model.exportKey, rank: durationProfile ? 1 : layout.index + 1, total: durationProfile ? 1 : records.length,
+          metricLabel: model.axisLabel, formattedValue: layout.labelText, hover: true });
         const textX = layout.side === 'right' ? layout.box.left + 8 : layout.box.right - 8;
         const anchor = layout.side === 'right' ? 'start' : 'end';
         const valueLabel = createSvgElement('text', { x: textX, y: layout.box.top + 17, 'text-anchor': anchor, 'font-size': 14, 'font-weight': layout.index === records.length - 1 ? 700 : 600, fill: layout.index === records.length - 1 ? '#F8FAFC' : model.color, 'font-family': 'ui-monospace, monospace' });
         valueLabel.textContent = layout.labelText;
+        valueLabel.style.pointerEvents = 'none';
         svg.appendChild(valueLabel);
 
         layout.titleLines.forEach((line, lineIndex) => {
           const titleLabel = createSvgElement('text', { x: textX, y: layout.box.top + 34 + lineIndex * 15, 'text-anchor': anchor, 'font-size': 12, fill: '#CBD5E1' });
           titleLabel.textContent = line;
+          titleLabel.style.pointerEvents = 'none';
           svg.appendChild(titleLabel);
         });
       });
+      window.dashboardTooltips?.refreshAnchor?.();
     }
 
     function openPbDetail(model, sourceButton) {
@@ -518,10 +621,21 @@
       pbDetailOpening = null;
       if (pbDetailReturnFocus) pbDetailReturnFocus.focus();
       pbDetailReturnFocus = null;
+      document.getElementById('pbTooltip')?.classList.add('hidden');
+      window.dashboardTooltips?.refreshAnchor?.();
     }
 
     function renderPbChart() {
       const activities = processedActivities;
+      const efforts = typeof fitBestEffortsByActivityId !== 'undefined' ? fitBestEffortsByActivityId : null;
+      if (pbTooltipSource !== activities || pbTooltipEffortSource !== efforts) {
+        window.dashboardTooltips?.invalidate?.();
+        pbTooltipSource = activities;
+        pbTooltipEffortSource = efforts;
+      }
+      registerPbTooltipAdapter();
+      pbTooltipBindings.splice(0).forEach(remove => remove());
+      pbTooltipTargets.clear();
 
       // ── Shared time axis across all sports so x-positions are comparable ──────
       const allSportMs = activities
@@ -684,6 +798,7 @@
       const ttRank   = document.getElementById('pbTooltipRank');
 
       function showPbTooltip(e, pb, rank, total, color) {
+        if (window.dashboardTooltips?.getPinned?.('personalBests')) { hidePbTooltip(); return; }
         ttTitle.textContent = pb.name || 'Activity';
         ttTitle.style.color = color;
         ttDate.textContent  = pb.date.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' });
@@ -727,6 +842,7 @@
       }
 
       function showPowerPbTooltip(e, pb, rank, total, color, durationLabel) {
+        if (window.dashboardTooltips?.getPinned?.('personalBests')) { hidePbTooltip(); return; }
         ttTitle.textContent = pb.name || 'Activity';
         ttTitle.style.color = color;
         ttDate.textContent = pb.date.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' });
@@ -786,7 +902,7 @@
           color,
           direction: 'up',
           formatValue,
-          records: records.map(item => ({ date: item.activity.date, value: item.value, title: item.activity.name || 'Activity' }))
+          records: records.map(item => ({ date: item.activity.date, value: item.value, title: item.activity.name || 'Activity', record: item.activity }))
         }, block);
 
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -853,7 +969,10 @@
           }
 
           const record = item;
+          bindPbTooltipTarget(hit, record, { scope: sport + '-' + title, rank: index + 1, total: records.length,
+            metricLabel, formattedValue: formatValue(item.value) });
           hit.addEventListener('mouseenter', function(e) {
+            if (window.dashboardTooltips?.getPinned?.('personalBests')) { hidePbTooltip(); return; }
             line.setAttribute('opacity', '1');
             ttTitle.textContent = record.activity.name || 'Activity';
             ttTitle.style.color = color;
@@ -947,6 +1066,8 @@
             appendCurrentBest(svg, x, y, Math.round(pb.watts) + ' W', color, 'left');
           }
 
+          bindPbTooltipTarget(hit, pb, { scope: 'Bike-power-' + (PB_BIKE_POWER_DURATIONS.find(duration => duration.seconds === pb.targetSeconds)?.label || pb.targetSeconds),
+            rank: index + 1, total: allPbs.length });
           hit.addEventListener('mouseenter', function(e) {
             line.setAttribute('opacity', '1');
             showPowerPbTooltip(e, pb, index + 1, allPbs.length, color, null);
@@ -1001,7 +1122,7 @@
             color,
             direction: 'down',
             formatValue: formatDurationHms,
-            records: allPbs.map(pb => ({ date: pb.date, value: pb.duration, title: pb.name || 'Activity' }))
+            records: allPbs.map(pb => ({ date: pb.date, value: pb.duration, title: pb.name || 'Activity', record: pb }))
           }, block);
           block.appendChild(header);
 
@@ -1086,8 +1207,9 @@
 
             // Hover events — close over immutable copies
             const pbSnap = pb;
-            const rank   = i + 1;
-            const total  = pbs.length;
+            const rank   = allPbs.indexOf(pb) + 1;
+            const total  = allPbs.length;
+            bindPbTooltipTarget(hit, pb, { scope: sport + '-' + distDef.label, rank: allPbs.indexOf(pb) + 1, total: allPbs.length });
             hit.addEventListener('mouseenter', function(e) {
               line.setAttribute('opacity', '1');
               showPbTooltip(e, pbSnap, rank, total, color);
@@ -1167,7 +1289,7 @@
             color,
             direction: 'up',
             formatValue: value => Math.round(value) + ' W',
-            records: allPbs.map(pb => ({ date: pb.date, value: pb.watts, title: pb.name || 'Activity' }))
+            records: allPbs.map(pb => ({ date: pb.date, value: pb.watts, title: pb.name || 'Activity', record: pb }))
           }, block);
           block.appendChild(header);
 
@@ -1270,6 +1392,7 @@
             hit.setAttribute('cx', px); hit.setAttribute('cy', py); hit.setAttribute('r', '6'); hit.setAttribute('fill', 'transparent');
             hit.setAttribute('class', 'profile-measurement-hit-area');
             hit.style.cursor = 'pointer';
+            bindPbTooltipTarget(hit, point, { scope: 'Bike-power-all-time-profile', rank: 1, total: 1 });
             hit.addEventListener('mouseenter', function(e) {
               highlight();
               showPowerPbTooltip(e, point.record, 1, 1, color, point.durationLabel);
@@ -1291,6 +1414,7 @@
             measurementHit.setAttribute('pointer-events', 'stroke');
             measurementHit.setAttribute('class', 'profile-measurement-hit-area');
             measurementHit.style.cursor = 'pointer';
+            bindPbTooltipTarget(measurementHit, point, { scope: 'Bike-power-all-time-profile', rank: 1, total: 1, focusable: false });
             measurementHit.addEventListener('mouseenter', function(e) {
               highlight();
               showPowerPbTooltip(e, point.record, 1, 1, color, point.durationLabel);
@@ -1331,4 +1455,6 @@
       const hasAnyPb = processedActivities.some(function(a) { return ['Swim','Run','Bike'].includes(a.sport); });
       const emptyState = document.getElementById('pbEmptyState');
       if (emptyState) emptyState.classList.toggle('hidden', hasAnyPb);
+      if (activePbDetailModel) renderPbDetailChart(activePbDetailModel);
+      window.dashboardTooltips?.refreshAnchor?.();
     }

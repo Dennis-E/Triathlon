@@ -553,8 +553,13 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: true },
           plugins: {
             legend: {
+              onClick(event, item, legend) {
+                window.dashboardTooltips?.invalidate();
+                Chart.defaults.plugins.legend.onClick.call(this, event, item, legend);
+              },
               display: selectedSportFilter === 'All', // Only show legend if multiple stacked
               position: 'top',
               labels: {
@@ -627,12 +632,14 @@
           }
         }
       });
+      window.dashboardTooltips?.attachChart('totalDistance', chartInstance);
     }
 
     // ─── End Personal Bests Visualization ────────────────────────────────────────
 
     // UI Interactive helpers for filters
     function setSportFilter(sport, render = true) {
+      if (sport !== selectedSportFilter) window.dashboardTooltips?.invalidate();
       selectedSportFilter = sport;
       
       // Update Buttons State
@@ -645,6 +652,7 @@
     }
 
     function setTimeframeFilter(timeframeKey) {
+      if (timeframeKey !== selectedTimeframeByAggregation[selectedAggregationLevel]) window.dashboardTooltips?.invalidate();
       selectedTimeframeByAggregation[selectedAggregationLevel] = timeframeKey;
       renderTimeframeButtons();
       renderDashboard();
@@ -658,6 +666,7 @@
       const selectedKey = selectedTimeframeByAggregation[selectedAggregationLevel];
 
       if (!options.some(opt => opt.key === selectedKey) && options[0]) {
+        window.dashboardTooltips?.invalidate();
         selectedTimeframeByAggregation[selectedAggregationLevel] = options[0].key;
       }
 
@@ -679,6 +688,7 @@
 
     // Aggregation level toggle
     function setAggregationLevel(level, render = true) {
+      if (level !== selectedAggregationLevel) window.dashboardTooltips?.invalidate();
       selectedAggregationLevel = level;
 
       // Update Buttons State
@@ -703,6 +713,7 @@
           return null;
         },
         values => {
+          if (selectedTimeframeByAggregation[values.aggregation] !== values.timeframe) window.dashboardTooltips?.invalidate();
           selectedTimeframeByAggregation[values.aggregation] = values.timeframe;
           setAggregationLevel(values.aggregation, false);
           setSportFilter(values.sport, false);

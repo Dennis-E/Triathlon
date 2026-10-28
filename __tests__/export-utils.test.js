@@ -3,6 +3,7 @@ const {
   computeContainFit,
   computeExportContentFit,
   computeExportContentLayout,
+  computeTooltipAnnotationLayout,
   computeExportMetadataLayout,
   computeFilterRowLayout,
   getTabDisplayTitle,
@@ -252,6 +253,124 @@ describe('export-utils', () => {
     });
   });
 
+  describe('computeTooltipAnnotationLayout', () => {
+    const measureText = text => Array.from(text).reduce((width, character) => width + (character.codePointAt(0) > 127 ? 20 : 10), 0);
+    const options = { maxWidth: 400, maxHeight: 280, measureText };
+    const content = {
+      title: 'Morning run', itemLabel: 'Activity 42',
+      sections: [{ heading: 'Summary', rows: [{ label: 'Distance', value: 0, unit: 'km' }, { label: 'Pace', value: 'Unavailable' }] }],
+      footerLines: ['Total: 1 activity'], notes: ['Estimated data']
+    };
+
+    it('preserves ordered full semantic content and returns exact padded dimensions', () => {
+      const before = JSON.parse(JSON.stringify(content));
+      expect(computeTooltipAnnotationLayout({ ...options, content })).toEqual({
+        mode: 'full',
+        lines: ['Morning run', 'Activity 42', 'Summary', 'Distance: 0 km', 'Pace: Unavailable', 'Total: 1 activity', 'Estimated data'],
+        width: 194, height: 192, fontSize: 18, lineHeight: 24, padding: 12
+      });
+      expect(content).toEqual(before);
+    });
+
+    it('compacts many detail rows to the whole wrapped title without truncation or shrinking', () => {
+      const title = 'Complete grouped activity title';
+      const result = computeTooltipAnnotationLayout({
+        ...options, maxWidth: 184, maxHeight: 96,
+        content: { title, sections: [{ rows: Array.from({ length: 100 }, () => ({ label: 'Distance', value: '12', unit: 'km' })) }] }
+      });
+      expect(result).toEqual({ mode: 'headline', lines: ['Complete grouped', 'activity title'], width: 184, height: 72, fontSize: 18, lineHeight: 24, padding: 12 });
+      expect(result.lines.join(' ')).toBe(title);
+    });
+
+    it('uses the complete item/group label when the title is absent or blank', () => {
+      const result = computeTooltipAnnotationLayout({
+        ...options, maxHeight: 48,
+        content: { title: '  ', itemLabel: 'Group of 3 runs', notes: ['Detail not omitted from the original model'] }
+      });
+      expect(result).toMatchObject({ mode: 'headline', lines: ['Group of 3 runs'], height: 48 });
+      expect(computeTooltipAnnotationLayout({ ...options, content: { itemLabel: 'Group of 3 runs' } }).lines).toEqual(['Group of 3 runs']);
+    });
+
+    it.each(['outside current view', 'not in export'])('retains required association in full and headline modes: %s', associationNote => {
+      const full = computeTooltipAnnotationLayout({ ...options, content: { title: 'Run' }, associationNote });
+      const compact = computeTooltipAnnotationLayout({ ...options, maxHeight: 72, content, associationNote });
+      expect(full.mode).toBe('full');
+      expect(compact.mode).toBe('headline');
+      expect(full.lines).toEqual(['Run', associationNote]);
+      expect(compact.lines).toEqual(['Morning run', associationNote]);
+    });
+
+    it('wraps the entire required association and fits exactly at the compact height boundary', () => {
+      const bounds = {
+        ...options, maxWidth: 124, maxHeight: 144,
+        content: { title: 'Group title', notes: ['Detail '.repeat(100)] },
+        associationNote: 'outside current view'
+      };
+      expect(computeTooltipAnnotationLayout(bounds)).toEqual({
+        mode: 'headline', lines: ['Group', 'title', 'outside', 'current', 'view'],
+        width: 94, height: 144, fontSize: 18, lineHeight: 24, padding: 12
+      });
+      expect(() => computeTooltipAnnotationLayout({ ...bounds, maxHeight: 143 })).toThrow(/tooltip annotation.*fit/i);
+    });
+
+    it('measures wide Unicode code points and long words without losing text', () => {
+      const title = '\u754c\u754c\u{1F3C3}\u754cABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      const result = computeTooltipAnnotationLayout({ ...options, maxWidth: 84, maxHeight: 280, content: { title } });
+      expect(result.mode).toBe('full');
+      expect(result.lines.join('')).toBe(title);
+      expect(result.lines.every(line => measureText(line) <= 60)).toBe(true);
+      expect(result.width).toBeLessThanOrEqual(84);
+      expect(result.lines).toContain('\u754c\u754c\u{1F3C3}');
+    });
+
+    it('wraps explicit newlines and keeps unbroken detail values and units', () => {
+      const result = computeTooltipAnnotationLayout({
+        ...options, maxWidth: 124,
+        content: { title: 'Run\nBike', sections: [{ rows: [{ label: 'ID', value: 'ABCDEFGHIJKLMNOP', unit: 'km' }] }] }
+      });
+      expect(result.lines.slice(0, 2)).toEqual(['Run', 'Bike']);
+      expect(result.lines.slice(2).join('').replace(/\s/g, '')).toBe('ID:ABCDEFGHIJKLMNOPkm');
+    });
+
+    it('accepts canvas TextMetrics measurements and never lowers the requested font', () => {
+      const measure = jest.fn(() => ({ width: 60 }));
+      const result = computeTooltipAnnotationLayout({ ...options, content: { title: 'Run' }, measureText: measure, fontSize: 22, lineHeight: 28, padding: 8 });
+      expect(result).toEqual({ mode: 'full', lines: ['Run'], width: 76, height: 44, fontSize: 22, lineHeight: 28, padding: 8 });
+      expect(measure).toHaveBeenCalledWith('Run', 22);
+      expect(computeTooltipAnnotationLayout({ ...options, content: { title: 'Run' }, fontSize: 12, lineHeight: 10 })).toMatchObject({ fontSize: 18, lineHeight: 18 });
+    });
+
+    it('compacts instead of shrinking a larger requested font to fit more details', () => {
+      const measure = (value, size) => Array.from(value).length * size;
+      expect(computeTooltipAnnotationLayout({
+        ...options, content: { title: 'Run', notes: ['Detail'] }, measureText: measure,
+        fontSize: 30, lineHeight: 36, maxHeight: 60
+      })).toEqual({ mode: 'headline', lines: ['Run'], width: 114, height: 60, fontSize: 30, lineHeight: 36, padding: 12 });
+    });
+
+    it('uses headline when only a detail character cannot fit', () => {
+      expect(computeTooltipAnnotationLayout({
+        ...options, maxWidth: 34, content: { title: 'A', notes: ['\u754c'] }
+      })).toMatchObject({ mode: 'headline', lines: ['A'] });
+    });
+
+    it.each([
+      { maxWidth: 33, maxHeight: 280, content: { title: 'A' } },
+      { maxWidth: 400, maxHeight: 47, content: { title: 'Run' } },
+      { maxWidth: 400, maxHeight: 71, content: { title: 'Run' }, associationNote: 'outside current view' }
+    ])('throws an explicit fit error only when the complete headline plus association cannot fit: %p', bounds => {
+      expect(() => computeTooltipAnnotationLayout({ ...options, ...bounds })).toThrow(/tooltip annotation.*fit/i);
+    });
+
+    it('exposes the helper through the existing browser bridge', () => {
+      const context = { window: {} };
+      require('vm').runInNewContext(require('fs').readFileSync(require('path').join(__dirname, '../src/export-utils.js'), 'utf8'), context);
+      expect(context.window.exportUtils.computeTooltipAnnotationLayout({ ...options, content: { title: 'Run' } })).toEqual(
+        computeTooltipAnnotationLayout({ ...options, content: { title: 'Run' } })
+      );
+    });
+  });
+
   describe('computeExportContentLayout', () => {
     const canvas = {
       canvasWidth: 1080,
@@ -275,6 +394,40 @@ describe('export-utils', () => {
 
       expect(layout.context).toEqual({ x: 60, y: 205, width: 960, height: 36 });
       expect(layout.visualization).toEqual({ x: 60, y: 253, width: 960, height: 803 });
+    });
+
+    it.each([undefined, 0, -24])('preserves the exact no-pin output for annotationHeight %p', annotationHeight => {
+      expect(computeExportContentLayout({ ...canvas, contextHeight: 36, annotationHeight })).toEqual({
+        context: { x: 60, y: 205, width: 960, height: 36 },
+        visualization: { x: 60, y: 253, width: 960, height: 803 }
+      });
+    });
+
+    it('preserves the exact default output and reserves annotation below a context-free visualization', () => {
+      expect(computeExportContentLayout()).toEqual({
+        context: null, visualization: { x: 60, y: 205, width: 960, height: 851 }
+      });
+      expect(computeExportContentLayout({ annotationHeight: 280 })).toEqual({
+        context: null,
+        visualization: { x: 60, y: 205, width: 960, height: 571 },
+        annotation: { x: 60, y: 776, width: 960, height: 280 }
+      });
+    });
+
+    it('reserves a separate annotation below the chart without moving header/context/legend capture bounds', () => {
+      const annotation = computeTooltipAnnotationLayout({ content: { title: 'Run' }, maxWidth: 960, maxHeight: 280, measureText: text => text.length * 10 });
+      const layout = computeExportContentLayout({ ...canvas, contextHeight: 36, annotationHeight: annotation.height });
+      expect(layout).toEqual({
+        context: { x: 60, y: 205, width: 960, height: 36 },
+        visualization: { x: 60, y: 253, width: 960, height: 755 },
+        annotation: { x: 60, y: 1008, width: 960, height: 48 }
+      });
+      expect(layout.annotation.y).toBe(layout.visualization.y + layout.visualization.height);
+      expect(layout.annotation.y + layout.annotation.height).toBe(canvas.canvasHeight - canvas.bottomMargin);
+    });
+
+    it('rejects annotation reservations that would overlap protected context or overflow the canvas', () => {
+      expect(() => computeExportContentLayout({ ...canvas, contextHeight: 36, annotationHeight: 804 })).toThrow(/annotation.*fit/i);
     });
 
     it.each([[1600, 900], [400, 900]])('fits a %i x %i capture proportionally within the available visualization bounds', (sourceWidth, sourceHeight) => {
@@ -396,6 +549,30 @@ describe('export-utils', () => {
   });
 
   describe('export target metadata', () => {
+    it('deep-copies legend metadata and keeps all existing target metadata independent in both directions', () => {
+      const input = {
+        kind: 'tab', key: 'paceMetrics', title: 'Pace', targetElementId: 'chart', hasData: true,
+        filters: [{ label: 'Sport', value: 'Run' }],
+        availableControls: [{ label: 'View', controls: [{ label: 'Pace', selected: true }] }],
+        legend: { title: 'Measures', items: [{ label: 'Pace', color: '#123456', metadata: { units: ['min/km'] } }], metadata: { palette: ['red'] } }
+      };
+      const target = createExportTarget(input);
+      expect(target.legend).toEqual(input.legend);
+      input.legend.items[0].metadata.units[0] = 'km/h';
+      input.legend.items.push({ label: 'Speed' });
+      input.legend.metadata.palette[0] = 'blue';
+      input.filters[0].value = 'Bike';
+      input.availableControls[0].controls[0].selected = false;
+      expect(target.legend.items).toEqual([{ label: 'Pace', color: '#123456', metadata: { units: ['min/km'] } }]);
+      expect(target.legend.metadata.palette).toEqual(['red']);
+      expect(target.filters[0].value).toBe('Run');
+      expect(target.availableControls[0].controls[0].selected).toBe(true);
+      target.legend.items[0].label = 'Changed';
+      target.legend.metadata.palette.push('green');
+      expect(input.legend.items[0].label).toBe('Pace');
+      expect(input.legend.metadata.palette).toEqual(['blue']);
+    });
+
     it('validates a visualization target and preserves its context', () => {
       const target = createExportTarget({
         kind: 'tab',

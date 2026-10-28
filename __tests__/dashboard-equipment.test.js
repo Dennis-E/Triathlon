@@ -38,7 +38,8 @@ function harness(width = 768) {
   const elements = Object.fromEntries([
     'equipmentChart', 'equipmentCanvasArea', 'equipmentChartWrapper',
     'equipmentEmptyState', 'equipmentValueFallback', 'equipmentPaceExplanation',
-    'equipmentColorSchemeControl', 'equipmentColorScheme'
+    'equipmentColorSchemeControl', 'equipmentColorScheme',
+    'equipmentTimelineChart', 'equipmentTimelineWrapper', 'equipmentTimelineEmptyState'
   ].map(id => [id, element(id)]));
   const text = [];
   const gradients = [];
@@ -54,19 +55,21 @@ function harness(width = 768) {
   };
   elements.equipmentCanvasArea.clientWidth = width;
   elements.equipmentChart.getContext = () => ctx;
+  elements.equipmentTimelineChart.getContext = () => ctx;
   const charts = [];
   class Chart {
     constructor(context, config) {
       this.ctx = context;
       this.data = config.data;
+      this.config = config;
       this.options = config.options;
       this.plugins = config.plugins;
       this.width = width;
       this.chartArea = { left: 0, right: width - config.options.layout.padding.right };
       this.scales = { x: { getPixelForValue: value => this.chartArea.left + value * (this.chartArea.right - this.chartArea.left) } };
-      this.bars = this.data.labels.map((_, index) => ({
+      this.bars = (this.data.labels || this.data.datasets[0].data).map((_, index) => ({
         x: this.chartArea.right, y: 50 + index * 56,
-        options: { backgroundColor: this.data.datasets[0].backgroundColor[index], borderRadius: 6 }
+        options: { backgroundColor: this.data.datasets[0].backgroundColor?.[index], borderRadius: 6 }
       }));
       this.destroy = jest.fn();
       charts.push(this);
@@ -89,7 +92,8 @@ function harness(width = 768) {
     }
   }
   const sandbox = {
-    window: { equipmentUtils, distributionUtils }, Chart,
+    window: { equipmentUtils, distributionUtils,
+      dashboardTooltips: { attachChart: jest.fn(), invalidate: jest.fn() } }, Chart,
     document: {
       getElementById: id => elements[id] || null,
       querySelectorAll: () => [],
@@ -106,6 +110,91 @@ function harness(width = 768) {
 }
 
 describe('equipment chart', () => {
+  it('attaches every equipment metric and preserves native display values', () => {
+    const h = harness();
+    for (const [metric, expected] of [['distance', '40.0 km'], ['pace', '4:00 /km'], ['count', '1'], ['avgLength', '40']]) {
+      h.sandbox.setEquipmentMetric(metric);
+      const chart = h.charts.at(-1);
+      expect(h.sandbox.window.dashboardTooltips.attachChart).toHaveBeenLastCalledWith('equipment', chart);
+      expect(String(chart.options.plugins.tooltip.callbacks.label({ dataIndex: 0, raw: chart.data.datasets[0].data[0] }))).toBe(expected);
+    }
+  });
+
+  it('attaches continuous timeline with full interval detail and excludes spacer hits', () => {
+    const h = harness();
+    h.sandbox.processedActivities = [
+      { equipment: 'Nike Fast', date: new Date('2025-01-01'), distance: 10, sport: 'Run', name: 'First' },
+      { equipment: 'Nike Fast', date: new Date('2025-01-03'), distance: 20, sport: 'Run', name: 'Last' }
+    ];
+    h.sandbox.renderEquipmentTimeline();
+    const chart = h.charts.at(-1);
+    expect(h.sandbox.window.dashboardTooltips.attachChart).toHaveBeenLastCalledWith('equipmentTimeline', chart);
+    const tooltip = chart.options.plugins.tooltip;
+    expect(tooltip.callbacks.title([{ dataIndex: 0 }])).toBe('Nike Fast');
+    expect(tooltip.callbacks.label({ datasetIndex: 1, dataIndex: 0 })).toEqual([
+      'From: 1 Jan 2025', 'To:   3 Jan 2025', 'Distance: 30.0 km', 'Activities: 2'
+    ]);
+    expect(chart.data.datasets[0].label).toBe('');
+    expect(tooltip.filter({ datasetIndex: 0 })).toBe(false);
+    const spacer = {};
+    chart.getDatasetMeta = index => ({ data: index === 0 ? [spacer] : [{}] });
+    chart.plugins.forEach(plugin => plugin.afterUpdate?.(chart));
+    expect(spacer.skip).toBe(true);
+  });
+
+  it('uses the exact activity rectangle rather than the hidden zero-radius point for hits', () => {
+    const h = harness();
+    h.sandbox.processedActivities = [{ equipment: 'Nike Fast', date: new Date('2025-01-01'), distance: 10, sport: 'Run', name: 'Morning run' }];
+    h.sandbox.setEquipmentTimelineMode('activities');
+    const chart = h.charts.at(-1);
+    expect(h.sandbox.window.dashboardTooltips.attachChart).toHaveBeenLastCalledWith('equipmentTimeline', chart);
+    const point = chart.data.datasets[0].data[0];
+    const target = {};
+    chart.scales = { x: { getPixelForValue: value => 100 + (value - point.x) / point.widthMs * 20 }, y: { height: 100, getPixelForValue: () => 50 } };
+    chart.getDatasetMeta = () => ({ data: [target] });
+    chart.plugins.forEach(plugin => plugin.afterUpdate?.(chart));
+    expect(chart.data.datasets[0].pointRadius).toBe(0);
+    expect(target.inRange(109, 76)).toBe(true);
+    expect(target.inRange(111, 50)).toBe(false);
+    expect(target.inRange(100, 78)).toBe(false);
+    expect(target.getRange('x')).toBe(10);
+    chart.scales.x.getPixelForValue = value => 100 + (value - point.x) / point.widthMs * 40;
+    expect(target.inRange(119, 50)).toBe(true);
+    expect(target.inRange(121, 50)).toBe(false);
+    expect(target.getRange('x')).toBe(20);
+    expect(chart.options.plugins.tooltip.callbacks.title([{ datasetIndex: 0 }])).toBe('Nike Fast');
+    expect(chart.options.plugins.tooltip.callbacks.label({ raw: point })).toEqual(['Activity: Morning run', 'Date: 1 Jan 2025', 'Distance: 10.0 km', 'Sport: Run']);
+  });
+
+  it('invalidates before data settings, but not palette or resize', () => {
+    const h = harness();
+    const tooltips = h.sandbox.window.dashboardTooltips;
+    for (const [setter, value, state] of [
+      ['setEquipmentMetric', 'pace', 'selectedEquipmentMetric'],
+      ['setEquipmentFilter', 'Shoes', 'selectedEquipmentFilter'],
+      ['setEquipmentTimelineFilter', 'Bikes', 'selectedEquipmentTimelineFilter'],
+      ['setEquipmentTimelineMode', 'activities', 'selectedEquipmentTimelineMode']
+    ]) {
+      const previous = vm.runInContext(state, h.sandbox);
+      tooltips.invalidate.mockImplementationOnce(() => expect(vm.runInContext(state, h.sandbox)).toBe(previous));
+      h.sandbox[setter](value, false);
+    }
+    expect(tooltips.invalidate).toHaveBeenCalledTimes(4);
+    tooltips.invalidate.mockClear();
+    h.sandbox.setEquipmentColorScheme('monochrome-blue');
+    h.charts.at(-1).resize(375);
+    expect(tooltips.invalidate).not.toHaveBeenCalled();
+  });
+
+  it('does not attach equipment or either timeline mode with no data', () => {
+    const h = harness();
+    h.sandbox.processedActivities = [];
+    h.sandbox.renderEquipmentChart();
+    h.sandbox.renderEquipmentTimeline();
+    h.sandbox.setEquipmentTimelineMode('activities');
+    expect(h.sandbox.window.dashboardTooltips.attachChart).not.toHaveBeenCalled();
+  });
+
   it('applies mileage and timeline combinations independently with one render each', () => {
     const h = harness();
     h.sandbox.window.dashboardTabNavigation = require('../src/tab-navigation');

@@ -10,6 +10,51 @@
   let currentRenderHasContent = false;
   let currentRenderPromise = Promise.resolve(false);
   let resolveCurrentRender = null;
+  let tooltipAdapter = null;
+  const wordAnchors = new Map();
+
+  function registerWordTooltipAdapter() {
+    const api = window.dashboardTooltips;
+    if (!api?.registerAdapter || tooltipAdapter) return;
+    const adapter = {
+      readContext: () => api.readContext('wordcloud'),
+      projectAnchor: selection => {
+        const anchor = wordAnchors.get(selection.anchor.itemId);
+        if (!anchor) return selection.anchor;
+        return { ...selection.anchor, normalizedPoint: wordPoint(anchor.target, anchor.dimension) };
+      },
+      dispose() { wordAnchors.clear(); tooltipAdapter = null; }
+    };
+    api.registerAdapter('wordcloud', adapter);
+    tooltipAdapter = adapter;
+  }
+
+  function wordPoint(target, dimension) {
+    const rect = target?.getBoundingClientRect?.();
+    const point = { x: Number.isFinite(rect?.left) ? (rect.left + (rect.width || 0) / 2) / (window.innerWidth || 800) : 0.5,
+      y: Number.isFinite(rect?.top) ? (rect.top + (rect.height || 0) / 2) / (window.innerHeight || 600) : 0.5 };
+    if (dimension && rect && target.width && target.height) {
+      const localX = Number(dimension.x) + (Number(dimension.w) || 0) / 2;
+      const localY = Number(dimension.y) + (Number(dimension.h) || 0) / 2;
+      if (Number.isFinite(localX) && Number.isFinite(localY)) {
+        point.x = (rect.left + localX * rect.width / target.width) / (window.innerWidth || 800);
+        point.y = (rect.top + localY * rect.height / target.height) / (window.innerHeight || 600);
+      }
+    }
+    return point;
+  }
+
+  function inspectWord(word, target, pinned, dimension) {
+    const entry = rankedWords.find(candidate => candidate.word === word);
+    if (!entry || !tooltipAdapter || !window.dashboardTooltips?.show) return;
+    wordAnchors.set(word, { target, dimension });
+    const point = wordPoint(target, dimension);
+    window.dashboardTooltips.show('wordcloud', {
+      selectionKey: `wordcloud:${word}`,
+      content: { title: word, itemLabel: word, sections: [{ heading: '', rows: [{ label: 'Occurrences', value: String(entry.count) }] }], footerLines: [], notes: [] },
+      anchor: { kind: 'word', itemId: word, normalizedPoint: point, visibility: 'visible', associationLabel: word }
+    }, pinned, target);
+  }
 
   const WORD_COLORS = ['#67e8f9', '#a5b4fc', '#f9a8d4', '#fde68a', '#86efac', '#c4b5fd'];
 
@@ -77,6 +122,7 @@
       checkbox.className = 'h-4 w-4 shrink-0 rounded border-slate-600 bg-slate-950 text-indigo-500 focus:ring-indigo-500';
       checkbox.setAttribute('aria-label', `Show ${entry.word}, ${entry.count} occurrences`);
       checkbox.addEventListener('change', () => {
+        window.dashboardTooltips?.invalidate?.();
         selectedWords.set(entry.word, checkbox.checked);
         updateCloud(elements, topWords);
       });
@@ -90,9 +136,26 @@
       count.className = 'shrink-0 text-xs tabular-nums text-slate-400';
       count.textContent = entry.count.toLocaleString();
       count.setAttribute('aria-label', `${entry.count} occurrences`);
-      row.append(label, count);
+      const pin = document.createElement('button');
+      pin.type = 'button';
+      pin.className = 'h-7 w-7 shrink-0 rounded border border-slate-600 text-slate-200';
+      pin.title = `Pin details for ${entry.word}`;
+      pin.setAttribute('aria-label', `Pin details for ${entry.word}`);
+      pin.setAttribute('data-tooltip-inspector', 'true');
+      const icon = document.createElement('i');
+      icon.setAttribute('data-lucide', 'pin');
+      icon.setAttribute('aria-hidden', 'true');
+      icon.className = 'h-4 w-4 mx-auto';
+      pin.appendChild(icon);
+      pin.addEventListener('click', () => inspectWord(entry.word, pin, true));
+      pin.addEventListener('focus', () => inspectWord(entry.word, pin, false));
+      pin.addEventListener('blur', () => window.dashboardTooltips?.send?.({ type: 'leave' }));
+      row.append(label, count, pin);
       elements.list.appendChild(row);
+      const anchor = wordAnchors.get(entry.word);
+      if (anchor && anchor.target !== elements.canvas) wordAnchors.set(entry.word, { target: pin });
     });
+    window.lucide?.createIcons?.();
   }
 
   function getCanvasDimensions(canvas) {
@@ -186,6 +249,7 @@
       if (!isCurrent()) { finishCloudRender(version, false, false); return; }
       renderUnplacedNotice(elements, included.filter(entry => !drawnWords.has(entry.word)).map(entry => entry.word));
       finishCloudRender(version, true, drawnWords.size > 0);
+      window.dashboardTooltips?.refreshAnchor?.();
     };
     const onWordcloudAbort = () => {
       cleanupListeners();
@@ -211,6 +275,14 @@
         abortThreshold: 350,
         abort() {},
         backgroundColor: '#020617',
+        hover(item, dimension) {
+          if (!isCurrent()) return;
+          if (!item) { window.dashboardTooltips?.send?.({ type: 'leave' }); return; }
+          inspectWord(item[0], elements.canvas, false, dimension);
+        },
+        click(item, dimension) {
+          if (isCurrent() && item) inspectWord(item[0], elements.canvas, true, dimension);
+        },
         color: word => getWordColor(word),
         weightFactor: count => {
           if (maxLog <= minLog) return 28;
@@ -240,7 +312,10 @@
   function initializeControls(elements) {
     if (listenersInitialized) return;
     listenersInitialized = true;
-    if (elements.slider) elements.slider.addEventListener('input', () => updateWordCount(getElements()));
+    if (elements.slider) elements.slider.addEventListener('input', () => {
+      window.dashboardTooltips?.invalidate?.();
+      updateWordCount(getElements());
+    });
     if (typeof ResizeObserver !== 'undefined' && elements.canvas && elements.canvas.parentElement) {
       resizeObserver = new ResizeObserver(() => {
         const current = getElements();
@@ -262,6 +337,7 @@
 
   function synchronizeWordcloudSource() {
     if (activitySource !== processedActivities) {
+      window.dashboardTooltips?.invalidate?.();
       activitySource = processedActivities;
       rankedWords = window.wordcloudUtils.getWordFrequencies(processedActivities);
       selectedWords = new Map();
@@ -285,6 +361,7 @@
       },
       values => {
         const elements = getElements();
+        window.dashboardTooltips?.invalidate?.();
         if (elements.slider) elements.slider.value = String(values.count);
         Object.entries(values).filter(([id]) => id.startsWith('word:')).forEach(([id, enabled]) => selectedWords.set(id.slice(5), enabled));
         updateWordCount(elements);
@@ -294,6 +371,7 @@
 
   function renderWordcloud() {
     const elements = getElements();
+    registerWordTooltipAdapter();
     initializeControls(elements);
     rankedListExpanded = true;
     applyRankedListLayout(elements);

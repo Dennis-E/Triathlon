@@ -333,6 +333,7 @@
 
       const isLifetimeKpiExport = target.contentFit === 'lifetime-kpis';
       const contentX = target.kind === 'pb-tile' || isLifetimeKpiExport ? 24 : 60;
+      const contentWidth = target.kind === 'pb-tile' || isLifetimeKpiExport ? 1032 : 960;
 
       const layout = window.exportUtils.computeExportContentLayout({
         canvasWidth: targetSize,
@@ -341,7 +342,8 @@
         marginX: contentX,
         topGap: isLifetimeKpiExport ? 0 : 15,
         bottomMargin: isLifetimeKpiExport ? 50 : target.legend ? 76 : 24,
-        contextHeight: 0
+        contextHeight: 0,
+        annotationHeight: target.pinnedSelection ? getExportTooltipLayout(ctx, target, contentWidth).height : 0
       });
       const fit = window.exportUtils.computeContainFit(
         captured.width,
@@ -357,10 +359,28 @@
         fit.drawHeight
       );
 
+      if (target.pinnedSelection) {
+        const annotation = getExportTooltipLayout(ctx, target, contentWidth);
+        const box = layout.annotation;
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(box.x, box.y, box.width, box.height);
+        ctx.fillStyle = '#f1f5f9';
+        ctx.font = `500 ${annotation.fontSize}px system-ui, sans-serif`;
+        annotation.lines.forEach((line, index) => ctx.fillText(line, box.x + annotation.padding, box.y + annotation.padding + annotation.fontSize + index * annotation.lineHeight));
+        const anchor = target.pinnedSelection.anchor;
+        if (anchor.visibility === 'visible' && anchor.capturePoint && ctx.beginPath) {
+          const pointX = layout.visualization.x + (layout.visualization.width - fit.drawWidth) / 2 + anchor.capturePoint.x * fit.drawWidth;
+          const pointY = layout.visualization.y + (layout.visualization.height - fit.drawHeight) / 2 + anchor.capturePoint.y * fit.drawHeight;
+          ctx.strokeStyle = '#2dd4bf'; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(pointX, pointY, 8, 0, Math.PI * 2); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(pointX, pointY + 8); ctx.lineTo(box.x + 12, box.y); ctx.stroke();
+        }
+      }
+
       if (isLifetimeKpiExport) return finalCanvas.toDataURL('image/png');
 
       if (target.legend) {
-        const legendY = layout.visualization.y + layout.visualization.height + 28;
+        const legendY = layout.visualization.y + layout.visualization.height + (layout.annotation?.height || 0) + 28;
         ctx.fillStyle = '#94a3b8';
         ctx.font = '600 22px system-ui, -apple-system, "Segoe UI", sans-serif';
         ctx.fillText(target.legend.title, 60, legendY);
@@ -382,6 +402,45 @@
       }
 
       return finalCanvas.toDataURL('image/png');
+    }
+
+    function getExportTooltipLayout(ctx, target, maxWidth) {
+      const selected = target.pinnedSelection;
+      ctx.font = '500 18px system-ui, sans-serif';
+      const associationNote = selected.anchor.visibility === 'outside-view'
+        ? 'Selected item is outside the current view'
+        : selected.anchor.visibility === 'not-in-export' ? selected.anchor.associationLabel : '';
+      return window.exportUtils.computeTooltipAnnotationLayout({ content: selected.content, maxWidth, maxHeight: 280, measureText: text => ctx.measureText(text), associationNote });
+    }
+
+    function createExportCaptureSnapshot(targetEl, tabId) {
+      const adapter = window.dashboardTooltips?.adapters.get(tabId);
+      const renderer = adapter?.snapshotCapture?.();
+      const clonedTarget = targetEl.cloneNode ? targetEl.cloneNode(true) : { ...targetEl };
+      const sourceCanvases = targetEl.tagName === 'CANVAS' ? [targetEl] : Array.from(targetEl.querySelectorAll?.('canvas') || []);
+      const clonedCanvases = clonedTarget.tagName === 'CANVAS' ? [clonedTarget] : Array.from(clonedTarget.querySelectorAll?.('canvas') || []);
+      sourceCanvases.forEach((canvas, index) => {
+        const copy = clonedCanvases[index];
+        if (!copy) throw new Error('Could not isolate the chart for export');
+        copy.width = canvas.width; copy.height = canvas.height;
+        const source = renderer?.sourceCanvas === canvas ? renderer.canvas : canvas;
+        copy.getContext('2d').drawImage(source, 0, 0, copy.width, copy.height);
+      });
+      const sourceImages = Array.from(targetEl.querySelectorAll?.('img') || []);
+      Array.from(clonedTarget.querySelectorAll?.('img') || []).forEach((image, index) => {
+        image.src = sourceImages[index]?.currentSrc || sourceImages[index]?.src || image.src;
+        image.removeAttribute?.('srcset');
+      });
+      Array.from(clonedTarget.querySelectorAll?.('#heatmapActivityTooltip, #trainingCalendarDayTooltip, #pbTooltip, .visualization-detail-tooltip, [data-export-exclude]') || []).forEach(element => element.remove());
+      const mediaLease = tabId === 'mediaGallery' ? window.mediaGalleryDashboard?.acquireExportCapture?.(targetEl) : null;
+      if (clonedTarget.nodeType === 1) {
+        const rect = targetEl.getBoundingClientRect();
+        clonedTarget.id = `${targetEl.id || tabId}-export-snapshot`;
+        Object.assign(clonedTarget.style, { position: 'fixed', left: '-100000px', top: '0', width: `${rect.width}px`, height: `${rect.height}px`, maxWidth: 'none', margin: '0', pointerEvents: 'none' });
+        clonedTarget.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(clonedTarget);
+      }
+      return { element: clonedTarget, prepare: () => mediaLease?.prepare(clonedTarget), release() { mediaLease?.release(); if (clonedTarget.nodeType === 1) clonedTarget.remove(); } };
     }
 
     // Chart.js exposes no consistent cross-version "isAnimating" API, so a short settle
@@ -446,8 +505,14 @@
     async function prepareExportImage(dataUrl, target, pbOpening = null) {
       const blob = exportDataUrlToBlob(dataUrl);
       const image = new Image();
-      image.src = dataUrl;
-      await image.decode();
+      await new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = () => reject(new Error('Could not prepare the export image. Please export again.'));
+        image.src = dataUrl;
+        if (typeof image.decode === 'function') image.decode().then(resolve, reject);
+      });
+      image.onload = null;
+      image.onerror = null;
       if (!(image.naturalWidth > 0 && image.naturalHeight > 0)) {
         throw new Error('Could not prepare the export image. Please export again.');
       }
@@ -552,24 +617,18 @@
 
       exportRequestState = 'capturing';
       const pbOpening = target.kind === 'pb-tile' && typeof pbDetailOpening !== 'undefined' ? pbDetailOpening : null;
-      const tooltip = document.getElementById('trainingCalendarDayTooltip');
-      const tooltipWasVisible = tooltip && !tooltip.classList.contains('hidden');
+      let snapshot = null;
       try {
-        if (tooltipWasVisible) tooltip.classList.add('hidden');
+        const tabId = target.kind === 'pb-tile' ? 'personalBests' : target.key;
+        target = JSON.parse(JSON.stringify(target));
+        target.pinnedSelection = window.dashboardTooltips?.getPinned(tabId) || null;
+        const heatmapPalette = document.getElementById('heatmapColorScheme')?.value;
         if (target.key === 'wordcloud') {
-          const completed = await window.wordcloudDashboard.waitForCurrentRender();
-          if (!completed || !window.wordcloudDashboard.hasExportableCloud()) {
-            exportRequestState = 'idle';
-            showExportToast('The Wordcloud is not ready to export. Wait for the cloud to finish rendering and try again.');
-            return;
-          }
+          if (!window.wordcloudDashboard.hasExportableCloud()) throw new Error('The Wordcloud is not ready to export. Wait for the cloud to finish rendering and try again.');
         }
-        await waitForChartRenderSettle();
-        if (target.key === 'wordcloud' && !window.wordcloudDashboard.hasExportableCloud()) {
-          exportRequestState = 'idle';
-          showExportToast('The Wordcloud changed before capture completed. Wait for the current cloud and try again.');
-          return;
-        }
+        snapshot = createExportCaptureSnapshot(targetEl, tabId);
+        if (window.tooltipSelectionUtils) target = window.tooltipSelectionUtils.freezePlain(window.tooltipSelectionUtils.copyPlain(target));
+        await snapshot.prepare();
         const assets = await loadExportAssets();
 
         const captureOptions = {
@@ -578,7 +637,8 @@
           logging: false,
           windowWidth: ['pieCharts', 'heatmap'].includes(target.key) ? Math.max(window.innerWidth || 0, 1200) : undefined,
           onclone: clonedDocument => {
-            const clonedTarget = clonedDocument.getElementById(target.targetElementId);
+            const clonedTarget = clonedDocument.getElementById(snapshot.element.id || target.targetElementId)
+              || clonedDocument.getElementById(target.targetElementId);
             if (!clonedTarget) return;
             clonedTarget.style.border = 'none';
             clonedTarget.style.borderRadius = '0px';
@@ -655,7 +715,7 @@
               clonedTarget.style.height = '500px';
               clonedTarget.style.maxWidth = 'none';
               clonedTarget.querySelectorAll?.('.leaflet-control-zoom').forEach(control => control.remove());
-              if (document.getElementById('heatmapColorScheme')?.value === 'black-fire') {
+              if (heatmapPalette === 'black-fire') {
                 const tileLayer = clonedTarget.querySelector('.leaflet-tile-pane .leaflet-layer');
                 if (tileLayer) {
                   tileLayer.style.filter = '';
@@ -677,11 +737,12 @@
             clonedTarget.style.maxWidth = 'none';
           }
         };
+        const capture = () => html2canvas(snapshot.element, captureOptions);
         const captured = target.key === 'heatmap'
           && window.heatmapDashboard
           && typeof window.heatmapDashboard.captureAtExportSize === 'function'
-          ? await window.heatmapDashboard.captureAtExportSize(() => html2canvas(targetEl, captureOptions))
-          : await html2canvas(targetEl, captureOptions);
+          ? await window.heatmapDashboard.captureAtExportSize(capture)
+          : await capture();
         const dataUrl = drawExportComposition(captured, target, assets);
         lastExportedImage = await prepareExportImage(dataUrl, target, pbOpening);
 
@@ -692,7 +753,7 @@
         exportRequestState = 'idle';
         showExportToast(error.message || 'Could not export this visualization. Please try again.');
       } finally {
-        if (tooltip && tooltipWasVisible) tooltip.classList.remove('hidden');
+        snapshot?.release();
       }
     }
 

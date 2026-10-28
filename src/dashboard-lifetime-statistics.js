@@ -1,4 +1,79 @@
 (function(root) {
+  let tooltipAdapter = null;
+  let sourceActivities = null;
+  let sourceCountries = null;
+  let statisticDetails = new Map();
+
+  function pinMarkup(key, exportMode = false) {
+    return exportMode ? '' : `<button type="button" data-statistic-pin="${escapeHtml(key)}" data-tooltip-inspector="true" aria-label="Pin details for ${escapeHtml(key)}" title="Pin details" class="inline-flex h-7 w-7 items-center justify-center rounded border border-slate-600 text-slate-200"><i data-lucide="pin" class="h-4 w-4" aria-hidden="true"></i></button>`;
+  }
+
+  function statisticAnchor(key, target) {
+    const rect = target?.getBoundingClientRect?.();
+    return { kind: 'statistic', itemId: key, normalizedPoint: {
+      x: Number.isFinite(rect?.left) ? (rect.left + (rect.width || 0) / 2) / (root.innerWidth || 800) : 0.5,
+      y: Number.isFinite(rect?.top) ? (rect.top + (rect.height || 0) / 2) / (root.innerHeight || 600) : 0.5
+    }, visibility: 'visible', associationLabel: statisticDetails.get(key)?.title || key };
+  }
+
+  function bindStatisticDetails(area, summary, countries) {
+    const details = new Map();
+    const add = (key, rows, notes = [], title = key) => details.set(key, {
+      title, itemLabel: title, sections: [{ heading: '', rows }], footerLines: [], notes
+    });
+    const addMetric = (label, metric, formatter, unit) => add(label,
+      [{ label, value: metricValue(metric, formatter, unit) }],
+      metric.status === 'unavailable' ? ['No usable source values'] : []);
+    addMetric('Total distance', summary.distance, value => formatNumber(value, 0), 'km');
+    addMetric('Moving time', summary.movingTime, formatMovingTime, '');
+    addMetric('Elevation gain', summary.elevationGain, value => formatNumber(value / 1000), 'km');
+    [['Workouts', summary.workoutCount], ['Active days', summary.activeDayCount],
+      ['Shoes used', summary.equipmentCounts.shoes], ['Bikes used', summary.equipmentCounts.bikes]]
+      .forEach(([label, value]) => add(label, [{ label, value: formatNumber(value, 0) }]));
+    summary.sportSummaries.forEach(sport => add(`sport:${sport.sport}`, [
+      { label: 'Workouts', value: formatNumber(sport.workoutCount, 0) },
+      { label: 'Distance', value: metricValue(sport.distance, value => formatNumber(value), 'km') },
+      { label: 'Moving time', value: metricValue(sport.movingTime, formatMovingTime, '') }
+    ], [], sport.sport));
+    [['Longest distance', summary.longestByDistance, value => formatNumber(value, 0), 'km'],
+      ['Longest moving time', summary.longestByMovingTime, formatMovingTime, '']].forEach(([label, activity, formatter, unit]) => {
+      const rows = [{ label, value: activity ? `${formatter(activity.value)}${unit ? ` ${unit}` : ''}` : 'Not available' }];
+      if (activity) rows.push({ label: 'Activity', value: activity.name || 'Activity' },
+        { label: 'Date', value: activity.date instanceof Date && Number.isFinite(activity.date.getTime()) ? activity.date.toLocaleDateString() : 'Date unavailable' });
+      add(label, rows, activity ? [] : ['No activity has a usable recorded value']);
+    });
+    const countryAvailable = countries && countries.status !== 'unavailable' && Number.isSafeInteger(countries.countryCount);
+    add('Countries visited', [{ label: 'Countries visited', value: !countries ? 'Calculating...' : countryAvailable ? formatNumber(countries.countryCount, 0) : 'Not available' }],
+      !countries ? ['Country names loading'] : !countryAvailable ? ['Location unavailable'] : [
+        (countries.countryNames || []).filter(name => typeof name === 'string' && name.trim()).join(', ') || 'No countries identified',
+        countries.status === 'partial' ? `Based on ${formatNumber(countries.trackedActivityCount, 0)} of ${formatNumber(countries.totalActivityCount, 0)} activities`
+          : `All ${formatNumber(countries.totalActivityCount, 0)} activities included`
+      ]);
+    statisticDetails = details;
+    const api = root.dashboardTooltips;
+    if (!api?.registerAdapter) return;
+    if (!tooltipAdapter) {
+      const adapter = {
+        readContext: () => api.readContext('lifetimeStatistics'),
+        projectAnchor: selection => {
+          const target = Array.from(area.querySelectorAll?.('[data-statistic-pin]') || []).find(button => button.dataset.statisticPin === selection.anchor.itemId);
+          return target ? statisticAnchor(selection.anchor.itemId, target) : selection.anchor;
+        },
+        dispose() { area.onclick = null; tooltipAdapter = null; }
+      };
+      api.registerAdapter('lifetimeStatistics', adapter);
+      tooltipAdapter = adapter;
+    }
+    area.onclick = event => {
+      const button = event.target?.closest?.('[data-statistic-pin]');
+      const key = button?.dataset.statisticPin;
+      const content = statisticDetails.get(key);
+      if (content) api.show('lifetimeStatistics', { selectionKey: `lifetimeStatistics:${key}`, content, anchor: statisticAnchor(key, button) }, true, button);
+    };
+    root.lucide?.createIcons?.();
+    api.refreshAnchor?.();
+  }
+
   function escapeHtml(value) {
     return String(value)
       .replace(/&/g, '&amp;')
@@ -55,6 +130,7 @@
       <h3 class="${labelClass}">${escapeHtml(label)}</h3>
       <p class="${valueClass}">${escapeHtml(metricValue(metric, formatter, unit))}</p>
       ${metricStatusMarkup(metric)}
+      ${pinMarkup(label, exportMode)}
     </article>`;
   }
 
@@ -62,7 +138,7 @@
     const distance = metricValue(sportSummary.distance, value => formatNumber(value), 'km');
     const movingTime = metricValue(sportSummary.movingTime, formatMovingTime, '');
     return `<tr class="border-t border-slate-800">
-      <th scope="row" class="py-3 pr-4 text-left font-medium text-white">${escapeHtml(sportSummary.sport)}</th>
+      <th scope="row" class="py-3 pr-4 text-left font-medium text-white">${escapeHtml(sportSummary.sport)} ${pinMarkup(`sport:${sportSummary.sport}`)}</th>
       <td class="px-3 py-3 text-right tabular-nums text-slate-200">${formatNumber(sportSummary.workoutCount, 0)}</td>
       <td class="px-3 py-3 text-right tabular-nums text-slate-200">${escapeHtml(distance)}</td>
       <td class="py-3 pl-3 text-right tabular-nums text-slate-200">${escapeHtml(movingTime)}</td>
@@ -82,6 +158,7 @@
     return `<article class="${cardClass}">
       <h3 class="${labelClass}">${escapeHtml(label)}</h3>
       <p class="${valueClass}">${formatNumber(value, 0)}</p>
+      ${pinMarkup(label, exportMode)}
     </article>`;
   }
 
@@ -97,6 +174,7 @@
         <h3 class="${labelClass}">${escapeHtml(label)}</h3>
         <p class="mt-2 text-xl font-semibold text-slate-300">Not available</p>
         <p class="mt-2 text-xs text-slate-400">No activity has a usable recorded value</p>
+        ${pinMarkup(label, exportMode)}
       </article>`;
     }
 
@@ -109,6 +187,7 @@
       <p class="mt-2 break-words text-xl font-semibold tabular-nums text-white">${escapeHtml(value)}</p>
       <p class="mt-2 break-words text-sm text-slate-300">${escapeHtml(activity.name)}</p>
       <p class="mt-1 ${exportMode ? 'text-sm' : 'text-xs'} text-slate-500">${escapeHtml(activityDate)}</p>
+      ${pinMarkup(label, exportMode)}
     </article>`;
   }
 
@@ -177,6 +256,7 @@
       <p class="${valueClass}">${escapeHtml(value)}</p>
       <p class="mt-2 break-words text-sm text-slate-200">${escapeHtml(namesText)}</p>
       ${coverageText ? `<p class="mt-1 break-words text-xs text-slate-500">${escapeHtml(coverageText)}</p>` : ''}
+      ${pinMarkup('Countries visited', exportMode)}
     </article>`;
   }
 
@@ -208,6 +288,7 @@
           : `<article class="min-w-0 rounded-xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
               <h3 class="text-xs font-medium uppercase tracking-wide text-slate-400">Workouts</h3>
               <p class="mt-2 break-words text-2xl font-semibold tabular-nums text-white">${formatNumber(summary.workoutCount, 0)}</p>
+              ${pinMarkup('Workouts')}
             </article>`}
             ${renderCountriesVisited(countrySummary, exportMode)}
       </div>
@@ -226,6 +307,12 @@
     const activities = typeof processedActivities !== 'undefined' && Array.isArray(processedActivities)
       ? processedActivities
       : [];
+    const countrySummary = typeof countryCountSummary !== 'undefined' ? countryCountSummary : null;
+    if (sourceActivities !== activities || sourceCountries !== countrySummary) {
+      root.dashboardTooltips?.invalidate?.();
+      sourceActivities = activities;
+      sourceCountries = countrySummary;
+    }
 
     if (activities.length === 0) {
       captureArea.innerHTML = '';
@@ -236,11 +323,11 @@
     }
 
     const summary = root.lifetimeStatisticsUtils.aggregateLifetimeStatistics(activities);
-    const countrySummary = typeof countryCountSummary !== 'undefined' ? countryCountSummary : null;
     captureArea.innerHTML = renderLifetimeStatistics(summary, { countryCountSummary: countrySummary });
     if (exportArea) exportArea.innerHTML = renderLifetimeStatistics(summary, { export: true, countryCountSummary: countrySummary });
     captureArea.classList.remove('hidden');
     emptyState.classList.add('hidden');
+    bindStatisticDetails(captureArea, summary, countrySummary);
   }
 
   root.lifetimeStatisticsDashboard = { render };

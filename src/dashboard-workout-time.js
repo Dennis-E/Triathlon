@@ -70,6 +70,10 @@
       const parsed = Number.parseInt(value, 10);
       if (!Number.isFinite(parsed) || workoutTimeDateCandidates.length === 0) return;
       const maxIndex = workoutTimeDateCandidates.length - 1;
+      const next = boundary === 'start'
+        ? Math.max(0, Math.min(parsed, workoutTimeDateRange.end))
+        : Math.min(maxIndex, Math.max(parsed, workoutTimeDateRange.start));
+      if (next !== workoutTimeDateRange[boundary === 'start' ? 'start' : 'end']) window.dashboardTooltips?.invalidate();
       if (boundary === 'start') {
         workoutTimeDateRange.start = Math.max(0, Math.min(parsed, workoutTimeDateRange.end));
       } else {
@@ -86,6 +90,7 @@
 
     function setWorkoutTimeGranularity(granularity) {
       if (!window.workoutTimeUtils || !Object.values(window.workoutTimeUtils.GRANULARITIES).includes(granularity)) return;
+      if (granularity !== selectedWorkoutTimeGranularity) window.dashboardTooltips?.invalidate();
       selectedWorkoutTimeGranularity = granularity;
       setWorkoutTimeButtonActive('workoutTimeGranularityBtn', `workoutTimeGranularityBtn${granularity.charAt(0).toUpperCase()}${granularity.slice(1)}`);
       renderWorkoutTimeChart();
@@ -93,6 +98,7 @@
 
     function setWorkoutTimeSportFilter(sport) {
       if (!['All', 'Run', 'Bike', 'Swim'].includes(sport)) return;
+      if (sport !== selectedWorkoutTimeSport) window.dashboardTooltips?.invalidate();
       selectedWorkoutTimeSport = sport;
       setWorkoutTimeButtonActive('workoutTimeSportBtn', `workoutTimeSportBtn${sport}`);
       renderWorkoutTimeChart();
@@ -124,6 +130,8 @@
           return null;
         },
         values => {
+          if (values.granularity !== selectedWorkoutTimeGranularity || values.sport !== selectedWorkoutTimeSport ||
+            values.start !== workoutTimeDateRange.start || values.end !== workoutTimeDateRange.end) window.dashboardTooltips?.invalidate();
           selectedWorkoutTimeGranularity = values.granularity;
           selectedWorkoutTimeSport = values.sport;
           workoutTimeDateRange = { start: values.start, end: values.end };
@@ -195,4 +203,5 @@
           }
         }
       });
+      window.dashboardTooltips?.attachChart('workoutTime', workoutTimeChartInstance);
     }

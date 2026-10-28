@@ -27,6 +27,7 @@
     const dashboardFilterAdapters = new Map();
 
     function advanceDashboardRevision(dataChanged = false) {
+      if (typeof window !== 'undefined') window.dashboardTooltips?.invalidate();
       dashboardNavigationRevision += 1;
       if (dataChanged) dashboardDataRevision += 1;
     }

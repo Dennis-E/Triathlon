@@ -27,6 +27,7 @@
     }
 
     function setDistributionsMetric(metricKey) {
+      if (metricKey !== selectedDistributionsMetric) window.dashboardTooltips?.invalidate();
       selectedDistributionsMetric = metricKey;
       const metricBtnSuffix = metricKey.charAt(0).toUpperCase() + metricKey.slice(1);
       setDistributionsBtnActive('distributionsMetricBtn', `distributionsMetricBtn${metricBtnSuffix}`);
@@ -34,12 +35,14 @@
     }
 
     function setDistributionsSportFilter(sport) {
+      if (sport !== selectedDistributionsSportFilter) window.dashboardTooltips?.invalidate();
       selectedDistributionsSportFilter = sport;
       setDistributionsBtnActive('distributionsSportBtn', `distributionsSportBtn${sport}`);
       renderDistributionsChart();
     }
 
     function setDistributionsDisplayMode(mode) {
+      if (mode !== selectedDistributionsDisplayMode) window.dashboardTooltips?.invalidate();
       selectedDistributionsDisplayMode = mode;
       const modeBtnSuffix = mode.charAt(0).toUpperCase() + mode.slice(1);
       setDistributionsBtnActive('distributionsModeBtn', `distributionsModeBtn${modeBtnSuffix}`);
@@ -134,6 +137,10 @@
     function setDistributionsDateRange(boundary, value) {
       const parsed = parseInt(value, 10);
       if (Number.isNaN(parsed)) return;
+      const next = boundary === 'start'
+        ? Math.max(0, Math.min(parsed, distributionsDateRange.end))
+        : Math.min(distributionsDateCandidates.length - 1, Math.max(parsed, distributionsDateRange.start));
+      if (next !== distributionsDateRange[boundary === 'start' ? 'start' : 'end']) window.dashboardTooltips?.invalidate();
 
       if (boundary === 'start') {
         distributionsDateRange.start = Math.max(0, Math.min(parsed, distributionsDateRange.end));
@@ -167,6 +174,9 @@
           return null;
         },
         values => {
+          if (values.metric !== selectedDistributionsMetric || values.sport !== selectedDistributionsSportFilter ||
+            values.mode !== selectedDistributionsDisplayMode || values.start !== distributionsDateRange.start ||
+            values.end !== distributionsDateRange.end) window.dashboardTooltips?.invalidate();
           selectedDistributionsMetric = values.metric;
           selectedDistributionsSportFilter = values.sport;
           selectedDistributionsDisplayMode = values.mode;
@@ -301,6 +311,7 @@
             tension: 0.4,
             fill: true,
             pointRadius: 0,
+            pointHitRadius: 6,
             pointHoverRadius: 0
           };
         });
@@ -316,6 +327,7 @@
               tension: 0.4,
               fill: true,
               pointRadius: 0,
+              pointHitRadius: 6,
               pointHoverRadius: 0
             }
           : {
@@ -348,6 +360,7 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: true },
           scales: {
             x: {
               type: selectedDistributionsDisplayMode === 'line' ? 'linear' : 'category',
@@ -370,6 +383,10 @@
           },
           plugins: {
             legend: {
+              onClick(event, item, legend) {
+                window.dashboardTooltips?.invalidate();
+                Chart.defaults.plugins.legend.onClick.call(this, event, item, legend);
+              },
               display: showPerSportLines,
               labels: {
                 usePointStyle: true,
@@ -379,4 +396,5 @@
           }
         }
       });
+      window.dashboardTooltips?.attachChart('distributions', distributionsChartInstance);
     }

@@ -240,28 +240,6 @@
       return exportAssetsPromise;
     }
 
-    function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight, maxLines = 3) {
-      const words = String(text || '').split(/\s+/).filter(Boolean);
-      const lines = [];
-      let line = '';
-      words.forEach(word => {
-        const next = line ? `${line} ${word}` : word;
-        if (ctx.measureText(next).width > maxWidth && line) {
-          lines.push(line);
-          line = word;
-        } else {
-          line = next;
-        }
-      });
-      if (line) lines.push(line);
-      const visibleLines = lines.slice(0, maxLines);
-      visibleLines.forEach((entry, index) => ctx.fillText(entry, x, y + index * lineHeight));
-      return {
-        lineCount: visibleLines.length,
-        bottom: y + visibleLines.length * lineHeight
-      };
-    }
-
     function drawAvailableControls(ctx, groups, x, y, maxWidth, maxY = Number.POSITIVE_INFINITY) {
       const pillHeight = 28;
       const rowPaddingBottom = 14;
@@ -355,23 +333,6 @@
 
       const isLifetimeKpiExport = target.contentFit === 'lifetime-kpis';
       const contentX = target.kind === 'pb-tile' || isLifetimeKpiExport ? 24 : 60;
-      const contentWidth = target.kind === 'pb-tile' || isLifetimeKpiExport ? 1032 : 960;
-      const filterText = (target.filters || []).map(filter => `${filter.label}: ${filter.value}`).join('  |  ');
-      const contextY = isLifetimeKpiExport ? 190 : 205;
-      let contextLineCount = 0;
-      if (filterText && !isLifetimeKpiExport) {
-        ctx.fillStyle = '#cbd5e1';
-        ctx.font = '600 24px system-ui, -apple-system, "Segoe UI", sans-serif';
-        contextLineCount = drawWrappedText(
-          ctx,
-          filterText,
-          contentX,
-          contextY,
-          contentWidth,
-          32,
-          Number.POSITIVE_INFINITY
-        ).lineCount;
-      }
 
       const layout = window.exportUtils.computeExportContentLayout({
         canvasWidth: targetSize,
@@ -380,8 +341,7 @@
         marginX: contentX,
         topGap: isLifetimeKpiExport ? 0 : 15,
         bottomMargin: isLifetimeKpiExport ? 50 : target.legend ? 76 : 24,
-        contextGap: 12,
-        contextHeight: contextLineCount * 32
+        contextHeight: 0
       });
       const fit = window.exportUtils.computeContainFit(
         captured.width,
@@ -620,6 +580,12 @@
           onclone: clonedDocument => {
             const clonedTarget = clonedDocument.getElementById(target.targetElementId);
             if (!clonedTarget) return;
+            clonedTarget.style.border = 'none';
+            clonedTarget.style.borderRadius = '0px';
+            clonedTarget.style.backgroundColor = 'transparent';
+            clonedTarget.style.boxShadow = 'none';
+            clonedTarget.style.outline = 'none';
+            clonedTarget.style.padding = '0px';
             if (['totalDistance', 'distributions', 'workoutTime'].includes(target.key)) {
               clonedTarget.style.width = '960px';
               clonedTarget.style.height = '500px';

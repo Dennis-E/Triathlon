@@ -958,20 +958,19 @@ describe('index.html inline script syntax', () => {
     expect(html).toContain('class="h-5 w-8 object-contain"');
   });
 
-  it('composes export metadata in separate image regions and supports PB tile targets', () => {
+  it('composes export content without filter metadata and supports PB tile targets', () => {
     expect(inlineCode).toContain('function drawExportComposition(captured, target, assets)');
     expect(inlineCode).toContain("ctx.fillRect(0, 0, targetSize, 190)");
     expect(inlineCode).toContain("ctx.fillRect(0, 0, targetSize, 190)");
     expect(inlineCode).toContain("ctx.drawImage(assets.qrCode, 930, 28, 120, 120)");
     expect(inlineCode).not.toContain("ctx.fillRect(0, 930, targetSize, 150)");
     expect(inlineCode).not.toContain('footerLogoBox');
-    expect(inlineCode).toContain("target.kind === 'pb-tile' || isLifetimeKpiExport ? 1032 : 960");
     expect(inlineCode).toContain("target.kind === 'pb-tile' || isLifetimeKpiExport ? 24 : 60");
     expect(inlineCode).toContain('computeExportContentLayout');
-    expect(inlineCode).toContain('contextHeight: contextLineCount * 32');
-    expect(inlineCode).toContain('if (filterText && !isLifetimeKpiExport)');
+    expect(inlineCode).toContain('contextHeight: 0');
+    expect(inlineCode).not.toContain('target.filters || []');
+    expect(inlineCode).not.toContain('contextLineCount');
     expect(inlineCode).toContain('if (isLifetimeKpiExport) return finalCanvas.toDataURL');
-    expect(inlineCode).toContain("ctx.font = '600 24px system-ui");
     expect(inlineCode).toContain("ctx.drawImage(assets.qrCode");
     expect(inlineCode).toContain("kind: 'pb-tile'");
     expect(inlineCode).toContain("targetElementId: 'pbDetailCaptureTarget'");

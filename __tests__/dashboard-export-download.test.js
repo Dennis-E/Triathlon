@@ -162,9 +162,9 @@ function createDownloadRuntime({ showSaveFilePicker, decodeError, imageWidth = 1
 }
 
 describe('dashboard export composition', () => {
-  it('renders only the active context and expands the chart within the square canvas', () => {
+  it('omits filter context and expands the chart into the available square canvas', () => {
     const runtime = createDownloadRuntime();
-    const captured = { width: 900, height: 600 };
+    const captured = { width: 600, height: 900 };
     const target = {
       kind: 'tab',
       key: 'totalDistance',
@@ -192,14 +192,15 @@ describe('dashboard export composition', () => {
 
     expect(result).toBe(PNG_DATA_URL);
     expect(runtime.canvasCalls.canvases[0]).toMatchObject({ width: 1080, height: 1080 });
-    expect(renderedText).toContain('Sport: Run');
-    expect(renderedText).toContain('Aggregation: Yearly');
-    expect(renderedText).toContain('Year: 2026');
+    expect(renderedText).not.toContain('Sport: Run');
+    expect(renderedText).not.toContain('Aggregation: Yearly');
+    expect(renderedText).not.toContain('Year: 2026');
     expect(renderedText).not.toContain('Views');
     expect(renderedText).not.toContain('Distance option');
     expect(renderedText).not.toContain('Weekly option');
     expect(chartDraw).toBeDefined();
-    expect(chartDraw[4]).toBeGreaterThan(500);
+    expect(chartDraw[2]).toBeCloseTo(205);
+    expect(chartDraw[4]).toBeCloseTo(851);
     expect(chartDraw[2] + chartDraw[4]).toBeLessThanOrEqual(1080);
   });
 
@@ -272,7 +273,7 @@ describe('dashboard export download destination', () => {
     });
   });
 
-  it('draws the filter summary below the branded header and before the visualization', () => {
+  it('omits filter summaries and preserves the Pace vs series legend', () => {
     const runtime = createDownloadRuntime();
     const context = runtime.context;
     const events = [];
@@ -306,10 +307,11 @@ describe('dashboard export download destination', () => {
 
     const filterIndex = events.findIndex(event => event[0] === 'fillText' && event[1] === 'Sport: Run');
     const chartIndex = events.findIndex(event => event[0] === 'drawImage' && event[1] === captured);
-    expect(filterIndex).toBeGreaterThan(-1);
-    expect(filterIndex).toBeLessThan(chartIndex);
-    expect(events[filterIndex][3]).toBeGreaterThan(190);
-    expect(events[chartIndex][3]).toBeGreaterThan(events[filterIndex][3] + 32);
+    expect(filterIndex).toBe(-1);
+    expect(chartIndex).toBeGreaterThan(-1);
+    expect(events[chartIndex][3]).toBeCloseTo(354.5);
+    expect(events.some(event => event[0] === 'fillText' && event[1] === 'Years')).toBe(true);
+    expect(events.some(event => event[0] === 'fillText' && event[1] === '2023')).toBe(true);
   });
 
   it('uses the native save picker when the browser supports it', async () => {
@@ -524,8 +526,17 @@ describe('dashboard export download destination', () => {
 
     expect(tileLayer.style.filter).toBe('');
     expect(tileLayer.style.opacity).toBe('0.45');
-    expect(clonedMap.style.backgroundColor).toBe('rgb(2, 6, 23)');
-    expect(clonedMap.style).toMatchObject({ width: '960px', height: '500px', maxWidth: 'none' });
+    expect(clonedMap.style).toMatchObject({
+      width: '960px',
+      height: '500px',
+      maxWidth: 'none',
+      border: 'none',
+      borderRadius: '0px',
+      boxShadow: 'none',
+      outline: 'none',
+      padding: '0px',
+      backgroundColor: 'rgb(2, 6, 23)'
+    });
     expect(clonedZoomControl.remove).toHaveBeenCalledTimes(1);
     expect(liveZoomControl.remove).not.toHaveBeenCalled();
     expect(map.style).toEqual({ width: '100%', height: '480px' });
@@ -573,7 +584,7 @@ describe('dashboard export download destination', () => {
     const liveSummary = { style: { display: '' } };
     const liveChartContainer = { style: { maxWidth: '520px', height: '520px' } };
     const liveCanvas = { style: { width: '100%', height: '100%' }, parentElement: liveChartContainer };
-    const liveTarget = { id: 'pieChartsCaptureArea' };
+    const liveTarget = { id: 'pieChartsCaptureArea', style: { border: '', borderRadius: '', padding: '' } };
     const clonedSummary = { style: { display: '' } };
     const clonedGrid = { style: {} };
     const clonedChartContainer = { style: {}, parentElement: clonedGrid };
@@ -583,6 +594,7 @@ describe('dashboard export download destination', () => {
     const clonedLegendSpans = [{ style: {} }, { style: {} }];
     const clonedLegend = {
       style: {},
+      textContent: 'Distance: 12 km',
       querySelectorAll: selector => selector === 'li span' ? clonedLegendSpans : []
     };
     const clonedImage = { style: {} };
@@ -613,15 +625,26 @@ describe('dashboard export download destination', () => {
     await context.__capture(target);
 
     expect(clonedSummary.style.display).toBe('none');
-    expect(clonedTarget.style).toMatchObject({ width: '960px', maxWidth: 'none' });
+    expect(clonedTarget.style).toMatchObject({
+      width: '960px',
+      maxWidth: 'none',
+      border: 'none',
+      borderRadius: '0px',
+      backgroundColor: 'transparent',
+      boxShadow: 'none',
+      outline: 'none',
+      padding: '0px'
+    });
     expect(context.window.pieChartsDashboard.getExportChartImage).toHaveBeenCalledWith(560);
     expect(clonedCanvas.replaceWith).toHaveBeenCalledWith(clonedImage);
     expect(clonedImage).toMatchObject({ src: PNG_DATA_URL, alt: 'Pie chart' });
     expect(clonedLegend.style.fontSize).toBe('22px');
     expect(clonedLegendSpans.every(span => span.style.fontSize === '22px')).toBe(true);
+    expect(clonedLegend.textContent).toBe('Distance: 12 km');
     expect(liveSummary.style.display).toBe('');
     expect(liveChartContainer.style).toEqual({ maxWidth: '520px', height: '520px' });
     expect(liveCanvas.style).toEqual({ width: '100%', height: '100%' });
+    expect(liveTarget.style).toEqual({ border: '', borderRadius: '', padding: '' });
   });
 
   it('fits a selected PB detail inside its content bounds without distorting or changing identity', () => {
@@ -648,7 +671,7 @@ describe('dashboard export download destination', () => {
       targetElementId: 'pbDetailCaptureTarget',
       hasData: true,
       detailKey: 'run-5km',
-      filters: [{ label: 'Metric', value: 'Pace' }]
+      filters: [{ label: 'Metric', value: 'Time' }]
     });
 
     context.__drawExportComposition(captured, target, {
@@ -657,8 +680,11 @@ describe('dashboard export download destination', () => {
     });
 
     const chartDraw = events.find(event => event[0] === 'drawImage' && event[1] === captured);
+    const renderedText = events.filter(event => event[0] === 'fillText').map(event => event[1]).join(' ');
     expect(target.detailKey).toBe('run-5km');
-    expect(events).toContainEqual(['fillText', 'Run 5 km', 194, 68]);
+    expect(renderedText).toContain('Run 5 km');
+    expect(renderedText).not.toContain('Metric: Time');
+    expect(chartDraw).toBeDefined();
     expect(chartDraw[2]).toBeGreaterThanOrEqual(24);
     expect(chartDraw[2] + chartDraw[4]).toBeLessThanOrEqual(1056);
     expect(chartDraw[3]).toBeGreaterThan(190);
@@ -671,7 +697,7 @@ describe('dashboard export download destination', () => {
     const runtime = createDownloadRuntime();
     const context = runtime.context;
     const liveSvg = { style: { width: '100%', height: '100%' }, viewBox: '0 0 1200 680', preserveAspectRatio: 'xMidYMid meet' };
-    const liveTarget = { id: 'pbDetailCaptureTarget', style: { width: '720px', height: '480px' }, querySelector: () => liveSvg };
+    const liveTarget = { id: 'pbDetailCaptureTarget', style: { width: '720px', height: '480px', border: '', borderRadius: '', padding: '' }, querySelector: () => liveSvg };
     const clonedSvg = { style: {}, viewBox: '0 0 1200 680', preserveAspectRatio: 'xMidYMid meet' };
     const clonedTarget = { style: {}, querySelector: () => clonedSvg };
     context.document.getElementById = id => id === 'pbDetailCaptureTarget' ? liveTarget : null;
@@ -698,13 +724,59 @@ describe('dashboard export download destination', () => {
       height: '560px',
       minHeight: '560px',
       maxHeight: '560px',
-      maxWidth: 'none'
+      maxWidth: 'none',
+      border: 'none',
+      borderRadius: '0px',
+      backgroundColor: 'transparent',
+      boxShadow: 'none',
+      outline: 'none',
+      padding: '0px'
     });
     expect(clonedSvg.style).toMatchObject({ width: '100%', height: '100%', maxWidth: 'none' });
     expect(clonedSvg.viewBox).toBe('0 0 1200 680');
     expect(clonedSvg.preserveAspectRatio).toBe('xMidYMid meet');
-    expect(liveTarget.style).toEqual({ width: '720px', height: '480px' });
+    expect(liveTarget.style).toEqual({ width: '720px', height: '480px', border: '', borderRadius: '', padding: '' });
     expect(liveSvg.style).toEqual({ width: '100%', height: '100%' });
+  });
+
+  it('retains the Training Calendar intensity legend in the captured visualization', async () => {
+    const runtime = createDownloadRuntime();
+    const context = runtime.context;
+    const liveTarget = { id: 'trainingCalendarYears', style: {} };
+    const clonedLegend = { textContent: 'Less No activity Intensity 1 Intensity 2 More' };
+    const clonedTarget = {
+      style: {},
+      clientWidth: 960,
+      querySelector: selector => selector === '#trainingCalendarLegend' ? clonedLegend : null,
+      querySelectorAll: () => []
+    };
+    context.document.getElementById = id => id === 'trainingCalendarYears' ? liveTarget : null;
+    context.__mockCapture(PNG_DATA_URL);
+    context.html2canvas = jest.fn(async (_target, options) => {
+      options.onclone({ getElementById: id => id === 'trainingCalendarYears' ? clonedTarget : null });
+      return { width: 960, height: 500 };
+    });
+    const target = context.window.exportUtils.createExportTarget({
+      kind: 'tab',
+      key: 'trainingCalendar',
+      title: 'Training Calendar',
+      targetElementId: 'trainingCalendarYears',
+      hasData: true
+    });
+
+    await context.__capture(target);
+
+    expect(clonedTarget.style).toMatchObject({
+      border: 'none',
+      borderRadius: '0px',
+      backgroundColor: 'transparent',
+      boxShadow: 'none',
+      outline: 'none',
+      padding: '0px'
+    });
+    expect(clonedTarget.querySelector('#trainingCalendarLegend').textContent).toContain('Intensity 1');
+    expect(clonedTarget.querySelector('#trainingCalendarLegend').textContent).toContain('More');
+    expect(liveTarget.style).toEqual({});
   });
 
   it('passes the current PNG bytes and suggested filename to the browser unchanged', async () => {

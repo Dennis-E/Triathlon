@@ -83,6 +83,37 @@ function computeExportContentFit(sourceWidth, sourceHeight, boxWidth, boxHeight)
   };
 }
 
+function computeExportContentLayout({
+  canvasWidth = 1080,
+  canvasHeight = 1080,
+  headerHeight = 190,
+  marginX = 60,
+  topGap = 15,
+  bottomMargin = 24,
+  contextGap = 12,
+  contextHeight = 0
+} = {}) {
+  const width = Math.max(0, canvasWidth - marginX * 2);
+  const contextY = headerHeight + topGap;
+  const safeContextHeight = Math.max(0, contextHeight);
+  const context = safeContextHeight > 0
+    ? { x: marginX, y: contextY, width, height: safeContextHeight }
+    : null;
+  const visualizationY = context
+    ? context.y + context.height + contextGap
+    : contextY;
+
+  return {
+    context,
+    visualization: {
+      x: marginX,
+      y: visualizationY,
+      width,
+      height: Math.max(0, canvasHeight - bottomMargin - visualizationY)
+    }
+  };
+}
+
 // "Contain"/letterbox fit: scales the source to fully fit inside a
 // targetSize x targetSize square, centered, without cropping or distortion.
 function computeSquareFit(sourceWidth, sourceHeight, targetSize) {
@@ -304,6 +335,7 @@ if (typeof module !== 'undefined' && module.exports) {
     computeSquareFit,
     computeContainFit,
     computeExportContentFit,
+    computeExportContentLayout,
     computeExportMetadataLayout,
     computeFilterRowLayout,
     getTabDisplayTitle,
@@ -327,6 +359,7 @@ if (typeof window !== 'undefined') {
     computeSquareFit,
     computeContainFit,
     computeExportContentFit,
+    computeExportContentLayout,
     computeExportMetadataLayout,
     computeFilterRowLayout,
     getTabDisplayTitle,

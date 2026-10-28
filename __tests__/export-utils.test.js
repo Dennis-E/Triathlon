@@ -2,6 +2,7 @@ const {
   computeSquareFit,
   computeContainFit,
   computeExportContentFit,
+  computeExportContentLayout,
   computeExportMetadataLayout,
   computeFilterRowLayout,
   getTabDisplayTitle,
@@ -248,6 +249,42 @@ describe('export-utils', () => {
         widthUtilization: 0,
         heightUtilization: 0
       });
+    });
+  });
+
+  describe('computeExportContentLayout', () => {
+    const canvas = {
+      canvasWidth: 1080,
+      canvasHeight: 1080,
+      headerHeight: 190,
+      marginX: 60,
+      topGap: 15,
+      bottomMargin: 24,
+      contextGap: 12
+    };
+
+    it('omits the context region and gives the chart the remaining height when context is empty', () => {
+      const layout = computeExportContentLayout({ ...canvas, contextHeight: 0 });
+
+      expect(layout.context).toBeNull();
+      expect(layout.visualization).toEqual({ x: 60, y: 205, width: 960, height: 851 });
+    });
+
+    it('reserves only the compact context height and keeps the remaining chart bounds', () => {
+      const layout = computeExportContentLayout({ ...canvas, contextHeight: 36 });
+
+      expect(layout.context).toEqual({ x: 60, y: 205, width: 960, height: 36 });
+      expect(layout.visualization).toEqual({ x: 60, y: 253, width: 960, height: 803 });
+    });
+
+    it.each([[1600, 900], [400, 900]])('fits a %i x %i capture proportionally within the available visualization bounds', (sourceWidth, sourceHeight) => {
+      const bounds = computeExportContentLayout({ ...canvas, contextHeight: 36 }).visualization;
+      const fit = computeContainFit(sourceWidth, sourceHeight, bounds.width, bounds.height);
+
+      expect(fit.drawWidth).toBeLessThanOrEqual(bounds.width);
+      expect(fit.drawHeight).toBeLessThanOrEqual(bounds.height);
+      expect(fit.drawWidth / fit.drawHeight).toBeCloseTo(sourceWidth / sourceHeight);
+      expect(Math.max(fit.drawWidth / bounds.width, fit.drawHeight / bounds.height)).toBeCloseTo(1);
     });
   });
 

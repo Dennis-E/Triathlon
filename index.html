@@ -1191,14 +1191,14 @@
             </div>
           </div>
 
-          <div class="flex flex-col lg:flex-row items-start gap-4">
-            <div id="paceMetricsChartWrapper" class="relative w-full min-w-0 flex-1 h-[420px] md:h-[500px]">
+          <div class="flex flex-col md:flex-row items-start gap-4">
+            <div id="paceMetricsChartWrapper" class="relative w-full min-w-0 shrink-0 md:flex-1 h-[420px] md:h-[500px]">
               <canvas id="paceMetricsChart"></canvas>
               <div id="paceMetricsEmptyState" class="hidden absolute inset-0 flex items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/80 px-6 text-center text-sm text-slate-400">
                 No sessions with a valid pace or speed and the selected measurement are available in this export.
               </div>
             </div>
-            <fieldset id="paceMetricsTrendControls" data-filter-summary data-filter-label="Years and trend lines" class="hidden w-full lg:w-32 shrink-0 space-y-2 pt-2 text-xs text-white">
+            <fieldset id="paceMetricsTrendControls" data-filter-summary data-filter-label="Years and trend lines" class="hidden w-full md:w-32 shrink-0 space-y-2 pt-2 text-xs text-white">
               <legend class="mb-2 font-medium text-white">Years</legend>
             </fieldset>
           </div>

@@ -136,7 +136,6 @@
         ${renderCountMilestone('Shoes used', equipmentCounts.shoes, exportMode)}
         ${renderCountMilestone('Bikes used', equipmentCounts.bikes, exportMode)}
       </div>
-      <p class="text-xs text-slate-500">Counts are based on distinct gear labels in the imported activities.</p>
     </section>`;
   }
 

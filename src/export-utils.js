@@ -217,6 +217,96 @@ function computeTooltipAnnotationLayout({
   throw new RangeError('Tooltip annotation cannot fit the complete headline and required association');
 }
 
+function computeTooltipCalloutLayout({ content, anchor, visualizationRect, bounds, protectedRects = [], measureText }) {
+  const finiteRect = rect => rect && ['x', 'y', 'width', 'height'].every(key => Number.isFinite(rect[key])) && rect.width > 0 && rect.height > 0;
+  if (!finiteRect(bounds) || !finiteRect(visualizationRect)) throw new RangeError('Tooltip callout cannot fit invalid bounds');
+  const visible = anchor?.visibility === 'visible';
+  if (!anchor || !['visible', 'outside-view', 'not-in-export'].includes(anchor.visibility)
+    || (visible && (!anchor.capturePoint || !['x', 'y'].every(key => Number.isFinite(anchor.capturePoint[key]) && anchor.capturePoint[key] >= 0 && anchor.capturePoint[key] <= 1)))) {
+    throw new TypeError('Tooltip callout requires a resolved export anchor');
+  }
+  const associationNote = visible ? '' : anchor.associationLabel;
+  if (!visible && !String(associationNote || '').trim()) throw new TypeError('Tooltip callout requires an anchor association');
+  const point = visible ? {
+    x: visualizationRect.x + anchor.capturePoint.x * visualizationRect.width,
+    y: visualizationRect.y + anchor.capturePoint.y * visualizationRect.height
+  } : null;
+  const overlaps = (first, second) => first.x < second.x + second.width && first.x + first.width > second.x
+    && first.y < second.y + second.height && first.y + first.height > second.y;
+  const inside = rect => rect.x >= bounds.x && rect.y >= bounds.y
+    && rect.x + rect.width <= bounds.x + bounds.width && rect.y + rect.height <= bounds.y + bounds.height;
+  const blocked = protectedRects.filter(finiteRect);
+  if (point) blocked.push({ x: point.x - 9, y: point.y - 9, width: 18, height: 18 });
+  let candidateChecks = 0;
+  for (const mode of ['full', 'headline']) {
+    let textLayout;
+    try {
+      textLayout = computeTooltipAnnotationLayout({
+        content: mode === 'full' ? content : { title: String(content.title || '').trim() || content.itemLabel || 'Selected item' },
+        maxWidth: Math.min(360, bounds.width), maxHeight: Math.min(280, bounds.height), measureText, associationNote
+      });
+    } catch (error) {
+      if (error instanceof RangeError) continue;
+      throw error;
+    }
+    const width = Math.max(64, textLayout.width);
+    const height = textLayout.height;
+    if (width > bounds.width || height > bounds.height) continue;
+    const clampX = value => Math.max(bounds.x, Math.min(value, bounds.x + bounds.width - width));
+    const clampY = value => Math.max(bounds.y, Math.min(value, bounds.y + bounds.height - height));
+    const candidates = point ? [
+      { side: 'above', x: clampX(point.x - width / 2), y: point.y - 24 - height },
+      { side: 'below', x: clampX(point.x - width / 2), y: point.y + 24 },
+      { side: 'left', x: point.x - 24 - width, y: clampY(point.y - height / 2) },
+      { side: 'right', x: point.x + 24, y: clampY(point.y - height / 2) }
+    ] : [
+      { side: 'unanchored', x: bounds.x + bounds.width - width, y: bounds.y },
+      { side: 'unanchored', x: bounds.x, y: bounds.y },
+      { side: 'unanchored', x: bounds.x + bounds.width - width, y: bounds.y + bounds.height - height },
+      { side: 'unanchored', x: bounds.x, y: bounds.y + bounds.height - height }
+    ];
+    const valid = [];
+    for (const candidate of candidates) {
+      candidateChecks += 1;
+      const body = { x: candidate.x, y: candidate.y, width, height };
+      if (!inside(body) || blocked.some(rect => overlaps(body, rect))) continue;
+      let tail = null;
+      let distance = 0;
+      if (point) {
+        const horizontal = ['above', 'below'].includes(candidate.side);
+        const base = horizontal ? {
+          x: Math.max(body.x + 20, Math.min(point.x, body.x + width - 20)),
+          y: candidate.side === 'above' ? body.y + height : body.y
+        } : {
+          x: candidate.side === 'left' ? body.x + width : body.x,
+          y: Math.max(body.y + 16, Math.min(point.y, body.y + height - 16))
+        };
+        distance = Math.hypot(base.x - point.x, base.y - point.y);
+        if (distance <= 10) continue;
+        tail = {
+          start: { x: base.x - (horizontal ? 10 : 0), y: base.y - (horizontal ? 0 : 10) },
+          end: { x: base.x + (horizontal ? 10 : 0), y: base.y + (horizontal ? 0 : 10) },
+          tip: { x: point.x + (base.x - point.x) * 10 / distance, y: point.y + (base.y - point.y) * 10 / distance }
+        };
+        const tailBounds = {
+          x: Math.min(tail.start.x, tail.end.x, tail.tip.x), y: Math.min(tail.start.y, tail.end.y, tail.tip.y),
+          width: Math.max(tail.start.x, tail.end.x, tail.tip.x) - Math.min(tail.start.x, tail.end.x, tail.tip.x),
+          height: Math.max(tail.start.y, tail.end.y, tail.tip.y) - Math.min(tail.start.y, tail.end.y, tail.tip.y)
+        };
+        if (!inside(tailBounds) || blocked.some(rect => overlaps(tailBounds, rect))) continue;
+      }
+      valid.push({ body, tail, side: candidate.side, distance });
+    }
+    if (valid.length) {
+      valid.sort((first, second) => first.distance - second.distance);
+      const best = valid[0];
+      return { ...textLayout, mode: mode === 'headline' ? 'headline' : textLayout.mode, body: best.body, tail: best.tail, side: best.side, candidateChecks };
+    }
+    if (textLayout.mode === 'headline') break;
+  }
+  throw new RangeError('Tooltip callout cannot fit the complete headline and required association');
+}
+
 // "Contain"/letterbox fit: scales the source to fully fit inside a
 // targetSize x targetSize square, centered, without cropping or distortion.
 function computeSquareFit(sourceWidth, sourceHeight, targetSize) {
@@ -448,6 +538,7 @@ if (typeof module !== 'undefined' && module.exports) {
     computeExportContentFit,
     computeExportContentLayout,
     computeTooltipAnnotationLayout,
+    computeTooltipCalloutLayout,
     computeExportMetadataLayout,
     computeFilterRowLayout,
     getTabDisplayTitle,
@@ -473,6 +564,7 @@ if (typeof window !== 'undefined') {
     computeExportContentFit,
     computeExportContentLayout,
     computeTooltipAnnotationLayout,
+    computeTooltipCalloutLayout,
     computeExportMetadataLayout,
     computeFilterRowLayout,
     getTabDisplayTitle,

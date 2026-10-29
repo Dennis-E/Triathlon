@@ -342,8 +342,7 @@
         marginX: contentX,
         topGap: isLifetimeKpiExport ? 0 : 15,
         bottomMargin: isLifetimeKpiExport ? 50 : target.legend ? 76 : 24,
-        contextHeight: 0,
-        annotationHeight: target.pinnedSelection ? getExportTooltipLayout(ctx, target, contentWidth).height : 0
+        contextHeight: 0
       });
       const fit = window.exportUtils.computeContainFit(
         captured.width,
@@ -360,21 +359,27 @@
       );
 
       if (target.pinnedSelection) {
-        const annotation = getExportTooltipLayout(ctx, target, contentWidth);
-        const box = layout.annotation;
-        ctx.fillStyle = '#0f172a';
-        ctx.fillRect(box.x, box.y, box.width, box.height);
-        ctx.fillStyle = '#f1f5f9';
+        const visualizationRect = {
+          x: layout.visualization.x + (layout.visualization.width - fit.drawWidth) / 2,
+          y: layout.visualization.y + (layout.visualization.height - fit.drawHeight) / 2,
+          width: fit.drawWidth, height: fit.drawHeight
+        };
+        const protectedRects = [{ x: 0, y: 0, width: targetSize, height: 190 }];
+        (target.captureProtectedRects || []).forEach(rect => protectedRects.push({
+          x: visualizationRect.x + rect.x * visualizationRect.width,
+          y: visualizationRect.y + rect.y * visualizationRect.height,
+          width: rect.width * visualizationRect.width, height: rect.height * visualizationRect.height
+        }));
+        if (target.legend && !isLifetimeKpiExport) {
+          const legendTop = layout.visualization.y + layout.visualization.height + 4;
+          protectedRects.push({ x: 24, y: legendTop, width: 1032, height: targetSize - legendTop });
+        }
+        const annotation = getExportTooltipLayout(ctx, target, visualizationRect, protectedRects);
+        drawExportTooltipBody(ctx, annotation);
+        const box = annotation.body;
+        ctx.fillStyle = '#111827';
         ctx.font = `500 ${annotation.fontSize}px system-ui, sans-serif`;
         annotation.lines.forEach((line, index) => ctx.fillText(line, box.x + annotation.padding, box.y + annotation.padding + annotation.fontSize + index * annotation.lineHeight));
-        const anchor = target.pinnedSelection.anchor;
-        if (anchor.visibility === 'visible' && anchor.capturePoint && ctx.beginPath) {
-          const pointX = layout.visualization.x + (layout.visualization.width - fit.drawWidth) / 2 + anchor.capturePoint.x * fit.drawWidth;
-          const pointY = layout.visualization.y + (layout.visualization.height - fit.drawHeight) / 2 + anchor.capturePoint.y * fit.drawHeight;
-          ctx.strokeStyle = '#2dd4bf'; ctx.lineWidth = 3;
-          ctx.beginPath(); ctx.arc(pointX, pointY, 8, 0, Math.PI * 2); ctx.stroke();
-          ctx.beginPath(); ctx.moveTo(pointX, pointY + 8); ctx.lineTo(box.x + 12, box.y); ctx.stroke();
-        }
       }
 
       if (isLifetimeKpiExport) return finalCanvas.toDataURL('image/png');
@@ -404,18 +409,53 @@
       return finalCanvas.toDataURL('image/png');
     }
 
-    function getExportTooltipLayout(ctx, target, maxWidth) {
-      const selected = target.pinnedSelection;
-      ctx.font = '500 18px system-ui, sans-serif';
-      const associationNote = selected.anchor.visibility === 'outside-view'
-        ? 'Selected item is outside the current view'
-        : selected.anchor.visibility === 'not-in-export' ? selected.anchor.associationLabel : '';
-      return window.exportUtils.computeTooltipAnnotationLayout({ content: selected.content, maxWidth, maxHeight: 280, measureText: text => ctx.measureText(text), associationNote });
+    function drawExportTooltipBody(ctx, annotation) {
+      const { x, y, width, height } = annotation.body;
+      const radius = 8;
+      const tail = annotation.tail;
+      const insertTail = (side, reverse = false) => {
+        if (!tail || annotation.side !== side) return;
+        const first = reverse ? tail.end : tail.start;
+        const last = reverse ? tail.start : tail.end;
+        ctx.lineTo(first.x, first.y);
+        ctx.lineTo(tail.tip.x, tail.tip.y);
+        ctx.lineTo(last.x, last.y);
+      };
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      insertTail('below');
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      insertTail('left');
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      insertTail('above', true);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      insertTail('right', true);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+      ctx.fillStyle = '#f8fafc';
+      ctx.strokeStyle = '#111827';
+      ctx.lineWidth = 3;
+      ctx.fill();
+      ctx.stroke();
     }
 
-    function createExportCaptureSnapshot(targetEl, tabId) {
+    function getExportTooltipLayout(ctx, target, visualizationRect, protectedRects) {
+      const selected = target.pinnedSelection;
+      ctx.font = '500 18px system-ui, sans-serif';
+      return window.exportUtils.computeTooltipCalloutLayout({
+        content: selected.content, anchor: selected.anchor, visualizationRect,
+        bounds: { x: 24, y: 198, width: 1032, height: 858 }, protectedRects,
+        measureText: text => ctx.measureText(text)
+      });
+    }
+
+    function createExportCaptureSnapshot(targetEl, tabId, selection = null, target = null) {
       const adapter = window.dashboardTooltips?.adapters.get(tabId);
-      const renderer = adapter?.snapshotCapture?.();
+      const renderer = adapter?.snapshotCapture?.(selection);
       const clonedTarget = targetEl.cloneNode ? targetEl.cloneNode(true) : { ...targetEl };
       const sourceCanvases = targetEl.tagName === 'CANVAS' ? [targetEl] : Array.from(targetEl.querySelectorAll?.('canvas') || []);
       const clonedCanvases = clonedTarget.tagName === 'CANVAS' ? [clonedTarget] : Array.from(clonedTarget.querySelectorAll?.('canvas') || []);
@@ -440,7 +480,23 @@
         clonedTarget.setAttribute('aria-hidden', 'true');
         document.body.appendChild(clonedTarget);
       }
-      return { element: clonedTarget, prepare: () => mediaLease?.prepare(clonedTarget), release() { mediaLease?.release(); if (clonedTarget.nodeType === 1) clonedTarget.remove(); } };
+      const chartImage = tabId === 'pieCharts'
+        ? renderer?.canvas ? renderer.canvas.toDataURL('image/png') : window.pieChartsDashboard?.getExportChartImage?.(560)
+        : null;
+      return {
+        element: clonedTarget, chartImage,
+        resolveExportAnchor(element) {
+          if (!selection) return null;
+          const captureContext = { element, target };
+          const resolved = renderer?.resolveExportAnchor
+            ? renderer.resolveExportAnchor(captureContext)
+            : adapter?.resolveExportAnchor?.(selection, captureContext);
+          if (!resolved) throw new Error('Could not resolve the selected item in the export');
+          return resolved;
+        },
+        prepare: () => mediaLease?.prepare(clonedTarget),
+        release() { mediaLease?.release(); if (clonedTarget.nodeType === 1) clonedTarget.remove(); }
+      };
     }
 
     // Chart.js exposes no consistent cross-version "isAnimating" API, so a short settle
@@ -621,16 +677,19 @@
       try {
         const tabId = target.kind === 'pb-tile' ? 'personalBests' : target.key;
         target = JSON.parse(JSON.stringify(target));
-        target.pinnedSelection = window.dashboardTooltips?.getPinned(tabId) || null;
+        const selected = window.dashboardTooltips?.getPinned(tabId);
+        target.pinnedSelection = selected ? JSON.parse(JSON.stringify(selected)) : null;
         const heatmapPalette = document.getElementById('heatmapColorScheme')?.value;
         if (target.key === 'wordcloud') {
           if (!window.wordcloudDashboard.hasExportableCloud()) throw new Error('The Wordcloud is not ready to export. Wait for the cloud to finish rendering and try again.');
         }
-        snapshot = createExportCaptureSnapshot(targetEl, tabId);
+        snapshot = createExportCaptureSnapshot(targetEl, tabId, target.pinnedSelection, target);
         if (window.tooltipSelectionUtils) target = window.tooltipSelectionUtils.freezePlain(window.tooltipSelectionUtils.copyPlain(target));
         await snapshot.prepare();
         const assets = await loadExportAssets();
 
+        let resolvedAnchor = null;
+        let captureProtectedRects = [];
         const captureOptions = {
           backgroundColor: '#020617',
           useCORS: true,
@@ -640,6 +699,7 @@
             const clonedTarget = clonedDocument.getElementById(snapshot.element.id || target.targetElementId)
               || clonedDocument.getElementById(target.targetElementId);
             if (!clonedTarget) return;
+            try {
             clonedTarget.style.border = 'none';
             clonedTarget.style.borderRadius = '0px';
             clonedTarget.style.backgroundColor = 'transparent';
@@ -691,9 +751,10 @@
                   grid.style.alignItems = 'center';
                 }
               }
-              if (chart && window.pieChartsDashboard && typeof window.pieChartsDashboard.getExportChartImage === 'function') {
+              if (chart && snapshot.chartImage) {
                 const image = clonedDocument.createElement('img');
-                image.src = window.pieChartsDashboard.getExportChartImage(560);
+                image.src = snapshot.chartImage;
+                image.setAttribute?.('data-export-chart-image', 'true');
                 image.alt = 'Pie chart';
                 image.style.width = '560px';
                 image.style.height = '560px';
@@ -711,8 +772,10 @@
               return;
             }
             if (target.key === 'heatmap') {
-              clonedTarget.style.width = '960px';
-              clonedTarget.style.height = '500px';
+              if (!target.pinnedSelection) {
+                clonedTarget.style.width = '960px';
+                clonedTarget.style.height = '500px';
+              }
               clonedTarget.style.maxWidth = 'none';
               clonedTarget.querySelectorAll?.('.leaflet-control-zoom').forEach(control => control.remove());
               if (heatmapPalette === 'black-fire') {
@@ -735,6 +798,18 @@
             });
             clonedTarget.style.width = `${captureWidth}px`;
             clonedTarget.style.maxWidth = 'none';
+            } finally {
+              if (target.pinnedSelection) {
+                resolvedAnchor = snapshot.resolveExportAnchor(clonedTarget);
+                const bounds = clonedTarget.getBoundingClientRect?.();
+                if (bounds?.width > 0 && bounds?.height > 0) {
+                  captureProtectedRects = Array.from(clonedTarget.querySelectorAll?.('#pieChartsLegend, .leaflet-control-attribution') || []).map(element => {
+                    const rect = element.getBoundingClientRect();
+                    return { x: (rect.left - bounds.left) / bounds.width, y: (rect.top - bounds.top) / bounds.height, width: rect.width / bounds.width, height: rect.height / bounds.height };
+                  }).filter(rect => rect.width > 0 && rect.height > 0);
+                }
+              }
+            }
           }
         };
         const capture = () => html2canvas(snapshot.element, captureOptions);
@@ -743,8 +818,11 @@
           && typeof window.heatmapDashboard.captureAtExportSize === 'function'
           ? await window.heatmapDashboard.captureAtExportSize(capture)
           : await capture();
-        const dataUrl = drawExportComposition(captured, target, assets);
-        lastExportedImage = await prepareExportImage(dataUrl, target, pbOpening);
+        if (target.pinnedSelection && !resolvedAnchor) resolvedAnchor = snapshot.resolveExportAnchor(snapshot.element);
+        const compositionTarget = resolvedAnchor ? { ...target, captureProtectedRects, pinnedSelection: { ...target.pinnedSelection, anchor: resolvedAnchor } } : target;
+        if (window.tooltipSelectionUtils) window.tooltipSelectionUtils.freezePlain(compositionTarget);
+        const dataUrl = drawExportComposition(captured, compositionTarget, assets);
+        lastExportedImage = await prepareExportImage(dataUrl, compositionTarget, pbOpening);
 
         exportRequestState = 'previewing';
         showExportPreviewModal(dataUrl);

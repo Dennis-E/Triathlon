@@ -15,7 +15,7 @@
 
     function render() {
       if (!doc?.body) return;
-      if (!state) { overlay?.remove(); overlay = null; origin?.setAttribute?.('aria-pressed', 'false'); return; }
+      if (!state) { overlay?.remove(); overlay = null; origin?.setAttribute?.('aria-pressed', 'false'); origin = null; return; }
       if (!overlay) {
         overlay = doc.createElement('section');
         overlay.id = 'pinnedVisualizationTooltip';
@@ -84,13 +84,20 @@
     function show(tabId, item, pinned = false, focusTarget = null) {
       const context = adapters.get(tabId)?.readContext?.() || readContext(tabId);
       const selection = { ...item, context };
-      if (focusTarget) origin = focusTarget;
+      if (focusTarget && (pinned || state?.mode !== 'pinned')) refreshOrigin(focusTarget);
       return send({ type: pinned ? 'select' : 'hover', context, selection });
     }
 
+    function refreshOrigin(target) {
+      if (origin !== target) origin?.setAttribute?.('aria-pressed', 'false');
+      origin = target;
+      origin?.setAttribute?.('aria-pressed', state?.mode === 'pinned' ? 'true' : 'false');
+    }
+
     function dismiss() {
+      const target = origin;
       send({ type: 'dismiss' });
-      origin?.focus?.();
+      if (target?.isConnected !== false) target?.focus?.();
     }
 
     function invalidate() {
@@ -108,10 +115,22 @@
       send({ type: 'anchor', anchor, context: state.context });
     }
 
-    return { adapters, registerAdapter, readContext, show, send, dismiss, invalidate, getPinned, refreshAnchor, getState: () => state, ownsKeyboard: target => !!target?.closest?.('[data-tooltip-inspector]'), dispose() { for (const adapter of adapters.values()) adapter.dispose?.(); adapters.clear(); send({ type: 'reset' }); } };
+    return { adapters, registerAdapter, readContext, show, send, dismiss, invalidate, getPinned, refreshAnchor, refreshOrigin, getState: () => state, ownsKeyboard: target => !!target?.closest?.('[data-tooltip-inspector]'), dispose() { for (const adapter of adapters.values()) adapter.dispose?.(); adapters.clear(); send({ type: 'reset' }); } };
   }
 
   const controller = createController();
+
+  function resolveCaptureAnchor(selection, captureContext, element, point = { x: 0.5, y: 0.5 }) {
+    const bounds = captureContext.element?.getBoundingClientRect?.();
+    const rect = element?.getBoundingClientRect?.();
+    if (!(bounds?.width > 0 && bounds?.height > 0 && rect?.width >= 0 && rect?.height >= 0 && (rect.width > 0 || rect.height > 0))) throw new Error('Could not resolve the selected item in the export');
+    if (!point || !['x', 'y'].every(key => Number.isFinite(point[key]))) throw new Error('Could not resolve a finite selected-item anchor');
+    const capturePoint = { x: (rect.left - bounds.left + point.x * rect.width) / bounds.width, y: (rect.top - bounds.top + point.y * rect.height) / bounds.height };
+    if (!['x', 'y'].every(key => Number.isFinite(capturePoint[key]) && capturePoint[key] >= 0 && capturePoint[key] <= 1)) {
+      return { ...selection.anchor, visibility: 'outside-view', capturePoint: null, associationLabel: `${selection.content.itemLabel || selection.content.title}: outside the current view` };
+    }
+    return { ...selection.anchor, visibility: 'visible', capturePoint };
+  }
 
   function contentFromChart(chart, hits, position) {
     const tooltip = chart.tooltip;
@@ -143,7 +162,7 @@
       const element = chart.getDatasetMeta(first.datasetIndex).data[first.index];
       const point = element.tooltipPosition ? element.tooltipPosition() : element;
       const itemId = hits.map(hit => `${chart.data.datasets[hit.datasetIndex]?.label || hit.datasetIndex}:${chart.data.labels?.[hit.index] || hit.index}`).join('|');
-      return { selectionKey: `${tabId}:${itemId}`, content, anchor: { kind: 'chart-item', itemId, normalizedPoint: { x: (rect.left + point.x) / (root.innerWidth || 800), y: (rect.top + point.y) / (root.innerHeight || 600) }, capturePoint: { x: point.x / chart.width, y: point.y / chart.height }, visibility: 'visible', associationLabel: content.itemLabel } };
+      return { selectionKey: `${tabId}:${itemId}`, content, anchor: { kind: 'chart-item', itemId, chartElements: hits.map(hit => ({ datasetIndex: hit.datasetIndex, index: hit.index })), normalizedPoint: { x: (rect.left + point.x) / (root.innerWidth || 800), y: (rect.top + point.y) / (root.innerHeight || 600) }, capturePoint: { x: point.x / chart.width, y: point.y / chart.height }, visibility: 'visible', associationLabel: content.itemLabel } };
     };
     const hitsFor = event => chart.getElementsAtEventForMode(event, chart.options.interaction?.mode || 'nearest', { intersect: true, ...(chart.options.interaction || {}) }, false);
     const selectHits = (hits, position, pinned) => {
@@ -192,9 +211,10 @@
         if (!point) return selection.anchor;
         return { ...selection.anchor, normalizedPoint: { x: (rect.left + point.x * rect.width) / (root.innerWidth || 800), y: (rect.top + point.y * rect.height) / (root.innerHeight || 600) } };
       },
-      snapshotCapture() {
+      snapshotCapture(selection) {
         const privateCanvas = root.document.createElement('canvas');
-        privateCanvas.width = chart.width; privateCanvas.height = chart.height;
+        privateCanvas.width = tabId === 'pieCharts' ? 560 : chart.width;
+        privateCanvas.height = tabId === 'pieCharts' ? 560 : chart.height;
         const options = copyChartInput(chart.config.options);
         options.responsive = false; options.animation = false; options.devicePixelRatio = 1;
         options.plugins = { ...options.plugins, tooltip: { enabled: false } };
@@ -204,18 +224,27 @@
         });
         chart.data.datasets.forEach((dataset, index) => privateChart.setDatasetVisibility(index, chart.isDatasetVisible(index)));
         privateChart.update('none');
+        const hit = selection?.anchor.chartElements?.[0];
+        const selectedElement = hit && privateChart.getDatasetMeta(hit.datasetIndex)?.data[hit.index];
+        const selectedPoint = selectedElement?.tooltipPosition?.() || selectedElement;
+        const exportPoint = selectedPoint ? { x: selectedPoint.x / privateCanvas.width, y: selectedPoint.y / privateCanvas.height } : selection?.anchor.capturePoint;
         const copy = root.document.createElement('canvas');
         copy.width = privateCanvas.width; copy.height = privateCanvas.height;
         copy.getContext('2d').drawImage(privateCanvas, 0, 0);
         privateChart.destroy();
-        return { canvas: copy, sourceCanvas: canvas };
+        return { canvas: copy, sourceCanvas: canvas, resolveExportAnchor: selection ? captureContext => {
+          if (!exportPoint) throw new Error('Could not resolve the selected chart item');
+          const element = captureContext.element.querySelector?.('[data-export-chart-image]')
+            || (captureContext.element.tagName === 'CANVAS' ? captureContext.element : captureContext.element.querySelector?.('canvas'));
+          return resolveCaptureAnchor(selection, captureContext, element, exportPoint);
+        } : null };
       },
       dispose() { listeners.forEach(remove => remove()); const plugins = chart.config?.plugins; if (plugins) { const index = plugins.indexOf(plugin); if (index >= 0) plugins.splice(index, 1); } }
     });
     return chart;
   }
 
-  root.dashboardTooltips = { ...controller, createController, attachChart, contentFromChart };
+  root.dashboardTooltips = { ...controller, createController, attachChart, contentFromChart, resolveCaptureAnchor };
   if (root.document?.addEventListener) {
     root.document.addEventListener('keydown', event => {
       if (event.key === 'Escape' && controller.getState()?.mode === 'pinned' && (controller.ownsKeyboard(event.target) || root.document.getElementById('pinnedVisualizationTooltip')?.contains(event.target))) {

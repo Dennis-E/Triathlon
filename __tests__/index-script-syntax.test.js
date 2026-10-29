@@ -659,7 +659,8 @@ describe('index.html inline script syntax', () => {
     expect(trainingCalendarCode).toContain('id="trainingCalendarSportBtn${sport}"');
     expect(inlineCode).toContain("getActiveButtonText(Array.from(document.querySelectorAll('#trainingCalendarSportFilters button')).map(button => button.id))");
     expect(inlineCode).toContain("trainingCalendar: typeof processedActivities !== 'undefined' && processedActivities.length > 0");
-    expect(inlineCode).toContain('createExportCaptureSnapshot(targetEl, tabId)');
+    expect(inlineCode).toContain('createExportCaptureSnapshot(targetEl, tabId, target.pinnedSelection, target)');
+    expect(inlineCode).toContain('snapshot.resolveExportAnchor(clonedTarget)');
     expect(inlineCode).toContain('html2canvas(snapshot.element');
     expect(inlineCode).not.toContain('if (tooltipWasVisible)');
     expect(inlineCode).toContain("showExportToast('Nothing to export for this selection yet.')");

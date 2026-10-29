@@ -46,6 +46,11 @@ function registerMediaTooltipAdapter(grid, library) {
   if (!mediaTooltipAdapter) {
     const adapter = {
       readContext: () => api.readContext('mediaGallery'),
+      resolveExportAnchor(selection, captureContext) {
+        const target = Array.from(captureContext.element.querySelectorAll?.('[data-export-asset-key]') || []).find(item => item.dataset.exportAssetKey === selection.anchor.itemId);
+        return target ? api.resolveCaptureAnchor(selection, captureContext, target)
+          : { ...selection.anchor, visibility: 'not-in-export', capturePoint: null, associationLabel: `${selection.content.itemLabel}: not included in this collage` };
+      },
       projectAnchor: selection => {
         const target = Array.from(grid.querySelectorAll?.('[data-media-pin-key]') || []).find(button => button.dataset.mediaPinKey === selection.anchor.itemId);
         return target ? getMediaTooltipAnchor(selection.anchor.itemId, target, selection.content.itemLabel) : selection.anchor;

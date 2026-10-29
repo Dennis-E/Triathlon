@@ -19,7 +19,9 @@ Use a visualization's Export action to prepare a local PNG preview, then select 
 
 Click a visualization item to pin its detail tooltip, or tap it on a touch screen. Selecting another item replaces the pin; selecting the same item again, using Close, or pressing Escape releases it. Charts support focused arrow-key inspection and Enter/Space selection; calendar cells and item-level pin buttons use normal keyboard activation. Media pin buttons remain separate from opening an image or selecting a collage item. Changing data filters, switching tabs, or importing replacement data clears the pin; map movement and resizing retain it.
 
-Pinned detail is included in the export preview and downloaded image. If the full tooltip does not fit readably, the image uses its complete headline instead; the live tooltip remains complete. The export retains the view and selection present when Export was requested, even if you change the live view during preparation. Without a pin, transient hover tooltips are excluded from the image.
+In Lifetime Statistics, select the statistic itself or focus it and press Enter/Space. There are no separate pin-symbol buttons on its statistics.
+
+Pinned detail appears in the export preview and downloaded image as a compact, outlined speech bubble near its selected item, with a tail pointing toward it. If the selected item is outside the visible area or omitted from the export layout, the bubble identifies that distinction without pointing at unrelated content. If the full tooltip does not fit readably, the image uses its complete headline instead; the live tooltip remains complete. The export retains the view and selection present when Export was requested, even if you change the live view during preparation. Without a pin, transient hover tooltips are excluded from the image.
 
 The app does not open a separate native save picker before downloading. This avoids a second save dialog when a native write is restricted and the browser would otherwise retry through its ordinary download flow. Browser security checks and download errors remain managed by the browser.
 

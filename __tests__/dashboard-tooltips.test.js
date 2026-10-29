@@ -103,6 +103,19 @@ test('private chart capture disables native tooltips and leaves the live configu
   expect(destroy).toHaveBeenCalledTimes(1);
 });
 
+test('capture projection accounts for nested canvas offsets and source-relative points without DPR drift', () => {
+  const { window } = makeController();
+  const selection = makeSelection();
+  const element = { getBoundingClientRect: () => ({ left: 140, top: 100, width: 400, height: 200 }) };
+  const captureContext = { element: { getBoundingClientRect: () => ({ left: 100, top: 50, width: 800, height: 400 }) } };
+  expect(window.dashboardTooltips.resolveCaptureAnchor(selection, captureContext, element, { x: 0.25, y: 0.5 }).capturePoint).toEqual({ x: 0.175, y: 0.375 });
+  expect(selection.anchor.capturePoint).toBeUndefined();
+  const line = { getBoundingClientRect: () => ({ left: 140, top: 100, width: 0, height: 200 }) };
+  expect(window.dashboardTooltips.resolveCaptureAnchor(selection, captureContext, line).capturePoint).toEqual({ x: 0.05, y: 0.375 });
+  expect(() => window.dashboardTooltips.resolveCaptureAnchor(selection, captureContext, null)).toThrow(/resolve/);
+  expect(() => window.dashboardTooltips.resolveCaptureAnchor(selection, captureContext, line, { x: Infinity, y: 0.5 })).toThrow(/finite/);
+});
+
 test('pin stays visible after leave and hover, toggles, replaces and dismisses safely', () => {
   const { controller, document } = makeController();
   controller.show('totalDistance', makeSelection(), true);
@@ -116,6 +129,40 @@ test('pin stays visible after leave and hover, toggles, replaces and dismisses s
   controller.show('totalDistance', makeSelection({ selectionKey: 'other' }), true);
   expect(controller.getState()).toBeNull();
   expect(document.getElementById('pinnedVisualizationTooltip')).toBeNull();
+});
+
+test('replacement clears old pressed state and ignored hover does not steal the pin origin', () => {
+  const { controller, document } = makeController();
+  const first = document.createElement('article');
+  const second = document.createElement('article');
+  controller.show('totalDistance', makeSelection(), true, first);
+  controller.show('totalDistance', makeSelection({ selectionKey: 'other' }), false, second);
+  expect(first.getAttribute('aria-pressed')).toBe('true');
+  expect(second.getAttribute('aria-pressed')).toBeNull();
+  controller.show('totalDistance', makeSelection({ selectionKey: 'other' }), true, second);
+  expect(first.getAttribute('aria-pressed')).toBe('false');
+  expect(second.getAttribute('aria-pressed')).toBe('true');
+  controller.invalidate();
+  expect(second.getAttribute('aria-pressed')).toBe('false');
+});
+
+test('rerender can transfer origin and dismiss never focuses a detached target', () => {
+  const { controller, document } = makeController();
+  const original = document.createElement('article');
+  const replacement = document.createElement('article');
+  original.focus = jest.fn();
+  replacement.focus = jest.fn();
+  original.isConnected = false;
+  controller.show('totalDistance', makeSelection(), true, original);
+  controller.refreshOrigin(replacement);
+  expect(original.getAttribute('aria-pressed')).toBe('false');
+  expect(replacement.getAttribute('aria-pressed')).toBe('true');
+  controller.dismiss();
+  expect(replacement.focus).toHaveBeenCalledTimes(1);
+  expect(original.focus).not.toHaveBeenCalled();
+  controller.show('totalDistance', makeSelection(), true, original);
+  controller.dismiss();
+  expect(original.focus).not.toHaveBeenCalled();
 });
 
 test('pins have no timer expiry and invalidation clears exportable state', () => {

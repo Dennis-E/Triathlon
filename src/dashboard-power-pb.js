@@ -209,6 +209,11 @@
       if (!api?.registerAdapter || pbTooltipAdapter) return;
       const adapter = {
         readContext: () => api.readContext('personalBests'),
+        resolveExportAnchor(selection, captureContext) {
+          const target = Array.from(captureContext.element.querySelectorAll?.('[data-pb-inspection-key]') || []).find(item => item.getAttribute('data-pb-inspection-key') === selection.anchor.itemId);
+          return target ? api.resolveCaptureAnchor(selection, captureContext, target)
+            : { ...selection.anchor, visibility: 'not-in-export', capturePoint: null, associationLabel: `${selection.content.itemLabel}: not included in this personal-best view` };
+        },
         projectAnchor: selection => {
           const targets = pbTooltipTargets.get(selection.anchor.itemId) || [];
           const target = targets.slice().reverse().find(candidate => candidate.isConnected !== false && !candidate.closest?.('.hidden'));
@@ -268,6 +273,7 @@
       target.setAttribute('role', 'button');
       target.setAttribute('aria-label', `Pin ${title}${options.formattedValue ? ', ' + options.formattedValue : ''}`);
       target.setAttribute('data-tooltip-inspector', 'true');
+      target.setAttribute('data-pb-inspection-key', itemId);
       listen('click', event => { event.stopPropagation?.(); inspect(true); });
       listen('keydown', event => {
         if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation?.(); inspect(true); }

@@ -136,12 +136,17 @@
             readContext: () => controller.readContext('heatmap'),
             resolveItem: event => this._hitForEvent(event),
             projectAnchor: selection => this._projectInspectionAnchor(selection.anchor),
-            snapshotCapture: () => {
+            snapshotCapture: (selection = controller.getPinned('heatmap')) => {
               const canvas = document.createElement('canvas');
               canvas.width = this._canvas.width;
               canvas.height = this._canvas.height;
               canvas.getContext('2d').drawImage(this._canvas, 0, 0);
-              return { canvas, sourceCanvas: this._canvas, selection: controller.getPinned('heatmap'), model: heatmapTooltipModel ? JSON.parse(JSON.stringify(heatmapTooltipModel)) : null, palette: this._colorScheme };
+              const projected = selection ? this._projectInspectionAnchor(selection.anchor) : null;
+              const anchor = projected && { ...projected,
+                capturePoint: projected.visibility === 'visible' ? { ...projected.capturePoint } : null,
+                associationLabel: projected.visibility === 'visible' ? projected.associationLabel : `${selection.content.itemLabel || selection.content.title}: outside the current view` };
+              return { canvas, sourceCanvas: this._canvas, selection, model: heatmapTooltipModel ? JSON.parse(JSON.stringify(heatmapTooltipModel)) : null, palette: this._colorScheme,
+                resolveExportAnchor: anchor ? () => anchor : null };
             },
             dispose: () => { removers.forEach(remove => remove()); releaseKeyboard(); }
           });

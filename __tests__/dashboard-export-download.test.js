@@ -29,8 +29,15 @@ function createDownloadRuntime({ showSaveFilePicker, decodeError, imageWidth = 1
   const anchors = [];
   const downloadLinks = [];
   const pickerCalls = [];
-  const canvasCalls = { text: [], images: [], fills: [], canvases: [] };
+  const canvasCalls = { text: [], images: [], fills: [], canvases: [], paths: [] };
   const canvasContext = {
+    beginPath() { canvasCalls.paths.push(['begin']); },
+    moveTo(...args) { canvasCalls.paths.push(['move', ...args]); },
+    lineTo(...args) { canvasCalls.paths.push(['line', ...args]); },
+    quadraticCurveTo(...args) { canvasCalls.paths.push(['curve', ...args]); },
+    closePath() { canvasCalls.paths.push(['close']); },
+    fill() { canvasCalls.paths.push(['fill']); },
+    stroke() { canvasCalls.paths.push(['stroke']); },
     measureText(text) { return { width: String(text).length * 12 }; },
     fillText(text) { canvasCalls.text.push(String(text)); },
     drawImage(...args) { canvasCalls.images.push(args); },
@@ -162,6 +169,47 @@ function createDownloadRuntime({ showSaveFilePicker, decodeError, imageWidth = 1
 }
 
 describe('dashboard export composition', () => {
+  it('draws one rounded speech-bubble path and correctly projected tail without shrinking the visualization', () => {
+    const runtime = createDownloadRuntime();
+    const captured = { width: 800, height: 400 };
+    const assets = { logo: { naturalWidth: 120, naturalHeight: 60 }, qrCode: {} };
+    const target = { key: 'totalDistance', title: 'Distance', pinnedSelection: {
+      content: { title: 'Selected run', sections: [{ rows: [{ label: 'Distance', value: '12 km' }] }] },
+      anchor: { visibility: 'visible', capturePoint: { x: 0.5, y: 0.5 } }
+    } };
+    target.captureProtectedRects = [{ x: 0.75, y: 0.1, width: 0.2, height: 0.4 }];
+    const layoutHelper = jest.fn(runtime.context.window.exportUtils.computeTooltipCalloutLayout);
+    runtime.context.window.exportUtils.computeTooltipCalloutLayout = layoutHelper;
+    runtime.context.__drawComposition(captured, target, assets);
+    const pinnedDraw = runtime.canvasCalls.images.find(args => args[0] === captured);
+    expect(runtime.canvasCalls.paths.filter(step => step[0] === 'fill')).toHaveLength(1);
+    expect(runtime.canvasCalls.paths.filter(step => step[0] === 'curve')).toHaveLength(4);
+    const anchor = { x: pinnedDraw[1] + pinnedDraw[3] / 2, y: pinnedDraw[2] + pinnedDraw[4] / 2 };
+    expect(layoutHelper.mock.calls[0][0].protectedRects).toContainEqual({
+      x: pinnedDraw[1] + pinnedDraw[3] * 0.75, y: pinnedDraw[2] + pinnedDraw[4] * 0.1,
+      width: pinnedDraw[3] * 0.2, height: pinnedDraw[4] * 0.4
+    });
+    expect(runtime.canvasCalls.paths.filter(step => step[0] === 'line').some(step => Math.abs(Math.hypot(step[1] - anchor.x, step[2] - anchor.y) - 10) < 0.01)).toBe(true);
+    expect(runtime.canvasCalls.text.filter(text => text === 'Selected run')).toHaveLength(1);
+    expect(runtime.canvasCalls.text).toContain('Distance: 12 km');
+    const noPin = createDownloadRuntime();
+    noPin.context.__drawComposition(captured, { ...target, pinnedSelection: null }, assets);
+    expect(runtime.canvasCalls.fills).toEqual(noPin.canvasCalls.fills);
+    expect(noPin.canvasCalls.images.find(args => args[0] === captured)).toEqual(pinnedDraw);
+    expect(noPin.canvasCalls.paths).toHaveLength(0);
+  });
+
+  it.each(['outside-view', 'not-in-export'])('draws a compact, truthful non-pointing bubble for %s', visibility => {
+    const runtime = createDownloadRuntime();
+    runtime.context.__drawComposition({ width: 800, height: 400 }, { title: 'View', pinnedSelection: {
+      content: { title: 'Run', notes: ['Detail '.repeat(400)] },
+      anchor: { visibility, associationLabel: 'Run: outside this capture' }
+    } }, { logo: { naturalWidth: 120, naturalHeight: 60 }, qrCode: {} });
+    expect(runtime.canvasCalls.paths.filter(step => step[0] === 'line')).toHaveLength(4);
+    expect(runtime.canvasCalls.text.join(' ')).toContain('Run: outside this capture');
+    expect(runtime.canvasCalls.paths.filter(step => step[0] === 'fill')).toHaveLength(1);
+  });
+
   it('omits filter context and expands the chart into the available square canvas', () => {
     const runtime = createDownloadRuntime();
     const captured = { width: 600, height: 900 };
@@ -948,6 +996,58 @@ describe('download attempt outcomes', () => {
 });
 
 describe('owned export surface lifecycle', () => {
+  it.each(require('../src/tooltip-selection-utils').TAB_IDS)('resolves %s from the isolated layout and composes only once for preview and download', async key => {
+    const runtime = createDownloadRuntime();
+    runtime.closePreview();
+    const snapshotElement = { id: 'captureTarget', style: {}, clientWidth: 800, querySelectorAll: () => [], querySelector: () => null,
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 400 }) };
+    const liveElement = { ...snapshotElement, cloneNode: () => ({ ...snapshotElement, style: {} }) };
+    runtime.elements.captureTarget = liveElement;
+    const pin = { selectionKey: key + ':selected', content: { title: 'Captured selection' }, anchor: { visibility: 'visible', capturePoint: { x: 0.9, y: 0.9 } } };
+    const resolveExportAnchor = jest.fn((selected, captureContext) => {
+      expect(selected.selectionKey).toBe(key + ':selected');
+      expect(captureContext.element).not.toBe(liveElement);
+      return { visibility: 'visible', capturePoint: { x: 0.25, y: 0.5 } };
+    });
+    const snapshotCapture = jest.fn(() => null);
+    runtime.context.window.dashboardTooltips = { getPinned: () => pin, adapters: new Map([[key, { snapshotCapture, resolveExportAnchor }]]) };
+    runtime.context.window.wordcloudDashboard = { hasExportableCloud: () => true };
+    runtime.context.processedActivities = new Proxy([], { get() { throw new Error('Callout placement must not scan activities'); } });
+    runtime.context.window.Chart = jest.fn(() => { throw new Error('Callout placement must not rerender charts'); });
+    runtime.context.html2canvas = jest.fn(async (element, options) => {
+      options.onclone({ getElementById: () => element });
+      return { width: 800, height: 400 };
+    });
+    runtime.context.assetsForTest = { logo: { naturalWidth: 120, naturalHeight: 60 }, qrCode: {} };
+    vm.runInContext('loadExportAssets = () => Promise.resolve(assetsForTest);', runtime.context);
+    await runtime.capture({ kind: 'tab', key, title: 'View', targetElementId: 'captureTarget', hasData: true });
+    expect(runtime.context.console.error).not.toHaveBeenCalled();
+    expect(resolveExportAnchor).toHaveBeenCalledTimes(1);
+    expect(snapshotCapture).toHaveBeenCalledTimes(1);
+    expect(runtime.context.window.Chart).not.toHaveBeenCalled();
+    expect(runtime.context.html2canvas).toHaveBeenCalledTimes(1);
+    expect(runtime.getImage().target.pinnedSelection.anchor.capturePoint).toEqual({ x: 0.25, y: 0.5 });
+    const renderedCount = runtime.canvasCalls.images.length;
+    const originalImage = runtime.getImage();
+    const previewData = runtime.elements.exportPreviewImage.src;
+    await runtime.download();
+    expect(runtime.downloadLinks[0].href).toBe(previewData);
+    expect(runtime.downloadLinks[0].href).toBe(originalImage.dataUrl);
+    expect(runtime.canvasCalls.images).toHaveLength(renderedCount);
+    expect(runtime.canvasCalls.canvases).toHaveLength(1);
+    expect(runtime.context.html2canvas).toHaveBeenCalledTimes(1);
+    expect(runtime.canvasCalls.paths.filter(step => step[0] === 'fill')).toHaveLength(1);
+  });
+
+  it('fails rather than inventing an anchor for an unresolved captured item', async () => {
+    const runtime = createDownloadRuntime();
+    runtime.mockCapture(PNG_DATA_URL);
+    runtime.context.window.dashboardTooltips = { getPinned: () => ({ content: { title: 'Run' }, anchor: { visibility: 'visible' } }), adapters: new Map() };
+    await runtime.capture({ key: 'totalDistance', hasData: true, targetElementId: 'captureTarget' });
+    expect(runtime.toast.textContent).toMatch(/resolve the selected item/);
+    expect(runtime.elements.exportPreviewModal.classList.contains('hidden')).toBe(false);
+  });
+
   it('accepts a loaded PNG when the browser decode promise does not settle', async () => {
     const runtime = createDownloadRuntime();
     runtime.context.Image = class {
@@ -988,7 +1088,8 @@ describe('owned export surface lifecycle', () => {
     const source = { id: 'captureTarget', content: 'original pixels', cloneNode: () => ({ ...copiedSource }), querySelectorAll: () => [], getBoundingClientRect: () => ({ width: 800, height: 400 }) };
     runtime.elements.captureTarget = source;
     let pin = { content: { title: 'Original selection' }, anchor: { visibility: 'visible' } };
-    runtime.context.window.dashboardTooltips = { getPinned: () => pin, adapters: new Map() };
+    const resolveExportAnchor = jest.fn(selection => ({ ...selection.anchor, capturePoint: { x: 0.25, y: 0.5 } }));
+    runtime.context.window.dashboardTooltips = { getPinned: () => pin, adapters: new Map([['totalDistance', { resolveExportAnchor }]]) };
     runtime.context.assetGate = gate;
     vm.runInContext('loadExportAssets = () => assetGate.promise; drawExportComposition = (canvas, target) => { this.capturedTarget = target; return "' + PNG_DATA_URL + '"; };', runtime.context);
     const target = { key: 'totalDistance', hasData: true, targetElementId: 'captureTarget', filters: [{ label: 'Sport', value: 'Run' }] };
@@ -1003,6 +1104,8 @@ describe('owned export surface lifecycle', () => {
     expect(capturedSource.content).toBe('original pixels');
     expect(runtime.context.capturedTarget.filters[0].value).toBe('Run');
     expect(runtime.context.capturedTarget.pinnedSelection.content.title).toBe('Original selection');
+    expect(runtime.context.capturedTarget.pinnedSelection.anchor.capturePoint).toEqual({ x: 0.25, y: 0.5 });
+    expect(resolveExportAnchor.mock.calls[0][0].content.title).toBe('Original selection');
     expect(pin.content.title).toBe('New selection');
   });
 

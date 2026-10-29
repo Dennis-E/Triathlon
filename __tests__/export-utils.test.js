@@ -4,6 +4,7 @@ const {
   computeExportContentFit,
   computeExportContentLayout,
   computeTooltipAnnotationLayout,
+  computeTooltipCalloutLayout,
   computeExportMetadataLayout,
   computeFilterRowLayout,
   getTabDisplayTitle,
@@ -369,6 +370,79 @@ describe('export-utils', () => {
         computeTooltipAnnotationLayout({ ...options, content: { title: 'Run' } })
       );
     });
+  });
+
+  describe('computeTooltipCalloutLayout', () => {
+    const options = {
+      content: { title: 'Morning run', sections: [{ rows: [{ label: 'Distance', value: '12 km' }] }] },
+      anchor: { visibility: 'visible', capturePoint: { x: 0.5, y: 0.5 } },
+      visualizationRect: { x: 60, y: 205, width: 960, height: 800 },
+      bounds: { x: 24, y: 205, width: 1032, height: 827 },
+      protectedRects: [], measureText: text => text.length * 10
+    };
+
+    it.each([[0.01, 0.01], [0.99, 0.01], [0.01, 0.99], [0.99, 0.99], [0.5, 0.5]])('keeps body and tail inside bounds for anchor %p/%p', (x, y) => {
+      const layout = computeTooltipCalloutLayout({ ...options, anchor: { visibility: 'visible', capturePoint: { x, y } } });
+      expect(layout.body.x).toBeGreaterThanOrEqual(24);
+      expect(layout.body.y).toBeGreaterThanOrEqual(205);
+      expect(layout.body.x + layout.body.width).toBeLessThanOrEqual(1056);
+      expect(layout.body.y + layout.body.height).toBeLessThanOrEqual(1032);
+      expect(layout.body.width).toBeLessThan(480);
+      expect(layout.tail).not.toBeNull();
+      expect(Math.hypot(layout.tail.tip.x - (60 + x * 960), layout.tail.tip.y - (205 + y * 800))).toBeCloseTo(10);
+      expect(layout.candidateChecks).toBeLessThanOrEqual(8);
+    });
+
+    it('adapts sides and avoids protected content instead of drawing a bottom bar', () => {
+      const top = computeTooltipCalloutLayout({ ...options, anchor: { visibility: 'visible', capturePoint: { x: 0.5, y: 0.01 } } });
+      const bottom = computeTooltipCalloutLayout({ ...options, anchor: { visibility: 'visible', capturePoint: { x: 0.5, y: 0.99 } } });
+      expect(top.side).toBe('below');
+      expect(bottom.side).toBe('above');
+      const protectedRects = [{ x: 24, y: 205, width: 1032, height: 380 }];
+      const placed = computeTooltipCalloutLayout({ ...options, protectedRects });
+      expect(placed.side).toBe('below');
+      expect(placed.body.y).toBeGreaterThanOrEqual(585);
+    });
+
+    it('falls back to the complete headline when full content has no place', () => {
+      const content = { title: 'Run', notes: Array.from({ length: 7 }, () => 'Detailed content') };
+      const layout = computeTooltipCalloutLayout({ ...options, content,
+        visualizationRect: { x: 0, y: 0, width: 400, height: 240 },
+        bounds: { x: 0, y: 0, width: 400, height: 240 } });
+      expect(layout.mode).toBe('headline');
+      expect(layout.lines).toEqual(['Run']);
+      expect(layout.candidateChecks).toBeLessThanOrEqual(8);
+      expect(content.notes).toHaveLength(7);
+    });
+
+    it.each(['outside-view', 'not-in-export'])('keeps explicit association without a tail for %s', visibility => {
+      const layout = computeTooltipCalloutLayout({ ...options, content: { title: 'Run', notes: ['Long '.repeat(400)] },
+        anchor: { visibility, associationLabel: 'Run is outside the capture' } });
+      expect(layout.mode).toBe('headline');
+      expect(layout.lines.join(' ')).toContain('Run is outside the capture');
+      expect(layout.tail).toBeNull();
+      expect(layout.side).toBe('unanchored');
+    });
+
+    it('rejects invalid anchors and impossible fits instead of omitting details', () => {
+      expect(() => computeTooltipCalloutLayout({ ...options, anchor: { visibility: 'visible' } })).toThrow(/anchor/i);
+      expect(() => computeTooltipCalloutLayout({ ...options, bounds: { x: 0, y: 0, width: 10, height: 20 } })).toThrow(RangeError);
+      expect(() => computeTooltipCalloutLayout({ ...options, protectedRects: [options.bounds] })).toThrow(RangeError);
+    });
+
+    it('has bounded placement work independent of activity collections and exposes its browser bridge', () => {
+      const activities = new Proxy([], { get() { throw new Error('Must not scan activities'); } });
+      const first = computeTooltipCalloutLayout({ ...options, activities });
+      expect(first.candidateChecks).toBe(4);
+      expect(computeTooltipCalloutLayout(options)).toEqual(first);
+      const context = { window: {} };
+      require('vm').runInNewContext(fsSource(), context);
+      expect(context.window.exportUtils.computeTooltipCalloutLayout(options)).toEqual(first);
+    });
+
+    function fsSource() {
+      return require('fs').readFileSync(require('path').join(__dirname, '../src/export-utils.js'), 'utf8');
+    }
   });
 
   describe('computeExportContentLayout', () => {

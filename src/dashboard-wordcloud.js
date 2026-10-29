@@ -12,18 +12,27 @@
   let resolveCurrentRender = null;
   let tooltipAdapter = null;
   const wordAnchors = new Map();
+  const renderedWordPoints = new Map();
+  let releaseWordRecorder = null;
 
   function registerWordTooltipAdapter() {
     const api = window.dashboardTooltips;
     if (!api?.registerAdapter || tooltipAdapter) return;
     const adapter = {
       readContext: () => api.readContext('wordcloud'),
+      snapshotCapture(selection) {
+        if (!selection) return null;
+        const point = renderedWordPoints.get(selection.anchor.itemId);
+        const anchor = point ? { ...selection.anchor, visibility: 'visible', capturePoint: { ...point } }
+          : { ...selection.anchor, visibility: 'not-in-export', capturePoint: null, associationLabel: `${selection.content.itemLabel}: not drawn in this cloud` };
+        return { resolveExportAnchor: () => anchor };
+      },
       projectAnchor: selection => {
         const anchor = wordAnchors.get(selection.anchor.itemId);
         if (!anchor) return selection.anchor;
         return { ...selection.anchor, normalizedPoint: wordPoint(anchor.target, anchor.dimension) };
       },
-      dispose() { wordAnchors.clear(); tooltipAdapter = null; }
+      dispose() { releaseWordRecorder?.(); renderedWordPoints.clear(); wordAnchors.clear(); tooltipAdapter = null; }
     };
     api.registerAdapter('wordcloud', adapter);
     tooltipAdapter = adapter;
@@ -203,6 +212,8 @@
 
   function updateCloud(elements, topWords) {
     if (!elements.canvas) return;
+    releaseWordRecorder?.();
+    renderedWordPoints.clear();
     const included = topWords.filter(entry => selectedWords.get(entry.word) !== false);
     const version = beginCloudRender();
     const source = processedActivities;
@@ -232,7 +243,9 @@
     const minLog = Math.log(minimumCount);
     const maxLog = Math.log(maximumCount || 1);
     const drawnWords = new Set();
+    let restoreRecorder = null;
     const cleanupListeners = () => {
+      restoreRecorder?.();
       elements.canvas.removeEventListener('wordclouddrawn', onWordDrawn);
       elements.canvas.removeEventListener('wordcloudstop', onWordcloudStop);
       elements.canvas.removeEventListener('wordcloudabort', onWordcloudAbort);
@@ -262,6 +275,26 @@
     elements.canvas.addEventListener('wordcloudabort', onWordcloudAbort);
 
     try {
+      const context = elements.canvas.getContext?.('2d');
+      if (context?.fillText) {
+        const fillText = context.fillText;
+        const recordText = function(word, x, y, ...rest) {
+          const result = fillText.call(this, word, x, y, ...rest);
+          if (isCurrent() && this.getTransform && this.measureText) {
+            const transform = this.getTransform();
+            const width = this.measureText(word).width;
+            const centerX = x + (this.textAlign === 'center' ? 0 : ['right', 'end'].includes(this.textAlign) ? -width / 2 : width / 2);
+            renderedWordPoints.set(String(word), {
+              x: (transform.a * centerX + transform.c * y + transform.e) / elements.canvas.width,
+              y: (transform.b * centerX + transform.d * y + transform.f) / elements.canvas.height
+            });
+          }
+          return result;
+        };
+        context.fillText = recordText;
+        restoreRecorder = () => { if (context.fillText === recordText) context.fillText = fillText; };
+        releaseWordRecorder = restoreRecorder;
+      }
       window.WordCloud(elements.canvas, {
         list: included.map(entry => [entry.word, entry.count]),
         shuffle: false,

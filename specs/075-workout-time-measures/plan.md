@@ -1,0 +1,119 @@
+# Implementation Plan: Workout Time Count, Duration, and Distance
+
+**Branch**: `TriAnalytica-dev-2` | **Date**: 2026-10-29 | **Spec**: [spec.md](spec.md)
+
+**Input**: Feature specification from `specs/075-workout-time-measures/spec.md`
+
+**Feature identifier**: `075-workout-time-measures`. The setup script reports this identifier as BRANCH; the actual Git branch remains `TriAnalytica-dev-2`. No new branch is created.
+
+## Summary
+
+Extend the existing Workout Time tab with a three-option segmented measure selector: Workout number (default), Duration, and Distance. Retain all current eligibility, start-time grouping, sport/date filters, tab IDs, and export targets. Accumulate count, recorded duration seconds, recorded distance kilometers, and measurement coverage in the existing pure utility, then render the chosen measure with correct units.
+
+Preserve the distinction between empty fields, measured zeros, partial totals, and unavailable measurements. Add opt-in inspection hooks to the existing chart adapter so Workout Time can inspect zero/null fields by category without fake data. Reuse shared pin invalidation, private chart snapshots, speech-bubble composition, preview, and download.
+
+## Technical Context
+
+**Language/Version**: Existing browser JavaScript; CommonJS/window bridge for reusable utilities and classic scripts for dashboard orchestration.
+
+**Primary Dependencies**: Existing CDN Chart.js and browser Canvas 2D; existing root Jest ^30.4.2 and @testing-library/dom ^10.4.1. No new packages, bundler, or library version change.
+
+**Storage**: One in-memory selected measure per page session and existing request-owned export snapshots; no saved preference, schema, or migration.
+
+**Testing**: Existing Node-environment Jest suites with VM/fake-document/chart harnesses; browser pointer, native touch emulation, keyboard, export screenshot, and performance checks using synthetic data.
+
+**Target Platform**: Existing desktop/mobile browsers; acceptance viewports 1440 px and 360 px wide, native export image size unchanged.
+
+**Project Type**: Static browser application served by a plain static file server.
+
+**Performance Goals**: SC-005: at least 19 of 20 measure changes over 10,000 eligible activities finish showing the correct result within one second. Use one activity aggregation pass and at most 31 ordered fields; no activity-level chart points or metric-driven reimport. Record browser, machine, grouping, dataset, animation behavior, and click-to-visible timing in validation evidence.
+
+**Constraints**: Preserve count compatibility, date/startTime eligibility, local start-time grouping, import availability flags, units, tab contract, and independent export resources. Duration raw totals stay in seconds; hours are a display conversion. Never make an unavailable field look measured by using an epsilon, positive dummy value, or substituted duration/distance.
+
+**Scale/Scope**: One existing visualization, three measures, four groupings, four sport selections, current date-range control, and existing local Share/Export. All 48 grouping/sport/measure combinations require exact reference-data checks.
+
+## Constitution Check
+
+*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+
+| Principle / Gate | Before Research | After Design |
+|------------------|-----------------|--------------|
+| I. Static browser-first | PASS: retain existing delivery | PASS: existing scripts/CDN and static startup; no new script entry |
+| II. Dual-target reusable utilities | PASS: extend workout-time-utils.js | PASS: additive pure measures/formatting through CommonJS/window bridge; dashboard stays orchestration |
+| III. Focused verification and tab consistency | PASS: relevant suites identified | PASS: per-slice tests, 48-case data matrix, navigation/markup checks, browser/export and performance gates defined |
+| Existing/new-tab export contract | PASS: no new tab | PASS: preserve workoutTime/workoutTimeChartWrapper and validate all three measures including unavailable states |
+| IV. Faithful source semantics | PASS: no parser changes | PASS: duration/distance availability flags remain authoritative; current count eligibility and local grouping retained |
+| V. Privacy/network boundaries | PASS: local computation | PASS: only synthetic fixtures, no new activity/tooltip transmission or API service changes |
+| Dependency/public API boundaries | PASS: root frontend scope only | PASS: existing exports/signatures remain usable; adapter hooks opt in only for Workout Time |
+
+No constitution exceptions or unresolved product decisions remain. These gates assess the design, not completed implementation tests.
+
+## Project Structure
+
+### Documentation (this feature)
+
+```text
+specs/075-workout-time-measures/
+  spec.md
+  plan.md
+  research.md
+  data-model.md
+  contracts/
+    workout-time-measures.md
+  quickstart.md
+  checklists/
+    requirements.md
+```
+
+tasks.md is generated by the next workflow, not by this planning command.
+
+### Source Code (repository root)
+```text
+index.html                              measure selector in existing tab
+src/workout-time-utils.js               aggregation, measure metadata, formatting
+src/dashboard-workout-time.js           state, selector, chart, field inspection
+src/dashboard-tooltips.js               optional chart inspection hooks/snapshot anchor
+src/dashboard-export.js                 measure metadata and existing no-data gate
+src/tab-navigation.js                   unchanged tab contract, verify only
+__tests__/workout-time-utils.test.js     data, coverage, formatting, 48 combinations
+__tests__/dashboard-core.test.js         setters, chart values, measure lifecycle
+__tests__/dashboard-tooltips.test.js     opted-in zero/null inspection and capture
+__tests__/index-script-syntax.test.js    selector/ARIA and atomic filter-domain wiring
+__tests__/tab-navigation.test.js         unchanged tab IDs/order and keyboard regression
+__tests__/dashboard-export-download.test.js  metric snapshots and unavailable export
+README.md                               concise behavior documentation
+```
+
+**Structure Decision**: Reuse the current modules and existing test files. No new runtime module or test framework is needed. Source parsing, lifetime-statistics utilities, global navigation infrastructure, and the API service remain unchanged. The shared tooltip adapter receives only opt-in behavior needed for Workout Time's otherwise uninspectable zero/null fields.
+
+## Phase 0: Research Outcome
+
+See [research.md](research.md). Critical findings are explicit false availability flags attached to numeric import placeholders, intersect-only chart hit testing, and Workout Time exportability being derived from its empty-state visibility. Decisions are reflected in the [data model](data-model.md) and [contracts](contracts/workout-time-measures.md).
+
+## Phase 1: Design
+
+1. Extend buildWorkoutTimeDataset(activities, filters) with an optional count/duration/distance measure, default count. Preserve existing count, activityCount, filters, group keys/labels/order, and eligibility semantics. In one pass accumulate counts, duration seconds, distance kilometers, and per-measure available counts; derive the selected value and coverage status separately.
+2. Introduce selectedWorkoutTimeMeasure = count and a validated setWorkoutTimeMeasure() setter. Invalidate the current pin before a real measure change, then render without modifying grouping, sport, or date indices. Keep selection across tab visits and replacement imports; do not persist across reloads.
+3. Add a three-button segmented control with stable IDs, accessible group naming, pressed state, and visible focus. Extend only the Workout Time domain to granularity -> sport -> measure -> start -> end; preserve the end-date dependency on the newly positioned start field and atomic filter application.
+4. Plot raw count, durationSeconds / 3600, or distanceKm. Keep empty fields at zero, unavailable fields null, and real zeros valid. Use shared pure value formatting and group coverage metadata for all readable detail. An entirely unavailable duration/distance view uses the current empty-state element with a distinct explanation; valid all-zero data still renders and remains exportable.
+5. Add optional resolveHits, describeContent, and anchorPoint hooks to attachChart(). Workout Time resolves the nearest category inside the chart area, describes the immutable group model, and anchors zero/null fields to their actual category at the zero baseline. Use the same anchor calculation in private chart snapshots. Opted-in pointer hover uses the shared detail overlay; avoid a duplicate native tooltip. Other charts retain existing behavior without hooks.
+6. Add Measure to both getExportContext() and getAvailableControlContext(). Retain the existing export target and request-time private chart/selection isolation. The axis title and selected detail carry measure and units even though export context bars are not drawn. Do not equate zero total with no data; the no-data gate follows actual measurement availability.
+7. Verify count parity and the 48-case data matrix, exact missing/zero/partial cases, boundary-spanning workouts, keyboard domain dependencies, null-field pinning, delayed exports, and no-data versus all-zero exports. Complete desktop/mobile screenshots and the 10,000-activity latency check before implementation sign-off.
+
+### Requirement Traceability
+
+| Requirements / Outcomes | Owning Design And Checks |
+|-------------------------|--------------------------|
+| FR-001, FR-010, FR-011; SC-001, SC-004 | selector/default/session state, validated setter, pressed state, atomic keyboard domain, 360/1440 px interaction |
+| FR-002, FR-003, FR-006; SC-002 | unchanged matchesFilters/getGroupDefinitions/getGroupIndex behavior; exact count parity and 48 combinations |
+| FR-004, FR-005, FR-007, FR-008; SC-003 | finite nonnegative values plus availability flags, raw totals, coverage counts, zero/null distinction |
+| FR-009 | measure definitions, axis conversion, complete duration/detail formatting and unit assertions |
+| FR-012; SC-006 | per-measure context, full/headline bubbles, private snapshot, delayed changes, no-data and all-zero export checks |
+| FR-013 | existing tab/markup/dispatch/capture consistency and no parser/API/network changes |
+| SC-005 | bounded single-pass aggregation and documented 20-switch browser performance measurement |
+
+The [quickstart validation guide](quickstart.md) contains the runnable commands and acceptance procedure. It does not claim that feature implementation or tests already exist.
+
+## Complexity Tracking
+
+No constitution violations or additional architectural layers are required.

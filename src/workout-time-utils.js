@@ -5,6 +5,42 @@ const GRANULARITIES = Object.freeze({
   YEAR: 'year'
 });
 
+const WORKOUT_TIME_MEASURES = Object.freeze({ COUNT: 'count', DURATION: 'duration', DISTANCE: 'distance' });
+const WORKOUT_TIME_MEASURE_DEFINITIONS = Object.freeze({
+  count: Object.freeze({ label: 'Workout number', axisTitle: 'Workouts', divisor: 1 }),
+  duration: Object.freeze({ label: 'Duration', axisTitle: 'Duration (h)', divisor: 3600 }),
+  distance: Object.freeze({ label: 'Distance', axisTitle: 'Distance (km)', divisor: 1 })
+});
+
+function getMeasureDefinition(measure = 'count') {
+  if (!Object.prototype.hasOwnProperty.call(WORKOUT_TIME_MEASURE_DEFINITIONS, measure)) throw new Error(`Unsupported Workout Time measure: ${measure}`);
+  return WORKOUT_TIME_MEASURE_DEFINITIONS[measure];
+}
+
+function formatWorkoutTimeValue(value, measure = 'count') {
+  getMeasureDefinition(measure);
+  if (!Number.isFinite(value) || value < 0) return 'Not available';
+  if (measure === 'duration') {
+    const seconds = Math.round(value);
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor(seconds % 3600 / 60);
+    const remainder = seconds % 60;
+    return [hours ? `${hours}h` : '', minutes ? `${minutes}m` : '', remainder || !seconds ? `${remainder}s` : ''].filter(Boolean).join(' ');
+  }
+  const formatted = new Intl.NumberFormat(undefined, { maximumFractionDigits: measure === 'count' ? 0 : 2 }).format(value);
+  return measure === 'distance' ? `${formatted} km` : `${formatted} ${value === 1 ? 'workout' : 'workouts'}`;
+}
+
+function workoutTimeCoverage(group, measure) {
+  const availableCount = measure === 'count' ? group.count : group[`${measure}AvailableCount`];
+  const total = measure === 'count' ? group.count : measure === 'duration' ? group.durationSeconds : group.distanceKm;
+  return {
+    availableCount,
+    value: group.count && !availableCount ? null : total,
+    status: !group.count ? 'empty' : !availableCount ? 'unavailable' : availableCount < group.count ? 'partial' : 'complete'
+  };
+}
+
 const DAY_GROUPS = Array.from({ length: 12 }, (_, index) => {
   const startHour = index * 2;
   return {
@@ -109,21 +145,37 @@ function cloneDateOrNull(value) {
 
 function buildWorkoutTimeDataset(activities, filters = {}) {
   const granularity = filters.granularity || GRANULARITIES.DAY;
-  const groups = getGroupDefinitions(granularity).map(group => ({ ...group, count: 0 }));
-  const qualifyingActivities = (Array.isArray(activities) ? activities : [])
-    .filter(activity => matchesFilters(activity, filters));
-
-  qualifyingActivities.forEach(activity => {
+  const measure = filters.measure === undefined ? 'count' : filters.measure;
+  getMeasureDefinition(measure);
+  const initialTotals = () => ({ count: 0, durationSeconds: 0, distanceKm: 0, durationAvailableCount: 0, distanceAvailableCount: 0 });
+  const groups = getGroupDefinitions(granularity).map(group => ({ ...group, ...initialTotals() }));
+  for (const activity of Array.isArray(activities) ? activities : []) {
+    if (!matchesFilters(activity, filters)) continue;
     const groupIndex = getGroupIndex(activity.startTime, granularity);
-    if (groups[groupIndex]) {
-      groups[groupIndex].count += 1;
+    const group = groups[groupIndex];
+    if (!group) continue;
+    group.count += 1;
+    if (activity.durationAvailable !== false && Number.isFinite(activity.duration) && activity.duration >= 0) {
+      group.durationSeconds += activity.duration;
+      group.durationAvailableCount += 1;
     }
+    if (activity.distanceAvailable !== false && Number.isFinite(activity.distance) && activity.distance >= 0) {
+      group.distanceKm += activity.distance;
+      group.distanceAvailableCount += 1;
+    }
+  }
+  const totals = initialTotals();
+  groups.forEach(group => {
+    for (const key of Object.keys(totals)) totals[key] += group[key];
+    Object.assign(group, workoutTimeCoverage(group, measure));
   });
 
   return {
     granularity,
+    measure,
     groups,
-    activityCount: qualifyingActivities.length,
+    activityCount: totals.count,
+    ...workoutTimeCoverage(totals, measure),
     filters: {
       sport: filters.sport || 'All',
       minDate: cloneDateOrNull(filters.minDate),
@@ -134,6 +186,9 @@ function buildWorkoutTimeDataset(activities, filters = {}) {
 
 const workoutTimeUtils = {
   GRANULARITIES,
+  MEASURES: WORKOUT_TIME_MEASURES,
+  getMeasureDefinition,
+  formatWorkoutTimeValue,
   buildWorkoutTimeDataset,
   getGroupDefinitions,
   matchesFilters

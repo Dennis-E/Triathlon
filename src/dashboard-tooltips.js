@@ -142,8 +142,8 @@
     return { title, itemLabel: title || String(chart.data.labels?.[hits[0].index] || chart.data.datasets[hits[0].datasetIndex]?.label || 'Selected item'), sections: [{ heading: '', rows: lines.map(value => ({ label: '', value: String(value) })) }], footerLines: [...(tooltip.footer || [])], notes: [] };
   }
 
-  function attachChart(tabId, chart) {
-    if (!chart?.canvas?.addEventListener || !chart.getElementsAtEventForMode) return;
+  function attachChart(tabId, chart, inspection = {}) {
+    if (!chart?.canvas?.addEventListener || (!chart.getElementsAtEventForMode && !inspection.resolveHits)) return;
     const canvas = chart.canvas;
     let currentIndex = -1;
     function copyChartInput(value) {
@@ -154,22 +154,38 @@
     }
     const listeners = [];
     const listen = (target, name, handler) => { target.addEventListener(name, handler); listeners.push(() => target.removeEventListener(name, handler)); };
+    const pointFor = (source, hit) => {
+      const element = source.getDatasetMeta?.(hit.datasetIndex)?.data[hit.index];
+      const point = inspection.anchorPoint ? inspection.anchorPoint(source, hit) : element?.tooltipPosition?.() || element;
+      if (point && !['x', 'y'].every(key => Number.isFinite(point[key]))) throw new Error('Could not resolve a finite chart inspection anchor');
+      return point;
+    };
     const itemFor = (hits, position) => {
-      const content = contentFromChart(chart, hits, position);
+      if (!hits?.length) return null;
+      const content = inspection.describeContent ? inspection.describeContent(chart, hits) : contentFromChart(chart, hits, position);
       if (!content) return null;
       const first = hits[0];
       const rect = canvas.getBoundingClientRect();
-      const element = chart.getDatasetMeta(first.datasetIndex).data[first.index];
-      const point = element.tooltipPosition ? element.tooltipPosition() : element;
-      const itemId = hits.map(hit => `${chart.data.datasets[hit.datasetIndex]?.label || hit.datasetIndex}:${chart.data.labels?.[hit.index] || hit.index}`).join('|');
-      return { selectionKey: `${tabId}:${itemId}`, content, anchor: { kind: 'chart-item', itemId, chartElements: hits.map(hit => ({ datasetIndex: hit.datasetIndex, index: hit.index })), normalizedPoint: { x: (rect.left + point.x) / (root.innerWidth || 800), y: (rect.top + point.y) / (root.innerHeight || 600) }, capturePoint: { x: point.x / chart.width, y: point.y / chart.height }, visibility: 'visible', associationLabel: content.itemLabel } };
+      const point = pointFor(chart, first);
+      if (!point) return null;
+      const itemId = hits.map(hit => chart.data.datasets[hit.datasetIndex]?.inspectionKeys?.[hit.index] || `${chart.data.datasets[hit.datasetIndex]?.label || hit.datasetIndex}:${chart.data.labels?.[hit.index] || hit.index}`).join('|');
+      return { selectionKey: `${tabId}:${itemId}`, content, anchor: { kind: 'chart-item', itemId, chartElements: hits.map(hit => ({ datasetIndex: hit.datasetIndex, index: hit.index })), normalizedPoint: { x: (rect.left + point.x * rect.width / chart.width) / (root.innerWidth || 800), y: (rect.top + point.y * rect.height / chart.height) / (root.innerHeight || 600) }, capturePoint: { x: point.x / chart.width, y: point.y / chart.height }, visibility: 'visible', associationLabel: content.itemLabel || content.title } };
     };
-    const hitsFor = event => chart.getElementsAtEventForMode(event, chart.options.interaction?.mode || 'nearest', { intersect: true, ...(chart.options.interaction || {}) }, false);
+    const hitsFor = event => inspection.resolveHits ? inspection.resolveHits(event, chart)
+      : chart.getElementsAtEventForMode(event, chart.options.interaction?.mode || 'nearest', { intersect: true, ...(chart.options.interaction || {}) }, false);
     const selectHits = (hits, position, pinned) => {
       const item = itemFor(hits, position);
       if (item) { controller.show(tabId, item, pinned, canvas); chart.draw?.(); }
     };
     listen(canvas, 'click', event => selectHits(hitsFor(event), { x: event.offsetX || 0, y: event.offsetY || 0 }, true));
+    if (inspection.resolveHits) {
+      listen(canvas, 'pointermove', event => {
+        const hits = hitsFor(event);
+        if (hits.length) selectHits(hits, { x: event.offsetX || 0, y: event.offsetY || 0 }, false);
+        else controller.send({ type: 'leave' });
+      });
+      listen(canvas, 'pointerleave', () => controller.send({ type: 'leave' }));
+    }
     canvas.tabIndex = 0;
     canvas.dataset.tooltipInspector = 'true';
     canvas.setAttribute('role', 'button');
@@ -177,12 +193,13 @@
     canvas.setAttribute('aria-label', `${tabId} data inspection`);
     listen(canvas, 'keydown', event => {
       if (event.key === 'Escape' && controller.getPinned(tabId)) { event.preventDefault(); event.stopPropagation(); controller.dismiss(); return; }
-      const valid = chart.data.datasets.flatMap((dataset, datasetIndex) => chart.isDatasetVisible(datasetIndex) ? dataset.data.map((value, index) => ({ datasetIndex, index })).filter(hit => chart.getDatasetMeta(datasetIndex).data[hit.index] && chart.data.datasets[datasetIndex].label !== '') : []);
+      const valid = chart.data.datasets.flatMap((dataset, datasetIndex) => chart.isDatasetVisible(datasetIndex) ? dataset.data.map((value, index) => ({ datasetIndex, index })).filter(hit => (inspection.anchorPoint || chart.getDatasetMeta(datasetIndex).data[hit.index]) && chart.data.datasets[datasetIndex].label !== '') : []);
       if (!valid.length) return;
       const inspect = (hit, pinned) => {
-        const element = chart.getDatasetMeta(hit.datasetIndex).data[hit.index];
+        const point = pointFor(chart, hit);
+        if (!point) return;
         const hits = chart.options.interaction?.mode === 'index' ? valid.filter(candidate => candidate.index === hit.index) : [hit];
-        selectHits(hits, { x: element.x, y: element.y }, pinned);
+        selectHits(hits, point, pinned);
       };
       if (['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown'].includes(event.key)) {
         event.preventDefault(); event.stopPropagation();
@@ -213,8 +230,8 @@
       },
       snapshotCapture(selection) {
         const privateCanvas = root.document.createElement('canvas');
-        privateCanvas.width = tabId === 'pieCharts' ? 560 : chart.width;
-        privateCanvas.height = tabId === 'pieCharts' ? 560 : chart.height;
+        privateCanvas.width = tabId === 'pieCharts' ? 560 : tabId === 'workoutTime' ? 960 : chart.width;
+        privateCanvas.height = tabId === 'pieCharts' ? 560 : tabId === 'workoutTime' ? 500 : chart.height;
         const options = copyChartInput(chart.config.options);
         options.responsive = false; options.animation = false; options.devicePixelRatio = 1;
         options.plugins = { ...options.plugins, tooltip: { enabled: false } };
@@ -225,13 +242,16 @@
         chart.data.datasets.forEach((dataset, index) => privateChart.setDatasetVisibility(index, chart.isDatasetVisible(index)));
         privateChart.update('none');
         const hit = selection?.anchor.chartElements?.[0];
-        const selectedElement = hit && privateChart.getDatasetMeta(hit.datasetIndex)?.data[hit.index];
-        const selectedPoint = selectedElement?.tooltipPosition?.() || selectedElement;
-        const exportPoint = selectedPoint ? { x: selectedPoint.x / privateCanvas.width, y: selectedPoint.y / privateCanvas.height } : selection?.anchor.capturePoint;
         const copy = root.document.createElement('canvas');
-        copy.width = privateCanvas.width; copy.height = privateCanvas.height;
-        copy.getContext('2d').drawImage(privateCanvas, 0, 0);
-        privateChart.destroy();
+        let exportPoint;
+        try {
+          const selectedPoint = hit && pointFor(privateChart, hit);
+          exportPoint = selectedPoint ? { x: selectedPoint.x / privateCanvas.width, y: selectedPoint.y / privateCanvas.height } : selection?.anchor.capturePoint;
+          copy.width = privateCanvas.width; copy.height = privateCanvas.height;
+          copy.getContext('2d').drawImage(privateCanvas, 0, 0);
+        } finally {
+          privateChart.destroy();
+        }
         return { canvas: copy, sourceCanvas: canvas, resolveExportAnchor: selection ? captureContext => {
           if (!exportPoint) throw new Error('Could not resolve the selected chart item');
           const element = captureContext.element.querySelector?.('[data-export-chart-image]')

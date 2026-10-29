@@ -1564,6 +1564,12 @@
             </div>
           </div>
 
+          <div id="workoutTimeMeasure" role="group" aria-label="Measure" data-keyboard-filter-group data-filter-summary data-filter-label="Measure" class="flex w-fit max-w-full flex-wrap bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
+            <button type="button" onclick="setWorkoutTimeMeasure('count')" id="workoutTimeMeasureBtnCount" aria-pressed="true" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">Workout number</button>
+            <button type="button" onclick="setWorkoutTimeMeasure('duration')" id="workoutTimeMeasureBtnDuration" aria-pressed="false" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Duration</button>
+            <button type="button" onclick="setWorkoutTimeMeasure('distance')" id="workoutTimeMeasureBtnDistance" aria-pressed="false" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Distance</button>
+          </div>
+
           <div data-filter-summary data-filter-label="Date range" data-filter-value-id="workoutTimeRangeLabel" class="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
             <div class="flex items-center justify-between text-xs text-slate-400">
               <span>Date range</span>

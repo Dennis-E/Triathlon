@@ -132,12 +132,24 @@ describe('finite dashboard owner adapters', () => {
     vm.runInContext('workoutTimeDateCandidates = [new Date(2025, 0, 1), new Date(2026, 0, 1)]', owner);
     const adapter = owner.getWorkoutTimeKeyboardAdapter();
     const snapshot = adapter.readSnapshot();
+    expect(snapshot.selection.map(choice => choice.id)).toEqual(['granularity', 'sport', 'measure', 'start', 'end']);
+    expect(adapter.getDomainProvider(snapshot)(snapshot.selection.slice(0, 2)).values).toEqual(['count', 'duration', 'distance']);
     const candidate = snapshot.selection.map(choice => ['start', 'end'].includes(choice.id) ? { ...choice, value: 1 } : choice);
     expect(adapter.applySelection(candidate)).toBe(true);
     expect(owner.renderWorkoutTimeChart).toHaveBeenCalledTimes(1);
     const invalid = candidate.map(choice => choice.id === 'end' ? { ...choice, value: 0 } : choice);
     expect(adapter.applySelection(invalid)).toBe(false);
     expect(owner.renderWorkoutTimeChart).toHaveBeenCalledTimes(1);
+  });
+
+  it('wires the measure selector with stable IDs, accessible naming and one default pressed choice', () => {
+    const markup = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+    expect(markup).toContain('id="workoutTimeMeasure" role="group" aria-label="Measure"');
+    for (const [suffix, measure] of [['Count', 'count'], ['Duration', 'duration'], ['Distance', 'distance']]) {
+      const button = markup.match(new RegExp('<button[^>]*id="workoutTimeMeasureBtn' + suffix + '"[^>]*>'))?.[0];
+      expect(button).toContain(`setWorkoutTimeMeasure('${measure}')`);
+      expect(button).toContain(`aria-pressed="${measure === 'count'}"`);
+    }
   });
 
   it('uses only available calendar sports and the existing palette filter', () => {
@@ -154,6 +166,21 @@ describe('finite dashboard owner adapters', () => {
 });
 
 describe('workspace arrow dispatch', () => {
+  it('does not invalidate an already selected Workout Time measure but invalidates a different choice', () => {
+    const workspace = createArrowWorkspace();
+    const button = workspace.target();
+    let pressed = 'true';
+    button.getAttribute = name => name === 'aria-pressed' ? pressed : null;
+    const originalClosest = button.closest;
+    button.closest = selector => selector === 'button' ? button
+      : selector === '[data-keyboard-filter-group]' ? { id: 'workoutTimeMeasure' } : originalClosest(selector);
+    workspace.context.invalidateDashboardFilterEvent({ type: 'click', target: button });
+    expect(vm.runInContext('dashboardNavigationRevision', workspace.context)).toBe(0);
+    pressed = 'false';
+    workspace.context.invalidateDashboardFilterEvent({ type: 'click', target: button });
+    expect(vm.runInContext('dashboardNavigationRevision', workspace.context)).toBe(1);
+  });
+
   function installView(workspace, onCommit = () => {}) {
     let values = { sport: 'All', period: 'Year' };
     const commit = jest.fn(next => { onCommit(); values = next; });

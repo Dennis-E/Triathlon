@@ -131,7 +131,8 @@
         ],
         workoutTime: [
           getControlGroup('Granularity', ['workoutTimeGranularityBtnDay', 'workoutTimeGranularityBtnWeek', 'workoutTimeGranularityBtnMonth', 'workoutTimeGranularityBtnYear']),
-          getControlGroup('Sport', ['workoutTimeSportBtnAll', 'workoutTimeSportBtnRun', 'workoutTimeSportBtnBike', 'workoutTimeSportBtnSwim'])
+          getControlGroup('Sport', ['workoutTimeSportBtnAll', 'workoutTimeSportBtnRun', 'workoutTimeSportBtnBike', 'workoutTimeSportBtnSwim']),
+          getControlGroup('Measure', ['workoutTimeMeasureBtnCount', 'workoutTimeMeasureBtnDuration', 'workoutTimeMeasureBtnDistance'])
         ],
         trainingCalendar: [
           getControlGroup('Palette', ['trainingCalendarPaletteGreen', 'trainingCalendarPaletteBlue', 'trainingCalendarPaletteFire']),
@@ -182,6 +183,7 @@
         workoutTime: [
           { label: 'Granularity', value: getActiveButtonText(['workoutTimeGranularityBtnDay', 'workoutTimeGranularityBtnWeek', 'workoutTimeGranularityBtnMonth', 'workoutTimeGranularityBtnYear']) },
           { label: 'Sport', value: getActiveButtonText(['workoutTimeSportBtnAll', 'workoutTimeSportBtnRun', 'workoutTimeSportBtnBike', 'workoutTimeSportBtnSwim']) },
+          { label: 'Measure', value: getActiveButtonText(['workoutTimeMeasureBtnCount', 'workoutTimeMeasureBtnDuration', 'workoutTimeMeasureBtnDistance']) },
           { label: 'Date range', value: document.getElementById('workoutTimeRangeLabel')?.textContent.trim() }
         ],
         trainingCalendar: [
@@ -462,8 +464,10 @@
       sourceCanvases.forEach((canvas, index) => {
         const copy = clonedCanvases[index];
         if (!copy) throw new Error('Could not isolate the chart for export');
-        copy.width = canvas.width; copy.height = canvas.height;
         const source = renderer?.sourceCanvas === canvas ? renderer.canvas : canvas;
+        const exportResolution = tabId === 'workoutTime' && renderer?.sourceCanvas === canvas;
+        copy.width = exportResolution ? source.width : canvas.width;
+        copy.height = exportResolution ? source.height : canvas.height;
         copy.getContext('2d').drawImage(source, 0, 0, copy.width, copy.height);
       });
       const sourceImages = Array.from(targetEl.querySelectorAll?.('img') || []);
@@ -609,19 +613,29 @@
           }
 
           if (fileHandle) {
+            let writable = null;
             try {
-              const writable = await fileHandle.createWritable();
+              writable = await fileHandle.createWritable();
               await writable.write(image.blob);
               await writable.close();
               attempt.outcome = 'saved';
               return attempt.outcome;
             } catch (error) {
-              attempt.outcome = 'failed';
-              console.error('Could not save exported image', error);
-              if (lastExportedImage === image) {
-                showExportToast(`Could not save export image. ${error && error.message || 'Please try again.'}`);
+              if (error && error.name === 'NotAllowedError') {
+                try {
+                  await writable?.abort?.();
+                } catch (abortError) {
+                  console.error('Could not abort the restricted export write', abortError);
+                }
+                showExportToast('Writing to the selected file was blocked; that file may be empty or incomplete. The complete PNG will use the browser download, with its location controlled by browser settings.');
+              } else {
+                attempt.outcome = 'failed';
+                console.error('Could not save exported image', error);
+                if (lastExportedImage === image) {
+                  showExportToast(`Could not save export image. ${error && error.message || 'Please try again.'}`);
+                }
+                return attempt.outcome;
               }
-              return attempt.outcome;
             }
           }
         } else {

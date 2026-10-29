@@ -203,3 +203,46 @@ test.each(require('../src/tooltip-selection-utils').TAB_IDS)('%s uses the shared
   expect(controller.getState()).toBeNull();
   expect(document.getElementById('pinnedVisualizationTooltip')).toBeNull();
 });
+
+test('opt-in chart inspection describes zero/null categories without native tooltip rows or metadata', () => {
+  const { window, document } = makeController();
+  const canvas = document.createElement('canvas');
+  const chart = { canvas, width: 800, height: 400,
+    data: { labels: ['Empty', 'Unavailable'], datasets: [{ label: 'Duration (h)', data: [0, null], inspectionKeys: ['day:duration:empty', 'day:duration:unavailable'] }] },
+    config: { type: 'bar', plugins: [], options: {} }, options: {},
+    getDatasetMeta: () => ({ data: [] }), isDatasetVisible: () => true, update: jest.fn(), draw: jest.fn(),
+    getElementsAtEventForMode: jest.fn(() => []) };
+  const hooks = {
+    resolveHits: jest.fn(event => event.outside ? [] : [{ datasetIndex: 0, index: 1 }]),
+    describeContent: jest.fn((source, hits) => ({ title: source.data.labels[hits[0].index], sections: [], notes: ['No usable duration values'] })),
+    anchorPoint: jest.fn((source, hit) => ({ x: source.width * (hit.index ? 0.75 : 0.25), y: source.height - 20 }))
+  };
+  window.dashboardTooltips.attachChart('workoutTime', chart, hooks);
+  canvas.dispatchEvent({ type: 'pointermove' });
+  expect(window.dashboardTooltips.getState().content.title).toBe('Unavailable');
+  canvas.dispatchEvent({ type: 'click' });
+  const selected = window.dashboardTooltips.getPinned('workoutTime');
+  expect(selected.selectionKey).toBe('workoutTime:day:duration:unavailable');
+  expect(selected.anchor.capturePoint).toEqual({ x: 0.75, y: 0.95 });
+  expect(chart.getElementsAtEventForMode).not.toHaveBeenCalled();
+  canvas.dispatchEvent({ type: 'pointerleave' });
+  expect(window.dashboardTooltips.getPinned('workoutTime')).not.toBeNull();
+  window.dashboardTooltips.dismiss();
+  canvas.dispatchEvent({ type: 'click', outside: true });
+  expect(window.dashboardTooltips.getPinned('workoutTime')).toBeNull();
+  const event = { type: 'keydown', key: 'Enter', preventDefault: jest.fn() };
+  canvas.dispatchEvent(event);
+  expect(window.dashboardTooltips.getPinned('workoutTime').selectionKey).toBe('workoutTime:day:duration:empty');
+  window.Chart = jest.fn(function (privateCanvas, config) {
+    this.width = privateCanvas.width; this.height = privateCanvas.height;
+    this.data = config.data; this.setDatasetVisibility = jest.fn(); this.update = jest.fn(); this.destroy = jest.fn();
+    this.getDatasetMeta = () => ({ data: [] });
+  });
+  const snapshot = window.dashboardTooltips.adapters.get('workoutTime').snapshotCapture(selected);
+  const cloned = document.createElement('canvas');
+  const anchor = snapshot.resolveExportAnchor({ element: cloned });
+  expect(anchor.capturePoint).toEqual({ x: 0.75, y: 0.96 });
+  expect(snapshot.canvas).toMatchObject({ width: 960, height: 500 });
+  expect(hooks.anchorPoint.mock.calls.at(-1)[0]).not.toBe(chart);
+  expect(window.Chart.mock.calls[0][1].options.plugins.tooltip.enabled).toBe(false);
+});

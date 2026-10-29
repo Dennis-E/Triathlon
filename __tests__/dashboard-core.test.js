@@ -94,6 +94,70 @@ function loadAdditionalChart(moduleName, canvasId) {
 }
 
 describe('distribution and workout time chart adapters', () => {
+  it.each([['count', 1], ['duration', 2], ['distance', 12]])('refreshes stale import date bounds without resetting the %s measure', (measure, expectedTotal) => {
+    const { dashboard, elements } = loadAdditionalChart('dashboard-workout-time', 'workoutTimeChart');
+    elements.set('workoutTimeDateStart', {});
+    elements.set('workoutTimeDateEnd', {});
+    dashboard.initWorkoutTimeDateSlider();
+    dashboard.setWorkoutTimeMeasure(measure);
+    dashboard.renderWorkoutTimeChart();
+    dashboard.__replacement = [{ date: new Date(2030, 0, 4), startTime: new Date(2030, 0, 4, 8), sport: 'Run', duration: 7200, distance: 12 }];
+    vm.runInContext('processedActivities = __replacement', dashboard);
+    dashboard.window.dashboardTooltips.attachChart.mockClear();
+    dashboard.renderWorkoutTimeChart();
+    expect(dashboard.window.dashboardTooltips.attachChart).toHaveBeenCalledTimes(1);
+    const chart = dashboard.window.dashboardTooltips.attachChart.mock.calls[0][1];
+    expect(chart.config.data.datasets[0].data.reduce((sum, value) => sum + value, 0)).toBe(expectedTotal);
+    expect(dashboard.getWorkoutTimeDateBounds().minDate).toEqual(new Date(2030, 0, 4));
+    expect(vm.runInContext('selectedWorkoutTimeMeasure', dashboard)).toBe(measure);
+    expect(elements.get('workoutTimeDateStart').value).toBe('0');
+    expect(elements.get('workoutTimeDateEnd').value).toBe('0');
+  });
+
+  it.each([['count', 'Workouts', 11], ['duration', 'Duration (h)', 11], ['distance', 'Distance (km)', 197]])('renders %s with its actual unit and selected numeric values', (measure, axisTitle, total) => {
+    const { dashboard } = loadAdditionalChart('dashboard-workout-time', 'workoutTimeChart');
+    dashboard.renderWorkoutTimeChart();
+    dashboard.setWorkoutTimeMeasure(measure);
+    const chart = dashboard.window.dashboardTooltips.attachChart.mock.calls.at(-1)[1];
+    expect(chart.config.options.scales.y.title.text).toBe(axisTitle);
+    expect(chart.config.data.datasets[0].data.reduce((sum, value) => sum + value, 0)).toBe(total);
+    expect(vm.runInContext('selectedWorkoutTimeMeasure', dashboard)).toBe(measure);
+  });
+
+  it('changes measure only after invalidating the old pin and retains it across filters and replacement data', () => {
+    const { dashboard } = loadAdditionalChart('dashboard-workout-time', 'workoutTimeChart');
+    const tooltips = dashboard.window.dashboardTooltips;
+    tooltips.invalidate.mockImplementationOnce(() => expect(vm.runInContext('selectedWorkoutTimeMeasure', dashboard)).toBe('count'));
+    dashboard.setWorkoutTimeMeasure('duration');
+    expect(tooltips.invalidate).toHaveBeenCalledTimes(1);
+    dashboard.setWorkoutTimeMeasure('duration');
+    dashboard.setWorkoutTimeMeasure('unsupported');
+    expect(tooltips.invalidate).toHaveBeenCalledTimes(1);
+    dashboard.setWorkoutTimeSportFilter('Run');
+    dashboard.setWorkoutTimeGranularity('week');
+    vm.runInContext('processedActivities = __activities.slice(0, 1)', dashboard);
+    dashboard.renderWorkoutTimeChart();
+    expect(vm.runInContext('selectedWorkoutTimeMeasure', dashboard)).toBe('duration');
+    const snapshot = dashboard.getWorkoutTimeKeyboardAdapter().readSnapshot();
+    expect(snapshot.selection.map(choice => choice.id)).toEqual(['granularity', 'sport', 'measure', 'start', 'end']);
+    expect(snapshot.selection.find(choice => choice.id === 'measure').value).toBe('duration');
+  });
+
+  it('distinguishes all-unavailable measurements from exportable measured-zero data', () => {
+    const { dashboard, elements } = loadAdditionalChart('dashboard-workout-time', 'workoutTimeChart');
+    const classes = new Set(['hidden']);
+    const emptyState = { textContent: '', classList: { add: name => classes.add(name), remove: name => classes.delete(name) } };
+    elements.set('workoutTimeEmptyState', emptyState);
+    vm.runInContext('processedActivities = __activities.map(activity => ({ ...activity, duration: 0, durationAvailable: false }))', dashboard);
+    dashboard.setWorkoutTimeMeasure('duration');
+    expect(classes.has('hidden')).toBe(false);
+    expect(emptyState.textContent).toMatch(/No usable duration/i);
+    vm.runInContext('processedActivities = __activities.map(activity => ({ ...activity, duration: 0, durationAvailable: true }))', dashboard);
+    dashboard.renderWorkoutTimeChart();
+    expect(classes.has('hidden')).toBe(true);
+    expect(dashboard.window.dashboardTooltips.attachChart.mock.calls.at(-1)[1].config.data.datasets[0].data.every(value => value === 0)).toBe(true);
+  });
+
   it.each(['line', 'histogram'])('attaches distributions in %s mode using original bucket/series values', mode => {
     const { dashboard } = loadAdditionalChart('dashboard-distributions', 'distributionsChart');
     if (mode === 'histogram') dashboard.setDistributionsSportFilter('Run');
@@ -116,7 +180,7 @@ describe('distribution and workout time chart adapters', () => {
     const { dashboard } = loadAdditionalChart('dashboard-workout-time', 'workoutTimeChart');
     dashboard.setWorkoutTimeGranularity(granularity);
     const tooltips = dashboard.window.dashboardTooltips;
-    expect(tooltips.attachChart).toHaveBeenLastCalledWith('workoutTime', expect.any(dashboard.Chart));
+    expect(tooltips.attachChart).toHaveBeenLastCalledWith('workoutTime', expect.any(dashboard.Chart), expect.objectContaining({ resolveHits: expect.any(Function), describeContent: expect.any(Function), anchorPoint: expect.any(Function) }));
     const { config } = tooltips.attachChart.mock.calls.at(-1)[1];
     expect(config.data.labels.length).toBe(config.data.datasets[0].data.length);
     expect(config.data.datasets[0].data.reduce((sum, count) => sum + count, 0)).toBe(11);
@@ -185,6 +249,35 @@ describe('distribution and workout time chart adapters', () => {
     dashboard.setWorkoutTimeSportFilter('Run');
     dashboard.setWorkoutTimeSportFilter('unsupported');
     expect(tooltips.invalidate).toHaveBeenCalledTimes(2);
+  });
+
+  it('describes unavailable, measured-zero and partial fields from an immutable render-local measure', () => {
+    const { dashboard } = loadAdditionalChart('dashboard-workout-time', 'workoutTimeChart');
+    dashboard.__activities = [
+      { date: new Date(2026, 6, 1), startTime: new Date(2026, 6, 1, 2), sport: 'Run', duration: 0, durationAvailable: false },
+      { date: new Date(2026, 6, 1), startTime: new Date(2026, 6, 1, 4), sport: 'Run', duration: 0 },
+      { date: new Date(2026, 6, 1), startTime: new Date(2026, 6, 1, 6), sport: 'Run', duration: 4500 },
+      { date: new Date(2026, 6, 1), startTime: new Date(2026, 6, 1, 6), sport: 'Run', duration: 0, durationAvailable: false }
+    ];
+    vm.runInContext('processedActivities = __activities', dashboard);
+    dashboard.setWorkoutTimeMeasure('duration');
+    const call = dashboard.window.dashboardTooltips.attachChart.mock.calls.at(-1);
+    const inspection = call[2];
+    const chart = { width: 1200, height: 400, canvas: { getBoundingClientRect: () => ({ left: 0, top: 0, width: 1200, height: 400 }) },
+      chartArea: { left: 0, top: 0, right: 1200, bottom: 400 },
+      scales: { x: { getValueForPixel: pixel => pixel / 100, getPixelForValue: index => index * 100 }, y: { getPixelForValue: value => 400 - value * 10 } } };
+    expect(inspection.resolveHits({ offsetX: 100, offsetY: 200 }, chart)).toEqual([{ datasetIndex: 0, index: 1 }]);
+    expect(inspection.resolveHits({ offsetX: -1, offsetY: 200 }, chart)).toEqual([]);
+    expect(inspection.describeContent(chart, [{ index: 1 }]).notes).toEqual(['No usable duration values']);
+    expect(inspection.describeContent(chart, [{ index: 2 }]).sections[0].rows[0].value).toBe('0s');
+    expect(inspection.describeContent(chart, [{ index: 0 }]).notes).toEqual(['No activities']);
+    expect(inspection.anchorPoint(chart, { index: 1 })).toEqual({ x: 100, y: 400 });
+    expect(inspection.describeContent(chart, [{ index: 3 }]).notes).toEqual(['Available for 1 of 2 workouts']);
+    vm.runInContext("selectedWorkoutTimeMeasure = 'distance'", dashboard);
+    expect(inspection.describeContent(chart, [{ index: 3 }]).sections[0].rows[0].value).toBe('1h 15m');
+    expect(inspection.anchorPoint(chart, { index: 3 })).toEqual({ x: 300, y: 387.5 });
+    expect(call[1].config.data.datasets[0].data[1]).toBeNull();
+    expect(call[1].config.data.datasets[0].data[2]).toBe(0);
   });
 });
 

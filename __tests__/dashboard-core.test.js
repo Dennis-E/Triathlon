@@ -10,10 +10,12 @@ function loadDashboardCore() {
 }
 
 function loadDashboardForRendering(activities) {
-  const dashboard = loadDashboardCore();
+  const dashboard = {};
+  vm.createContext(dashboard);
   dashboard.Date = Date;
   dashboard.window = { dashboardTabNavigation: require('../src/tab-navigation'), innerWidth: 1024,
     dashboardTooltips: { attachChart: jest.fn(), invalidate: jest.fn() } };
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/dashboard-core.js'), 'utf8'), dashboard);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/dashboard-state.js'), 'utf8'), dashboard);
 
   const elementIds = [
@@ -120,6 +122,11 @@ describe('distribution and workout time chart adapters', () => {
     const { config } = tooltips.attachChart.mock.calls.at(-1)[1];
     expect(config.data.labels.length).toBe(config.data.datasets[0].data.length);
     expect(config.data.datasets[0].data.reduce((sum, count) => sum + count, 0)).toBe(11);
+    expect(config.options.scales.x.title).toMatchObject({
+      display: true,
+      text: granularity === 'day' ? 'Start time' : granularity
+    });
+    expect(config.options.scales.y.title).toMatchObject({ display: true, text: 'Workouts' });
     expect(config.options.plugins.tooltip.callbacks.label({ parsed: { y: 3 } })).toBe('3 workouts');
   });
 
@@ -303,6 +310,23 @@ describe('dashboard core visualization readiness', () => {
     expect(runtime.elements.get('cardAvgLabel').textContent).toBe('Monthly Average');
     expect(runtime.elements.get('cardAvgUnit').textContent).toBe('km/mo');
     expect(Number(runtime.elements.get('cardAvgKm').textContent)).toBe(3.9);
+  });
+
+  it('exposes the selected distance total and period without recomputing dashboard data', () => {
+    const runtime = loadDashboardForRendering(aggregationFixtures);
+    runtime.render('yearly', 'Run', 'all');
+
+    expect(runtime.dashboard.window.totalDistanceDashboard.getExportData()).toMatchObject({
+      sport: 'Run',
+      metric: 'Distance',
+      period: '2024-2026',
+      unit: 'km',
+      centralValue: 82,
+      aggregation: 'yearly',
+      periodLabels: ['2024', '2025', '2026'],
+      series: [{ label: 'Running', values: [35, 20, 27] }],
+      incompleteYear: '2026'
+    });
   });
 
   it('applies complete distance views with candidate aggregation periods and one render', () => {

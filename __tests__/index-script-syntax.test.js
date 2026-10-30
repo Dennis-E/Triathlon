@@ -151,6 +151,34 @@ describe('finite dashboard owner adapters', () => {
     adapter.applySelection([{ id: 'palette', value: 'blue' }, { id: 'sport', value: 'Run' }]);
     expect(owner.renderTrainingCalendar).toHaveBeenCalledTimes(1);
   });
+
+  it('exposes an immutable copy of the selected calendar years and shared palette scale', () => {
+    const owner = loadOwner('dashboard-training-calendar.js', { trainingCalendarUtils: require('../src/training-calendar-utils') });
+    owner.__calendarModel = {
+      years: [
+        { year: 2026, activityCount: 2, days: [
+          { dateKey: '2026-01-01', activityCount: 1, metricValue: 10 },
+          { dateKey: '2026-01-02', activityCount: 1, metricValue: 100 }
+        ] },
+        { year: 2025, activityCount: 1, days: [
+          { dateKey: '2025-01-01', activityCount: 1, metricValue: 50 },
+          { dateKey: '2025-01-02', activityCount: 0, metricValue: 0 }
+        ] }
+      ]
+    };
+    vm.runInContext('trainingCalendarModel = __calendarModel', owner);
+    owner.window.trainingCalendarDashboard = owner.window.trainingCalendarDashboard || {};
+    const data = owner.window.trainingCalendarDashboard.getExportData();
+
+    expect(data.years.map(year => year.year)).toEqual([2026, 2025]);
+    expect(data.scale).toMatchObject({ palette: 'green', minValue: 10, maxValue: 100, minLevel: 0, maxLevel: 5 });
+    expect(data.years.flatMap(year => year.days.map(day => day.intensityLevel))).toEqual([1, 5, 3, 0]);
+    expect(data.yearSectionHeight).toBeGreaterThan(0);
+    data.years[0].year = 2000;
+    data.years[0].days[0].intensityLevel = 0;
+    expect(vm.runInContext('trainingCalendarModel.years[0].year', owner)).toBe(2026);
+    expect(vm.runInContext('trainingCalendarModel.years[0].days[0].metricValue', owner)).toBe(10);
+  });
 });
 
 describe('workspace arrow dispatch', () => {
@@ -659,7 +687,7 @@ describe('index.html inline script syntax', () => {
     expect(trainingCalendarCode).toContain('id="trainingCalendarSportBtn${sport}"');
     expect(inlineCode).toContain("getActiveButtonText(Array.from(document.querySelectorAll('#trainingCalendarSportFilters button')).map(button => button.id))");
     expect(inlineCode).toContain("trainingCalendar: typeof processedActivities !== 'undefined' && processedActivities.length > 0");
-    expect(inlineCode).toContain('createExportCaptureSnapshot(targetEl, tabId)');
+    expect(inlineCode).toContain('createExportCaptureSnapshot(targetEl, tabId, { chartCapture })');
     expect(inlineCode).toContain('html2canvas(snapshot.element');
     expect(inlineCode).not.toContain('if (tooltipWasVisible)');
     expect(inlineCode).toContain("showExportToast('Nothing to export for this selection yet.')");
@@ -962,29 +990,32 @@ describe('index.html inline script syntax', () => {
 
   it('composes export content without filter metadata and supports PB tile targets', () => {
     expect(inlineCode).toContain('function drawExportComposition(captured, target, assets)');
-    expect(inlineCode).toContain("ctx.fillRect(0, 0, targetSize, 190)");
-    expect(inlineCode).toContain("ctx.fillRect(0, 0, targetSize, 190)");
-    expect(inlineCode).toContain("ctx.drawImage(assets.qrCode, 930, 28, 120, 120)");
-    expect(inlineCode).not.toContain("ctx.fillRect(0, 930, targetSize, 150)");
-    expect(inlineCode).not.toContain('footerLogoBox');
-    expect(inlineCode).toContain("target.kind === 'pb-tile' || isLifetimeKpiExport ? 24 : 60");
-    expect(inlineCode).toContain('computeExportContentLayout');
-    expect(inlineCode).toContain('contextHeight: 0');
+    expect(inlineCode).toContain('getExportFormatConfig(format)');
+    expect(inlineCode).toContain('function wrapSocialExportText');
+    expect(inlineCode).toContain('presentation.context');
+    expect(inlineCode).toContain('canvasHeight - margin - 40');
+    expect(inlineCode).toContain('EXPORT_DOMAIN');
+    expect(inlineCode).not.toContain('Shareable visualization');
+    expect(inlineCode).not.toContain('assets.qrCode');
     expect(inlineCode).not.toContain('target.filters || []');
-    expect(inlineCode).not.toContain('contextLineCount');
-    expect(inlineCode).toContain('if (isLifetimeKpiExport) return finalCanvas.toDataURL');
-    expect(inlineCode).toContain("ctx.drawImage(assets.qrCode");
     expect(inlineCode).toContain("kind: 'pb-tile'");
     expect(inlineCode).toContain("targetElementId: 'pbDetailCaptureTarget'");
     expect(inlineCode).toContain('availableControls: getAvailableControlContext(tabName)');
     expect(inlineCode).not.toContain('target.availableControls || []');
     expect(inlineCode).toContain('computeContainFit');
-    expect(inlineCode).toContain('EXPORT_DOMAIN');
     expect(inlineCode).not.toContain('ctx.drawImage(assets.strava');
     expect(inlineCode).not.toContain('ctx.drawImage(assets.instagram');
     expect(inlineCode).not.toContain('targetElementId: tileId');
     expect(inlineCode).toContain('function exportActivePbDetail()');
     expect(inlineCode).toContain("exportVisualizationTarget(target)");
+  });
+
+  it('offers accessible Square and Portrait choices in the export preview', () => {
+    expect(html).toContain('id="exportFormatSelector" role="group" aria-label="Export image format"');
+    expect(html).toContain('id="exportFormatSquare" aria-pressed="true" onclick="setExportFormat(\'square\')"');
+    expect(html).toContain('id="exportFormatPortrait" aria-pressed="false" onclick="setExportFormat(\'portrait\')"');
+    expect(html).toContain('id="exportHumorEnabled" onchange="setExportHumorEnabled(this.checked)"');
+    expect(html).toContain('for="exportHumorEnabled"');
   });
 
   it('keeps export assets local and does not route generated images through the API', () => {
@@ -1010,8 +1041,9 @@ describe('index.html inline script syntax', () => {
 
   it('includes activity titles in collision-protected detail labels', () => {
     expect(inlineCode).toContain('function wrapPbActivityTitle(title, maxCharacters = 24)');
-    expect((inlineCode.match(/title: .*\.name \|\| 'Activity'/g) || [])).toHaveLength(4);
-    expect(inlineCode).toContain("svg.appendChild(createSvgElement('rect'");
+    expect((inlineCode.match(/title: .*\.name \|\| 'Activity'/g) || [])).toHaveLength(5);
+    expect(inlineCode).toContain("svg.appendChild(createSvgElement('g'");
+    expect(inlineCode).toContain("callout.appendChild(createSvgElement('rect'");
     expect(inlineCode).toContain('const labelLayouts = records.map');
     expect(inlineCode).toContain('labelLayouts.forEach(layout =>');
   });

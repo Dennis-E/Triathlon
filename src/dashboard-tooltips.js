@@ -192,12 +192,41 @@
         if (!point) return selection.anchor;
         return { ...selection.anchor, normalizedPoint: { x: (rect.left + point.x * rect.width) / (root.innerWidth || 800), y: (rect.top + point.y * rect.height) / (root.innerHeight || 600) } };
       },
-      snapshotCapture() {
+      snapshotCapture(captureOptions = {}) {
         const privateCanvas = root.document.createElement('canvas');
-        privateCanvas.width = chart.width; privateCanvas.height = chart.height;
+        const sourceRect = canvas.parentElement?.getBoundingClientRect?.() || canvas.getBoundingClientRect?.();
+        const captureWidth = captureOptions.width > 0 ? captureOptions.width
+          : chart.width > 0 ? chart.width : Math.round(sourceRect?.width || 0);
+        const captureHeight = captureOptions.height > 0 ? captureOptions.height
+          : chart.height > 0 ? chart.height : Math.round(sourceRect?.height || 0);
+        if (!(captureWidth > 0 && captureHeight > 0)) {
+          throw new Error('Visualization is not ready to export. Wait for it to finish rendering and try again.');
+        }
+        privateCanvas.width = captureWidth;
+        privateCanvas.height = captureHeight;
         const options = copyChartInput(chart.config.options);
         options.responsive = false; options.animation = false; options.devicePixelRatio = 1;
         options.plugins = { ...options.plugins, tooltip: { enabled: false } };
+        const minimumFontSize = Number(captureOptions.minFontSize) || 0;
+        const axisTextColor = captureOptions.axisTextColor;
+        if (typeof axisTextColor === 'string' && axisTextColor) {
+          Object.values(options.scales || {}).forEach(scale => {
+            if (scale.ticks) scale.ticks.color = axisTextColor;
+            if (scale.title && scale.title.display !== false) scale.title.color = axisTextColor;
+          });
+        }
+        if (minimumFontSize > 0) {
+          const enlargeFont = font => {
+            if (typeof font === 'number') return Math.max(font, minimumFontSize);
+            return { ...(font && typeof font === 'object' ? font : {}), size: Math.max(Number(font?.size) || 0, minimumFontSize) };
+          };
+          Object.values(options.scales || {}).forEach(scale => {
+            if (scale.ticks) scale.ticks.font = enlargeFont(scale.ticks.font);
+            if (scale.title && scale.title.display !== false) scale.title.font = enlargeFont(scale.title.font);
+          });
+          const legendLabels = options.plugins.legend?.labels;
+          if (legendLabels) legendLabels.font = enlargeFont(legendLabels.font);
+        }
         const privateChart = new root.Chart(privateCanvas, {
           type: chart.config.type, data: copyChartInput(chart.data), options,
           plugins: (chart.config.plugins || []).filter(entry => entry !== plugin)

@@ -64,6 +64,16 @@ describe('Wordcloud dashboard contract', () => {
     expect(power).toContain("'data-tooltip-inspector'");
   });
 
+  it('marks PB detail SVG axis, result and event text for clone-only export typography', () => {
+    const power = fs.readFileSync(path.join(ROOT, 'src/dashboard-power-pb.js'), 'utf8');
+    expect(power).toContain("'data-export-role': 'axis'");
+    expect(power).toContain("'data-export-role': 'result'");
+    expect(power).toContain("'data-export-role': 'description'");
+    expect(power).toContain("'data-pb-callout': ''");
+    expect(dashboardExport).toContain("label.getAttribute('data-export-role')");
+    expect(dashboardExport).toContain("firstDescription.replaceChildren(...lines.map");
+  });
+
   it('pins full SVG record details from keyboard and keeps overview/detail identities aligned', () => {
     const nodes = new Map();
     const createNode = tag => ({ tag, style: {}, attributes: {}, listeners: {}, children: [],
@@ -85,7 +95,7 @@ describe('Wordcloud dashboard contract', () => {
     const overviewKey = api.show.mock.calls.at(-1)[1].selectionKey;
     context.renderPbDetailChart({ exportKey: 'Run-5km', color: '#ffffff', axisLabel: 'Time', direction: 'down',
       formatValue: context.formatDurationHms, records: [{ date: record.date, value: record.duration, title: record.name, record }] });
-    const target = nodes.get('pbDetailChart').children.find(node => node.tag === 'rect');
+    const target = nodes.get('pbDetailChart').children.flatMap(node => node.children || []).find(node => node.tag === 'rect');
     const preventDefault = jest.fn();
     target.listeners.keydown[0]({ key: 'Enter', preventDefault });
     expect(preventDefault).toHaveBeenCalled();
@@ -214,7 +224,7 @@ describe('Wordcloud dashboard contract', () => {
     expect(dashboardExport.includes('wordcloud: !!(window.wordcloudDashboard && window.wordcloudDashboard.canRequestExport())')).toBe(true);
     expect(dashboardExport.includes('await window.wordcloudDashboard.waitForCurrentRender()')).toBe(false);
     expect(dashboardExport.includes('if (!window.wordcloudDashboard.hasExportableCloud())')).toBe(true);
-    expect(dashboardExport.includes('snapshot = createExportCaptureSnapshot(targetEl, tabId)')).toBe(true);
+    expect(dashboardExport.includes('snapshot = createExportCaptureSnapshot(targetEl, tabId, { chartCapture })')).toBe(true);
     expect(wordcloudDashboard.includes('hasExportableCloud')).toBe(true);
     expect(wordcloudDashboard.includes('waitForCurrentRender')).toBe(true);
   });

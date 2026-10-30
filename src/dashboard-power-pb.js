@@ -423,12 +423,12 @@
       scale.ticks.forEach(value => {
         const y = yFor(value);
         svg.appendChild(createSvgElement('line', { x1: left, y1: y, x2: W - right, y2: y, stroke: '#1E293B', 'stroke-width': 1 }));
-        const label = createSvgElement('text', { x: left - 12, y: y + 4, 'text-anchor': 'end', 'font-size': 13, fill: '#CBD5E1', 'font-family': 'ui-monospace, monospace' });
+        const label = createSvgElement('text', { x: left - 12, y: y + 4, 'text-anchor': 'end', 'font-size': 13, fill: '#CBD5E1', 'font-family': 'ui-monospace, monospace', 'data-export-role': 'axis' });
         label.textContent = model.formatValue(value);
         svg.appendChild(label);
       });
 
-      const yTitle = createSvgElement('text', { x: 24, y: top + plotH / 2, transform: `rotate(-90 24 ${top + plotH / 2})`, 'text-anchor': 'middle', 'font-size': 14, fill: '#94A3B8' });
+      const yTitle = createSvgElement('text', { x: 24, y: top + plotH / 2, transform: `rotate(-90 24 ${top + plotH / 2})`, 'text-anchor': 'middle', 'font-size': 14, fill: '#94A3B8', 'data-export-role': 'axis' });
       yTitle.textContent = model.axisLabel;
       svg.appendChild(yTitle);
 
@@ -436,7 +436,7 @@
         records.forEach(record => {
           const x = xForRecord(record);
           svg.appendChild(createSvgElement('line', { x1: x, y1: top, x2: x, y2: H - bottom, stroke: '#172033', 'stroke-width': 1 }));
-          const label = createSvgElement('text', { x, y: H - bottom + 28, 'text-anchor': 'middle', 'font-size': 13, fill: '#CBD5E1' });
+          const label = createSvgElement('text', { x, y: H - bottom + 28, 'text-anchor': 'middle', 'font-size': 13, fill: '#CBD5E1', 'data-export-role': 'axis' });
           label.textContent = record.durationLabel;
           svg.appendChild(label);
         });
@@ -445,7 +445,7 @@
         timeTicks.ticks.forEach(date => {
           const x = left + ((date.getTime() - start) / (end - start)) * plotW;
           svg.appendChild(createSvgElement('line', { x1: x, y1: top, x2: x, y2: H - bottom, stroke: '#172033', 'stroke-width': 1 }));
-          const label = createSvgElement('text', { x, y: H - bottom + 28, 'text-anchor': 'middle', 'font-size': 13, fill: '#CBD5E1' });
+          const label = createSvgElement('text', { x, y: H - bottom + 28, 'text-anchor': 'middle', 'font-size': 13, fill: '#CBD5E1', 'data-export-role': 'axis' });
           label.textContent = timeTicks.showMonth
             ? date.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })
             : String(date.getFullYear());
@@ -553,10 +553,13 @@
         return { record, index, x, y, labelText, titleLines, side, box, boxHeight };
       });
 
+      const calloutByLayout = new Map();
       labelLayouts.forEach(layout => {
         const edgeX = layout.side === 'right' ? layout.box.left : layout.box.right;
         const edgeY = Math.max(layout.box.top + 8, Math.min(layout.y, layout.box.bottom - 8));
-        svg.appendChild(createSvgElement('line', { x1: layout.x, y1: layout.y, x2: edgeX, y2: edgeY, stroke: '#64748B', 'stroke-width': 1 }));
+        const callout = svg.appendChild(createSvgElement('g', { 'data-pb-callout': '', 'data-pb-side': layout.side }));
+        calloutByLayout.set(layout, callout);
+        callout.appendChild(createSvgElement('line', { x1: layout.x, y1: layout.y, x2: edgeX, y2: edgeY, stroke: '#64748B', 'stroke-width': 1, 'data-pb-connector': '' }));
         const point = createSvgElement('circle', { cx: layout.x, cy: layout.y, r: layout.index === records.length - 1 ? 5 : 4, fill: model.color });
         bindPbTooltipTarget(point, layout.record, { scope: model.exportKey, rank: durationProfile ? 1 : layout.index + 1, total: durationProfile ? 1 : records.length,
           metricLabel: model.axisLabel, formattedValue: layout.labelText, focusable: false, hover: true });
@@ -564,7 +567,8 @@
       });
 
       labelLayouts.forEach(layout => {
-        const labelTarget = svg.appendChild(createSvgElement('rect', {
+        const callout = calloutByLayout.get(layout);
+        const labelTarget = callout.appendChild(createSvgElement('rect', {
           x: layout.box.left,
           y: layout.box.top,
           width: layout.box.right - layout.box.left,
@@ -579,16 +583,16 @@
           metricLabel: model.axisLabel, formattedValue: layout.labelText, hover: true });
         const textX = layout.side === 'right' ? layout.box.left + 8 : layout.box.right - 8;
         const anchor = layout.side === 'right' ? 'start' : 'end';
-        const valueLabel = createSvgElement('text', { x: textX, y: layout.box.top + 17, 'text-anchor': anchor, 'font-size': 14, 'font-weight': layout.index === records.length - 1 ? 700 : 600, fill: layout.index === records.length - 1 ? '#F8FAFC' : model.color, 'font-family': 'ui-monospace, monospace' });
+        const valueLabel = createSvgElement('text', { x: textX, y: layout.box.top + 17, 'text-anchor': anchor, 'font-size': 14, 'font-weight': layout.index === records.length - 1 ? 700 : 600, fill: layout.index === records.length - 1 ? '#F8FAFC' : model.color, 'font-family': 'ui-monospace, monospace', 'data-export-role': 'result' });
         valueLabel.textContent = layout.labelText;
         valueLabel.style.pointerEvents = 'none';
-        svg.appendChild(valueLabel);
+        callout.appendChild(valueLabel);
 
         layout.titleLines.forEach((line, lineIndex) => {
-          const titleLabel = createSvgElement('text', { x: textX, y: layout.box.top + 34 + lineIndex * 15, 'text-anchor': anchor, 'font-size': 12, fill: '#CBD5E1' });
+          const titleLabel = createSvgElement('text', { x: textX, y: layout.box.top + 34 + lineIndex * 15, 'text-anchor': anchor, 'font-size': 12, fill: '#CBD5E1', 'data-export-role': 'description' });
           titleLabel.textContent = line;
           titleLabel.style.pointerEvents = 'none';
-          svg.appendChild(titleLabel);
+          callout.appendChild(titleLabel);
         });
       });
       window.dashboardTooltips?.refreshAnchor?.();
@@ -624,6 +628,90 @@
       document.getElementById('pbTooltip')?.classList.add('hidden');
       window.dashboardTooltips?.refreshAnchor?.();
     }
+
+    function getActivePbExportData() {
+      const model = activePbDetailModel;
+      if (!model || !Array.isArray(model.records) || model.records.length === 0) return null;
+      const direction = model.direction === 'up' ? 'up' : 'down';
+      const records = model.records.map((record, index) => ({
+        index,
+        value: Number.isFinite(record.value) ? record.value
+          : Number.isFinite(record.watts) ? record.watts
+            : Number.isFinite(record.duration) ? record.duration : null,
+        date: record.date || null,
+        title: String(record.title || record.name || 'Activity'),
+        displayValue: typeof model.formatValue === 'function' && Number.isFinite(record.value)
+          ? model.formatValue(record.value) : String(record.value ?? record.watts ?? record.duration ?? ''),
+        sourceType: record.sourceType || record.record?.sourceType || record.record?.source || null
+      })).filter(record => Number.isFinite(record.value));
+      if (records.length === 0) return null;
+
+      const best = records.reduce((current, record) => direction === 'up'
+        ? record.value > current.value ? record : current
+        : record.value < current.value ? record : current);
+      let largestImprovement = null;
+      for (let index = 1; index < records.length; index += 1) {
+        const previous = records[index - 1];
+        const current = records[index];
+        const improvement = direction === 'up'
+          ? current.value - previous.value
+          : previous.value - current.value;
+        if (improvement > 0 && (!largestImprovement || improvement > largestImprovement.improvement)) {
+          largestImprovement = { index, improvement };
+        }
+      }
+
+      const candidates = [
+        { kind: 'first', record: records[0] },
+        ...(largestImprovement ? [{ kind: 'largestImprovement', record: records[largestImprovement.index] }] : []),
+        { kind: 'current', record: records[records.length - 1] }
+      ];
+      const seen = new Set();
+      const milestones = candidates.filter(candidate => {
+        if (seen.has(candidate.record.index)) return false;
+        seen.add(candidate.record.index);
+        return true;
+      }).map(({ kind, record }) => ({
+        kind,
+        value: record.value,
+          displayValue: record.displayValue,
+        date: record.date,
+        title: record.title,
+        sourceType: record.sourceType
+      }));
+      const exportRecords = records.map(record => ({
+        value: record.value,
+        displayValue: record.displayValue,
+        date: record.date,
+        sourceType: record.sourceType
+      }));
+      const summarizeRecord = record => ({
+        value: record.value,
+        displayValue: record.displayValue,
+        date: record.date,
+        sourceType: record.sourceType
+      });
+
+      return {
+        title: model.title,
+        metricLabel: model.axisLabel,
+        direction,
+        recordCount: records.length,
+        records: exportRecords,
+        firstRecord: summarizeRecord(records[0]),
+        currentRecord: summarizeRecord(records[records.length - 1]),
+        best: {
+          value: best.value,
+          displayValue: best.displayValue,
+          date: best.date,
+          title: best.title,
+          sourceType: best.sourceType
+        },
+        milestones
+      };
+    }
+
+    window.personalBestsDashboard = { getActiveExportData: getActivePbExportData };
 
     function renderPbChart() {
       const activities = processedActivities;

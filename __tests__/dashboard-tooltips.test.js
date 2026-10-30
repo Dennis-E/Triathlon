@@ -103,6 +103,73 @@ test('private chart capture disables native tooltips and leaves the live configu
   expect(destroy).toHaveBeenCalledTimes(1);
 });
 
+test('private chart capture falls back to visible wrapper dimensions when Chart.js reports zero size', () => {
+  const { window, document } = makeController();
+  window.Chart = jest.fn(function () { this.setDatasetVisibility = jest.fn(); this.update = jest.fn(); this.destroy = jest.fn(); });
+  const wrapper = document.createElement('div');
+  wrapper.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 400, right: 800, bottom: 400 });
+  const canvas = document.createElement('canvas');
+  canvas.width = 0;
+  canvas.height = 0;
+  canvas.parentElement = wrapper;
+  const chart = {
+    canvas, width: 0, height: 0,
+    data: { labels: ['October'], datasets: [{ label: 'Run', data: [12] }] },
+    config: { type: 'bar', plugins: [], options: { plugins: { tooltip: { enabled: true } } } },
+    options: { interaction: { mode: 'index' } }, getElementsAtEventForMode: () => [],
+    isDatasetVisible: () => true, update: jest.fn()
+  };
+  window.dashboardTooltips.attachChart('totalDistance', chart);
+
+  const snapshot = window.dashboardTooltips.adapters.get('totalDistance').snapshotCapture();
+
+  expect(window.Chart.mock.calls[0][0]).toMatchObject({ width: 800, height: 400 });
+  expect(snapshot.canvas.width).toBe(800);
+  expect(snapshot.canvas.height).toBe(400);
+  expect(chart.canvas).toMatchObject({ width: 0, height: 0 });
+});
+
+test('private chart export snapshot applies fixed bounds and minimum axis/legend fonts only to the copy', () => {
+  const { window, document } = makeController();
+  window.Chart = jest.fn(function () { this.setDatasetVisibility = jest.fn(); this.update = jest.fn(); this.destroy = jest.fn(); });
+  const chart = {
+    canvas: document.createElement('canvas'), width: 800, height: 400,
+    data: { labels: ['One'], datasets: [{ label: 'Run', data: [1] }] },
+    config: {
+      type: 'bar', plugins: [], options: {
+        scales: {
+          x: { ticks: { color: '#94a3b8', font: { size: 12 } }, title: { display: true, color: '#94a3b8', font: { size: 14 } } },
+          y: { ticks: { color: '#94a3b8', font: { size: 11 } }, title: { display: true, color: '#94a3b8', font: { size: 12 } } }
+        },
+        plugins: { tooltip: { enabled: true }, legend: { labels: { font: { size: 10 } } } }
+      }
+    },
+    options: { interaction: { mode: 'index' } }, getElementsAtEventForMode: () => [],
+    isDatasetVisible: () => true, update: jest.fn()
+  };
+  window.dashboardTooltips.attachChart('totalDistance', chart);
+  const originalData = JSON.parse(JSON.stringify(chart.data));
+
+  window.dashboardTooltips.adapters.get('totalDistance').snapshotCapture({ width: 960, height: 500, minFontSize: 30, axisTextColor: '#f8fafc' });
+
+  const [canvas, config] = window.Chart.mock.calls[0];
+  expect(canvas).toMatchObject({ width: 960, height: 500 });
+  expect(config.options.scales.x.ticks.font.size).toBe(30);
+  expect(config.options.scales.x.ticks.color).toBe('#f8fafc');
+  expect(config.options.scales.x.title.font.size).toBe(30);
+  expect(config.options.scales.x.title.color).toBe('#f8fafc');
+  expect(config.options.scales.y.ticks.font.size).toBe(30);
+  expect(config.options.scales.y.ticks.color).toBe('#f8fafc');
+  expect(config.options.scales.y.title.font.size).toBe(30);
+  expect(config.options.scales.y.title.color).toBe('#f8fafc');
+  expect(config.options.plugins.legend.labels.font.size).toBe(30);
+  expect(chart.config.options.scales.x.ticks.font.size).toBe(12);
+  expect(chart.config.options.scales.x.ticks.color).toBe('#94a3b8');
+  expect(chart.config.options.scales.y.title.color).toBe('#94a3b8');
+  expect(chart.config.options.plugins.legend.labels.font.size).toBe(10);
+  expect(chart.data).toEqual(originalData);
+});
+
 test('pin stays visible after leave and hover, toggles, replaces and dismisses safely', () => {
   const { controller, document } = makeController();
   controller.show('totalDistance', makeSelection(), true);

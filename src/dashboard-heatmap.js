@@ -722,47 +722,43 @@
       if (!container || !heatmapMapInstance || typeof capture !== 'function') {
         return typeof capture === 'function' ? capture() : null;
       }
-
-      const originalStyle = {
-        width: container.style.width,
-        height: container.style.height,
-        maxWidth: container.style.maxWidth
-      };
-      const center = heatmapMapInstance.getCenter();
-      const zoom = heatmapMapInstance.getZoom();
-
-      try {
-        container.style.width = '960px';
-        container.style.height = '500px';
-        container.style.maxWidth = 'none';
-        heatmapMapInstance.invalidateSize({ pan: false, animate: false });
-        await new Promise(resolve => {
+      const tileLayer = heatmapTileLayerInstance;
+      if (tileLayer && typeof tileLayer.isLoading === 'function' && tileLayer.isLoading()) {
+        await new Promise((resolve, reject) => {
           let settled = false;
-          let timeoutId = null;
-          const finish = () => {
+          const finish = error => {
             if (settled) return;
             settled = true;
-            if (timeoutId !== null) clearTimeout(timeoutId);
-            if (heatmapTileLayerInstance && typeof heatmapTileLayerInstance.off === 'function') {
-              heatmapTileLayerInstance.off('load', finish);
-            }
-            resolve();
+            clearTimeout(timeoutId);
+            tileLayer.off?.('load', onLoad);
+            tileLayer.off?.('tileerror', onError);
+            if (error) reject(error);
+            else resolve();
           };
-          if (heatmapTileLayerInstance && typeof heatmapTileLayerInstance.once === 'function') {
-            heatmapTileLayerInstance.once('load', finish);
-            if (!settled) timeoutId = setTimeout(finish, 1000);
-          } else {
-            finish();
-          }
+          const onLoad = () => finish();
+          const onError = () => finish(new Error('Could not load a map tile required for this export.'));
+          const timeoutId = setTimeout(() => finish(new Error('Map tiles did not finish loading for this export.')), 15000);
+          tileLayer.once?.('load', onLoad);
+          tileLayer.once?.('tileerror', onError);
         });
-        return await capture();
-      } finally {
-        container.style.width = originalStyle.width;
-        container.style.height = originalStyle.height;
-        container.style.maxWidth = originalStyle.maxWidth;
-        heatmapMapInstance.invalidateSize({ pan: false, animate: false });
-        heatmapMapInstance.setView(center, zoom, { animate: false });
       }
+      return capture();
     }
 
-    window.heatmapDashboard = { captureAtExportSize };
+    function getHeatmapExportData() {
+      if (!heatmapMapInstance) return { sport: selectedHeatmapSportFilter, colorScheme: selectedHeatmapColorScheme, viewport: null };
+      const center = heatmapMapInstance.getCenter();
+      const bounds = heatmapMapInstance.getBounds();
+      const normalizedCenter = Array.isArray(center) ? center.slice() : [center.lat, center.lng];
+      return {
+        sport: selectedHeatmapSportFilter,
+        colorScheme: selectedHeatmapColorScheme,
+        viewport: {
+          center: normalizedCenter,
+          zoom: heatmapMapInstance.getZoom(),
+          bounds: [bounds.getSouth(), bounds.getWest(), bounds.getNorth(), bounds.getEast()]
+        }
+      };
+    }
+
+    window.heatmapDashboard = { captureAtExportSize, getExportData: getHeatmapExportData };

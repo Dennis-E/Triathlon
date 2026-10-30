@@ -4,7 +4,8 @@
     let selectedEquipmentTimelineFilter = 'All';
     let selectedEquipmentTimelineMode = 'continuous'; // 'continuous' | 'activities'
     let equipmentTimelineChartInstance = null;
-     let equipmentChartInstance = null;
+    let equipmentChartInstance = null;
+    let equipmentExportData = null;
 
     function wrapEquipmentValue(ctx, label, availableWidth) {
       if (availableWidth <= 0) return null;
@@ -43,6 +44,7 @@
       const explanation = document.getElementById('equipmentPaceExplanation');
       const colorControl = document.getElementById('equipmentColorSchemeControl');
       const colorSelect = document.getElementById('equipmentColorScheme');
+      equipmentExportData = null;
       const canSelectColors = selectedEquipmentMetric === 'pace' && ['Shoes', 'Bikes'].includes(selectedEquipmentFilter);
       if (colorControl) colorControl.classList.toggle('hidden', !canSelectColors);
       if (colorSelect) colorSelect.value = selectedEquipmentColorScheme;
@@ -98,6 +100,12 @@
         ? rows.map(row => row.type === 'Bikes' ? formatSpeedLabel(row.speedKmh) : formatPaceLabel(row.paceMinPerKm))
         : values.map(value => metric === 'distance' ? `${value.toFixed(1)} km`
           : metric === 'count' ? `${value} activities` : `${value.toFixed(2)} km/act`);
+      equipmentExportData = {
+        metric,
+        equipmentFilter: selectedEquipmentFilter,
+        unit: metric === 'distance' ? 'km' : metric === 'count' ? 'activities' : metric === 'avgLength' ? 'km/activity' : null,
+        items: labels.map((name, index) => ({ name, value: values[index], displayValue: displayValues[index] }))
+      };
 
       if (canvasArea) canvasArea.style.height = `${Math.max(540, labels.length * 56 + 70)}px`;
       if (explanation && isPace) {
@@ -335,6 +343,32 @@
         }
       );
     }
+
+    function getEquipmentExportData() {
+      if (!equipmentExportData) return null;
+      return {
+        ...equipmentExportData,
+        items: equipmentExportData.items.map(item => ({ ...item }))
+      };
+    }
+
+    function getEquipmentTimelineExportData() {
+      const activitiesMode = selectedEquipmentTimelineMode === 'activities';
+      const items = activitiesMode
+        ? window.equipmentUtils.getEquipmentTimelineActivities(processedActivities, selectedEquipmentTimelineFilter)
+        : window.equipmentUtils.aggregateEquipmentTimeline(processedActivities, selectedEquipmentTimelineFilter);
+      return {
+        mode: selectedEquipmentTimelineMode,
+        equipmentFilter: selectedEquipmentTimelineFilter,
+        periodMeaning: activitiesMode ? 'Individual activities' : 'Usage span',
+        items
+      };
+    }
+
+    window.equipmentDashboard = {
+      getExportData: getEquipmentExportData,
+      getTimelineExportData: getEquipmentTimelineExportData
+    };
 
     // ─── shared helpers ────────────────────────────────────────────────────────
 

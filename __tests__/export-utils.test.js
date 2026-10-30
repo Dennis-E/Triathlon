@@ -18,10 +18,85 @@ const {
   getExportControlConfig,
   getExportLayoutConfig,
   getExportTargetSlug,
-  getExportPngDimensions
+  getExportPngDimensions,
+  getExportFormatConfig,
+  computeSocialExportLayout,
+  createSocialExportMetadata,
+  getSocialExportStyleConfig,
+  getContrastRatio,
+  wrapExportText
 } = require('../src/export-utils');
 
 describe('export-utils', () => {
+  describe('social export format and metadata', () => {
+    it('defines specification minimums and passes text/mark contrast thresholds', () => {
+      const style = getSocialExportStyleConfig();
+      expect(style).toMatchObject({
+        safeMargin: 48,
+        typography: {
+          headline: { min: 56, max: 72 },
+          centralValue: { min: 88, max: 120 },
+          essential: 36,
+          axis: 30,
+          context: 30,
+          branding: 24
+        }
+      });
+      expect(getContrastRatio(style.colors.headline, style.colors.background)).toBeGreaterThanOrEqual(4.5);
+      expect(getContrastRatio(style.colors.secondary, style.colors.background)).toBeGreaterThanOrEqual(4.5);
+      expect(getContrastRatio(style.colors.accent, style.colors.surface)).toBeGreaterThanOrEqual(3);
+    });
+
+    it('wraps long labels without dropping characters and rejects content beyond its line budget', () => {
+      const measureText = value => String(value).length * 10;
+      const lines = wrapExportText('Long Shoe Model 123456', 90, measureText, 3);
+      expect(lines.join(' ').replace(/\s/g, '')).toBe('LongShoeModel123456');
+      expect(lines.every(line => measureText(line) <= 90)).toBe(true);
+      expect(() => wrapExportText('A long label that cannot fit', 40, measureText, 1)).toThrow(/line/i);
+    });
+
+    it('defaults to square and returns fixed dimensions for both supported formats', () => {
+      expect(getExportFormatConfig()).toEqual({ key: 'square', width: 1080, height: 1080 });
+      expect(getExportFormatConfig('portrait')).toEqual({ key: 'portrait', width: 1080, height: 1350 });
+      expect(getExportFormatConfig('unsupported')).toBeNull();
+    });
+
+    it('computes a deterministic composition inside the selected format and safe margins', () => {
+      const square = computeSocialExportLayout('square', { headerHeight: 180, footerHeight: 48, contextHeight: 36 });
+      const portrait = computeSocialExportLayout('portrait', { headerHeight: 180, footerHeight: 48, contextHeight: 36 });
+
+      expect(square).toMatchObject({
+        format: 'square',
+        width: 1080,
+        height: 1080,
+        visualization: { x: 48, width: 984 }
+      });
+      expect(portrait).toMatchObject({
+        format: 'portrait',
+        width: 1080,
+        height: 1350,
+        visualization: { x: 48, width: 984 }
+      });
+      expect(square.visualization.y + square.visualization.height).toBeLessThanOrEqual(1080 - 48);
+      expect(portrait.visualization.y + portrait.visualization.height).toBeLessThanOrEqual(1350 - 48);
+      expect(() => computeSocialExportLayout('unsupported')).toThrow(/format/i);
+    });
+
+    it('validates factual headline and optional humor word limits without inventing context', () => {
+      expect(createSocialExportMetadata({
+        headline: 'My running years',
+        context: [{ label: 'Sport', value: 'Run' }],
+        secondaryLine: 'Apparently, I do not sit still.'
+      })).toEqual({
+        headline: 'My running years',
+        context: [{ label: 'Sport', value: 'Run' }],
+        secondaryLine: 'Apparently, I do not sit still.'
+      });
+      expect(() => createSocialExportMetadata({ headline: 'One two three four five six seven eight' })).toThrow(/seven words/i);
+      expect(() => createSocialExportMetadata({ headline: 'My running years', secondaryLine: 'One two three four five six seven eight nine ten eleven' })).toThrow(/ten words/i);
+    });
+  });
+
   describe('PNG byte validation', () => {
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6XcAAAAASUVORK5CYII=', 'base64');
 
@@ -382,6 +457,27 @@ describe('export-utils', () => {
       contextGap: 12
     };
 
+    it.each([
+      ['square', 1080, 1080, { x: 48, y: 253, width: 984, height: 779 }],
+      ['portrait', 1080, 1350, { x: 48, y: 253, width: 984, height: 1049 }]
+    ])('keeps the %s visualization inside the fixed export dimensions', (_format, canvasWidth, canvasHeight, expectedVisualization) => {
+      const layout = computeExportContentLayout({
+        canvasWidth,
+        canvasHeight,
+        headerHeight: 190,
+        marginX: 48,
+        topGap: 15,
+        bottomMargin: 48,
+        contextHeight: 36,
+        contextGap: 12
+      });
+
+      expect(layout.visualization).toEqual(expectedVisualization);
+      expect(layout.visualization.x).toBeGreaterThanOrEqual(48);
+      expect(layout.visualization.x + layout.visualization.width).toBeLessThanOrEqual(canvasWidth - 48);
+      expect(layout.visualization.y + layout.visualization.height).toBeLessThanOrEqual(canvasHeight - 48);
+    });
+
     it('omits the context region and gives the chart the remaining height when context is empty', () => {
       const layout = computeExportContentLayout({ ...canvas, contextHeight: 0 });
 
@@ -656,10 +752,7 @@ describe('export-utils', () => {
   describe('asset paths and target slugs', () => {
     it('returns local asset paths and stable PB tile slugs', () => {
       expect(getExportAssetPaths()).toEqual({
-        logo: 'assets/logo.png',
-        strava: 'assets/Strava_Logo.svg',
-        instagram: 'assets/Instagram_logo_2016.svg',
-        qrCode: 'assets/QR Code webpage.png'
+        logo: 'assets/logo.png'
       });
       expect(getExportTargetSlug({ kind: 'pb-tile', key: 'run-5k' })).toBe('pb-run-5k');
       expect(getExportTargetSlug({ kind: 'tab', key: 'paceMetrics' })).toBe('pace-metrics');
@@ -667,10 +760,10 @@ describe('export-utils', () => {
 
     it('exposes header-only layout and PB content-fit settings', () => {
       expect(getExportLayoutConfig()).toMatchObject({
-        footer: false,
-        headerIncludesDomain: true,
-        headerIncludesQrCode: true,
-        pbContentMargin: expect.any(Number)
+        footer: true,
+        headerIncludesDomain: false,
+        headerIncludesQrCode: false,
+        pbContentMargin: 48
       });
     });
 

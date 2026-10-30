@@ -203,6 +203,7 @@ function renderTrainingCalendar() {
   yearsContainer.innerHTML = '';
   trainingCalendarModel.years.forEach(yearModel => {
     const section = document.createElement('section');
+    section.dataset.calendarYear = String(yearModel.year);
     section.className = 'space-y-2';
     section.innerHTML = `<h3 class="text-sm font-semibold text-slate-200">${yearModel.year}</h3><div class="overflow-x-auto pb-2" role="region" aria-label="${yearModel.year} training calendar" tabindex="0"><div class="min-w-max space-y-1"><div class="grid min-w-max auto-cols-[14px] grid-flow-col gap-1" data-calendar-months></div><div class="grid min-w-max auto-cols-[14px] grid-flow-col grid-rows-[repeat(7,14px)] gap-1" data-calendar-days></div></div></div>`;
     yearsContainer.appendChild(section);
@@ -256,3 +257,40 @@ function showTrainingCalendarDayTooltipByKey(dateKey, anchor) {
   const day = selectTrainingCalendarDayByKey(dateKey);
   showTrainingCalendarTooltip(day, anchor);
 }
+
+function getTrainingCalendarExportData() {
+  const modelYears = trainingCalendarModel?.years || [];
+  const activeValues = modelYears.flatMap(year => year.days || [])
+    .filter(day => day.activityCount > 0 && Number.isFinite(day.metricValue))
+    .map(day => day.metricValue);
+  const minValue = activeValues.length ? Math.min(...activeValues) : 0;
+  const maxValue = activeValues.length ? Math.max(...activeValues) : 0;
+  const years = modelYears.map(year => ({
+    year: year.year,
+    activityCount: year.activityCount,
+    days: (year.days || []).map(day => ({
+      dateKey: day.dateKey,
+      intensityLevel: day.activityCount <= 0 ? 0 : minValue === maxValue ? 5
+        : Math.min(5, Math.floor(((day.metricValue - minValue) / (maxValue - minValue)) * 5) + 1)
+    }))
+  }));
+  const measuredHeights = Array.from(document.querySelectorAll('#trainingCalendarYears > [data-calendar-year]'))
+    .map(section => section.getBoundingClientRect?.().height || section.offsetHeight || 0)
+    .filter(height => height > 0);
+  const palette = selectedTrainingCalendarPalette;
+  return {
+    years,
+    palette,
+    scale: {
+      palette,
+      minValue,
+      maxValue,
+      minLevel: 0,
+      maxLevel: 5,
+      colors: [window.trainingCalendarUtils.EMPTY_DAY_COLOR, ...window.trainingCalendarUtils.PALETTES[palette]]
+    },
+    yearSectionHeight: measuredHeights.length ? Math.ceil(Math.max(...measuredHeights) + 22) : 180
+  };
+}
+
+window.trainingCalendarDashboard = { getExportData: getTrainingCalendarExportData };

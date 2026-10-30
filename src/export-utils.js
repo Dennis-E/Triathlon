@@ -34,10 +34,7 @@ const TAB_FILENAME_SLUGS = {
 };
 
 const EXPORT_ASSET_PATHS = {
-  logo: 'assets/logo.png',
-  strava: 'assets/Strava_Logo.svg',
-  instagram: 'assets/Instagram_logo_2016.svg',
-  qrCode: 'assets/QR Code webpage.png'
+  logo: 'assets/logo.png'
 };
 
 const EXPORT_BRAND_CONFIG = {
@@ -51,11 +48,99 @@ const EXPORT_CONTROL_CONFIG = {
 };
 
 const EXPORT_LAYOUT_CONFIG = {
-  footer: false,
-  headerIncludesDomain: true,
-  headerIncludesQrCode: true,
-  pbContentMargin: 24
+  footer: true,
+  headerIncludesDomain: false,
+  headerIncludesQrCode: false,
+  pbContentMargin: 48
 };
+
+const EXPORT_FORMATS = Object.freeze({
+  square: Object.freeze({ key: 'square', width: 1080, height: 1080 }),
+  portrait: Object.freeze({ key: 'portrait', width: 1080, height: 1350 })
+});
+
+const SOCIAL_EXPORT_STYLE = Object.freeze({
+  safeMargin: 48,
+  typography: Object.freeze({
+    headline: Object.freeze({ min: 56, max: 72 }),
+    centralValue: Object.freeze({ min: 88, max: 120 }),
+    essential: 36,
+    axis: 30,
+    context: 30,
+    branding: 24
+  }),
+  colors: Object.freeze({
+    background: '#071719',
+    surface: '#10292b',
+    headline: '#f8fafc',
+    secondary: '#d1e5e3',
+    accent: '#20c9b2',
+    grid: '#244346',
+    rank: '#fbbf24'
+  })
+});
+
+function getSocialExportStyleConfig() {
+  return {
+    safeMargin: SOCIAL_EXPORT_STYLE.safeMargin,
+    typography: Object.fromEntries(Object.entries(SOCIAL_EXPORT_STYLE.typography).map(([key, value]) => [
+      key,
+      value && typeof value === 'object' ? { ...value } : value
+    ])),
+    colors: { ...SOCIAL_EXPORT_STYLE.colors }
+  };
+}
+
+function getContrastRatio(foreground, background) {
+  const toRgb = color => {
+    const hex = String(color || '').replace(/^#/, '');
+    if (!/^(?:[\da-f]{3}|[\da-f]{6})$/i.test(hex)) throw new TypeError('Contrast colors must be 3- or 6-digit hex values');
+    const fullHex = hex.length === 3 ? [...hex].map(character => character + character).join('') : hex;
+    return [0, 2, 4].map(offset => parseInt(fullHex.slice(offset, offset + 2), 16) / 255);
+  };
+  const luminance = color => {
+    const [red, green, blue] = toRgb(color).map(channel => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+    return red * 0.2126 + green * 0.7152 + blue * 0.0722;
+  };
+  const first = luminance(foreground);
+  const second = luminance(background);
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+}
+
+function wrapExportText(text, maxWidth, measureText, maxLines = 2) {
+  if (!(maxWidth > 0) || typeof measureText !== 'function' || !(maxLines > 0)) {
+    throw new TypeError('Text wrapping requires a positive width, line limit, and measureText function');
+  }
+  const lines = [];
+  let current = '';
+  const pushCurrent = () => {
+    if (current) lines.push(current);
+    current = '';
+    if (lines.length > maxLines) throw new RangeError('Export text exceeds its line limit');
+  };
+  const appendWord = word => {
+    if (measureText(word) <= maxWidth) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (measureText(candidate) <= maxWidth) current = candidate;
+      else { pushCurrent(); current = word; }
+      return;
+    }
+    pushCurrent();
+    for (const character of Array.from(word)) {
+      if (measureText(character) > maxWidth) throw new RangeError('A character cannot fit in the export text width');
+      if (current && measureText(current + character) > maxWidth) pushCurrent();
+      current += character;
+    }
+  };
+  String(text || '').trim().split(/\s+/).filter(Boolean).forEach(appendWord);
+  pushCurrent();
+  return lines;
+}
+
+function getExportFormatConfig(format = 'square') {
+  const config = EXPORT_FORMATS[String(format || '').toLowerCase()];
+  return config ? { ...config } : null;
+}
 
 function computeContainFit(sourceWidth, sourceHeight, boxWidth, boxHeight) {
   if (!(sourceWidth > 0) || !(sourceHeight > 0) || !(boxWidth > 0) || !(boxHeight > 0)) {
@@ -127,6 +212,60 @@ function computeExportContentLayout({
     };
   }
   return layout;
+}
+
+function computeSocialExportLayout(format = 'square', options = {}) {
+  const formatConfig = getExportFormatConfig(format);
+  if (!formatConfig) throw new RangeError(`Unsupported export format: ${format}`);
+
+  const {
+    safeMargin = 48,
+    footerHeight = 48,
+    ...layoutOptions
+  } = options;
+  if (!(safeMargin >= 48) || !(footerHeight >= 0)) {
+    throw new RangeError('Social export layout requires a 48 px safe margin and a nonnegative footer height');
+  }
+
+  const layout = computeExportContentLayout({
+    canvasWidth: formatConfig.width,
+    canvasHeight: formatConfig.height,
+    marginX: safeMargin,
+    bottomMargin: safeMargin + footerHeight,
+    ...layoutOptions
+  });
+  return {
+    format: formatConfig.key,
+    width: formatConfig.width,
+    height: formatConfig.height,
+    safeMargin,
+    footerHeight,
+    ...layout
+  };
+}
+
+function createSocialExportMetadata(input = {}) {
+  const headline = String(input.headline || '').trim().replace(/\s+/g, ' ');
+  const headlineWordCount = headline ? headline.split(' ').length : 0;
+  if (!headlineWordCount) throw new TypeError('Social export requires a factual headline');
+  if (headlineWordCount > 7) throw new RangeError('Social export headline must contain at most seven words');
+
+  const providedContext = input.context === undefined ? [] : input.context;
+  if (!Array.isArray(providedContext)) throw new TypeError('Social export context must be a list');
+  const context = providedContext
+    .filter(item => item && String(item.label || '').trim() && String(item.value || '').trim())
+    .map(item => ({ label: String(item.label).trim(), value: String(item.value).trim() }));
+
+  const secondaryLine = String(input.secondaryLine || '').trim().replace(/\s+/g, ' ');
+  if (secondaryLine && secondaryLine.split(' ').length > 10) {
+    throw new RangeError('Social export secondary line must contain at most ten words');
+  }
+
+  return {
+    headline,
+    context,
+    secondaryLine: secondaryLine || null
+  };
 }
 
 function computeTooltipAnnotationLayout({
@@ -443,6 +582,12 @@ function getExportPngDimensions(bytes) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    getExportFormatConfig,
+    getSocialExportStyleConfig,
+    getContrastRatio,
+    wrapExportText,
+    computeSocialExportLayout,
+    createSocialExportMetadata,
     computeSquareFit,
     computeContainFit,
     computeExportContentFit,
@@ -468,6 +613,12 @@ if (typeof module !== 'undefined' && module.exports) {
 
 if (typeof window !== 'undefined') {
   window.exportUtils = {
+    getExportFormatConfig,
+    getSocialExportStyleConfig,
+    getContrastRatio,
+    wrapExportText,
+    computeSocialExportLayout,
+    createSocialExportMetadata,
     computeSquareFit,
     computeContainFit,
     computeExportContentFit,

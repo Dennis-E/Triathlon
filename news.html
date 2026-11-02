@@ -42,6 +42,35 @@
       line-height: 1.8;
     }
 
+    .news-screenshot {
+      margin: 1.75rem 0 0;
+    }
+
+    .news-screenshot a {
+      display: block;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .news-screenshot a:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 4px;
+    }
+
+    .news-screenshot img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .news-screenshot figcaption {
+      margin-top: 0.75rem;
+      color: var(--muted);
+      font-size: 0.875rem;
+      line-height: 1.6;
+    }
+
     @media (min-width: 640px) {
       .news-shell {
         width: min(100% - 3rem, 72rem);
@@ -68,6 +97,29 @@
     </div>
 
     <article class="news-panel mb-8 max-w-3xl rounded-2xl p-6 sm:p-10">
+      <h2 class="max-w-2xl text-2xl font-semibold leading-tight text-white sm:text-3xl">Training patterns, closer details, and better exports</h2>
+      <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-slate-400">
+        <time datetime="2026-11-02">November 2, 2026</time>
+        <span aria-hidden="true">&middot;</span>
+        <span>The latest from TriAnalytica</span>
+      </div>
+      <div class="article-copy mt-6 space-y-5 text-base">
+        <p>When does your training happen, which details matter, and how do you share the story? The latest updates bring a little more depth to all three.</p>
+        <p><strong class="font-semibold text-slate-200">Workout Time goes beyond counting sessions.</strong> Explore your training patterns by workout count, duration, or distance. A time slot full of short sessions can look very different from the one where your longest workouts live.</p>
+        <p><strong class="font-semibold text-slate-200">Keep the details in focus.</strong> Pin a data detail to keep it visible while you inspect a visualization. Image exports can carry that selection with them as a speech bubble, keeping the detail connected to the point it describes.</p>
+        <p><strong class="font-semibold text-slate-200">A better fit for sharing.</strong> Choose square or portrait images, with updated layouts that give titles, values, and legends more room. Longer Training Calendar exports can span multiple pages, so more of your training history makes it into the picture.</p>
+        <p>As before, your imported files are processed locally in your browser, and exported images are prepared there too.</p>
+      </div>
+      <figure class="news-screenshot">
+        <a href="assets/previews/workout-time.png" aria-label="View Workout Time screenshot at full size">
+          <img src="assets/previews/workout-time.png" alt="Workout Time bar chart comparing workout counts across two-hour start-time intervals" width="1101" height="701" decoding="async">
+        </a>
+        <figcaption>Workout Time reveals which parts of the day hold the most training sessions.</figcaption>
+      </figure>
+      <a href="./index.html" class="mt-8 inline-flex items-center rounded-lg border border-amber-300/40 bg-amber-300/10 px-4 py-2.5 text-sm font-medium text-amber-200 transition-colors hover:bg-amber-300/20">Explore the latest updates</a>
+    </article>
+
+    <article class="news-panel mb-8 max-w-3xl rounded-2xl p-6 sm:p-10">
       <h2 class="max-w-2xl text-2xl font-semibold leading-tight text-white sm:text-3xl">A smoother way through your training data</h2>
       <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-slate-400">
         <time datetime="2026-10-19">October 19, 2026</time>
@@ -81,6 +133,12 @@
         <p><strong class="font-semibold text-slate-200">A little more control over sharing.</strong> Image exports can now offer a choice of where to save the file. The Training Calendar also gives quiet days less visual weight, keeping your active training easier to spot.</p>
         <p>There is more around the edges, too: a newsletter signup is now available on the main page, and the import experience has new activity illustrations. Thanks for following along as TriAnalytica grows.</p>
       </div>
+      <figure class="news-screenshot">
+        <a href="assets/previews/heatmap.png" aria-label="View route heatmap screenshot at full size">
+          <img src="assets/previews/heatmap.png" alt="Route heatmap showing recorded activity routes around the Rheinland region" width="1080" height="1080" loading="lazy" decoding="async">
+        </a>
+        <figcaption>Your routes, mapped together: the heatmap keeps its current zoom when filters change.</figcaption>
+      </figure>
       <a href="./index.html" class="mt-8 inline-flex items-center rounded-lg border border-amber-300/40 bg-amber-300/10 px-4 py-2.5 text-sm font-medium text-amber-200 transition-colors hover:bg-amber-300/20">Explore this week’s updates</a>
     </article>
 
@@ -98,6 +156,12 @@
         <p><strong class="font-semibold text-slate-200">Lifetime Statistics</strong> brings your bigger-picture milestones together, including total distance, moving time, workout count, active days, elevation, longest activity, and equipment history. Both new visualizations include a local image preview and download.</p>
         <p>We’ve also made importing a little more fun with rotating, activity-aware messages while your files are processed.</p>
       </div>
+      <figure class="news-screenshot">
+        <a href="assets/previews/import.png" aria-label="View training import options screenshot at full size">
+          <img src="assets/previews/import.png" alt="Strava and TrainingPeaks import buttons, each with a link to its export guide" width="503" height="91" loading="lazy" decoding="async">
+        </a>
+        <figcaption>Two starting points for your training history: Strava and TrainingPeaks exports.</figcaption>
+      </figure>
       <a href="./index.html" class="mt-8 inline-flex items-center rounded-lg border border-amber-300/40 bg-amber-300/10 px-4 py-2.5 text-sm font-medium text-amber-200 transition-colors hover:bg-amber-300/20">Explore this week’s updates</a>
     </article>
 
@@ -114,6 +178,12 @@
         <p><strong class="font-semibold text-slate-200">Equipment and Personal Bests</strong> are easier to read, too. Equipment pace comparisons now show clearer values and compare speed within each equipment type. The all-time bike power profile is organized by duration, while Personal Bests align more cleanly across sports and screen sizes.</p>
         <p>And if you’re on a smaller screen, navigation arrows help you reach visualization tabs that don’t fit in the row.</p>
       </div>
+      <figure class="news-screenshot">
+        <a href="assets/previews/personal-bests.png" aria-label="View Personal Bests screenshot at full size">
+          <img src="assets/previews/personal-bests.png" alt="Bike 100 km Personal Bests chart with time improvements and activity annotations" width="1080" height="1080" loading="lazy" decoding="async">
+        </a>
+        <figcaption>A Personal Bests image showing how 100 km bike times have improved over the years.</figcaption>
+      </figure>
       <a href="./index.html" class="mt-8 inline-flex items-center rounded-lg border border-amber-300/40 bg-amber-300/10 px-4 py-2.5 text-sm font-medium text-amber-200 transition-colors hover:bg-amber-300/20">Explore the new updates</a>
     </article>
 
@@ -129,6 +199,12 @@
         <p><strong class="font-semibold text-slate-200">Training Calendar</strong> turns each year into a training heatmap: consistency, big weeks, and rest days at a glance. Peek at any day for the details, then filter by year or sport. Yes, even your rest days get a square. No judgment—they’re part of the plan.</p>
         <p><strong class="font-semibold text-slate-200">Pace vs ...</strong> lets you compare pace (or bike speed) with heart rate, cadence, elevation gain, or distance. Pick Run, Bike, or Swim, toggle years and trendlines, and see what your training is really telling you—not just what your legs claimed afterward.</p>
       </div>
+      <figure class="news-screenshot">
+        <a href="assets/previews/heartrate-pace.png" aria-label="View pace comparison screenshot at full size">
+          <img src="assets/previews/heartrate-pace.png" alt="Scatter plot comparing workout pace with heart rate" width="1080" height="1080" loading="lazy" decoding="async">
+        </a>
+        <figcaption>Pace and heart rate together, revealing patterns across individual workouts.</figcaption>
+      </figure>
       <a href="./index.html" class="mt-8 inline-flex items-center rounded-lg border border-amber-300/40 bg-amber-300/10 px-4 py-2.5 text-sm font-medium text-amber-200 transition-colors hover:bg-amber-300/20">Explore your training</a>
     </article>
 
@@ -144,6 +220,12 @@
         <p>I am very happy if this is also interesting for fellow athletes. Building this platform is a learning process, and I would be extremely happy to receive your feedback, suggestions, and wishes as it grows.</p>
         <p>Thank you for taking a look at TriAnalytica and for helping shape what it can become.</p>
       </div>
+      <figure class="news-screenshot">
+        <a href="assets/previews/total-distance.png" aria-label="View training distance screenshot at full size">
+          <img src="assets/previews/total-distance.png" alt="Training distance chart with colored bars for running, cycling, and swimming" width="893" height="526" loading="lazy" decoding="async">
+        </a>
+        <figcaption>A look at your endurance training history through distance across sports.</figcaption>
+      </figure>
       <a href="mailto:myaidevproject@gmail.com?subject=TriAnalytica%20News%20Feedback" class="mt-8 inline-flex items-center rounded-lg border border-amber-300/40 bg-amber-300/10 px-4 py-2.5 text-sm font-medium text-amber-200 transition-colors hover:bg-amber-300/20">Send feedback</a>
     </article>
   </main>

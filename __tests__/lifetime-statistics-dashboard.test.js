@@ -56,18 +56,22 @@ const coreSummary = {
 };
 
 describe('lifetime statistics dashboard', () => {
-  it('offers independent pins for totals, sports and milestones using full semantic detail', () => {
+  it('pins totals, sports and milestones through their content without separate pin symbols', () => {
     const { context, elements, window } = createDashboardContext(createLifetimeBaselineActivities(), coreSummary);
     const api = { registerAdapter: jest.fn(), readContext: jest.fn(), show: jest.fn(), refreshAnchor: jest.fn(),
       invalidate: jest.fn(), send: jest.fn(), getPinned: jest.fn() };
     window.dashboardTooltips = api;
     window.lifetimeStatisticsDashboard.render();
     const area = elements.lifetimeStatisticsCaptureArea;
-    expect(area.innerHTML).toContain('data-statistic-pin="Total distance"');
-    expect(area.innerHTML).toContain('data-statistic-pin="sport:Run"');
-    expect(area.innerHTML).toContain('data-statistic-pin="Longest distance"');
-    expect(elements.lifetimeStatisticsExportArea.innerHTML).not.toContain('data-statistic-pin');
-    const button = { dataset: { statisticPin: 'Total distance' }, getBoundingClientRect: () => ({ left: 20, top: 40, width: 10, height: 10 }) };
+    expect(area.innerHTML).toContain('data-statistic-key="Total distance"');
+    expect(area.innerHTML).toContain('data-statistic-key="sport:Run"');
+    expect(area.innerHTML).toContain('data-statistic-key="Longest distance"');
+    expect(area.innerHTML).toContain('role="button" tabindex="0" aria-pressed="false"');
+    expect(area.innerHTML).not.toContain('data-statistic-pin');
+    expect(area.innerHTML).not.toContain('data-lucide="pin"');
+    expect(area.innerHTML).not.toMatch(/<tr[^>]*role="button"/);
+    expect(elements.lifetimeStatisticsExportArea.innerHTML).not.toContain('data-tooltip-inspector');
+    const button = { dataset: { statisticKey: 'Total distance' }, getBoundingClientRect: () => ({ left: 20, top: 40, width: 10, height: 10 }) };
     area.onclick({ target: { closest: () => button } });
     expect(api.show).toHaveBeenCalledWith('lifetimeStatistics', expect.objectContaining({
       selectionKey: 'lifetimeStatistics:Total distance', content: expect.objectContaining({
@@ -80,6 +84,23 @@ describe('lifetime statistics dashboard', () => {
     context.processedActivities = [];
     window.lifetimeStatisticsDashboard.render();
     expect(api.invalidate).toHaveBeenCalled();
+    expect(area.innerHTML).not.toContain('data-statistic-key');
+  });
+
+  it.each(['Enter', ' '])('activates statistic content exactly once with %p and prevents scrolling', key => {
+    const { elements, window } = createDashboardContext(createLifetimeBaselineActivities(), coreSummary);
+    window.dashboardTooltips = { registerAdapter: jest.fn(), readContext: jest.fn(), show: jest.fn(), invalidate: jest.fn() };
+    window.lifetimeStatisticsDashboard.render();
+    const area = elements.lifetimeStatisticsCaptureArea;
+    const target = { tagName: 'ARTICLE', dataset: { statisticKey: 'Workouts' } };
+    const event = { key, target: { closest: () => target }, preventDefault: jest.fn(), repeat: false };
+    area.onkeydown(event);
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(window.dashboardTooltips.show).toHaveBeenCalledTimes(1);
+    expect(window.dashboardTooltips.show).toHaveBeenCalledWith('lifetimeStatistics', expect.objectContaining({ selectionKey: 'lifetimeStatistics:Workouts' }), true, target);
+    area.onkeydown({ ...event, repeat: true });
+    area.onkeydown({ ...event, key: 'ArrowDown' });
+    expect(window.dashboardTooltips.show).toHaveBeenCalledTimes(1);
   });
 
   it('shows an empty state and hides the capture region when there are no imported activities', () => {

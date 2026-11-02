@@ -137,7 +137,8 @@
         ],
         workoutTime: [
           getControlGroup('Granularity', ['workoutTimeGranularityBtnDay', 'workoutTimeGranularityBtnWeek', 'workoutTimeGranularityBtnMonth', 'workoutTimeGranularityBtnYear']),
-          getControlGroup('Sport', ['workoutTimeSportBtnAll', 'workoutTimeSportBtnRun', 'workoutTimeSportBtnBike', 'workoutTimeSportBtnSwim'])
+          getControlGroup('Sport', ['workoutTimeSportBtnAll', 'workoutTimeSportBtnRun', 'workoutTimeSportBtnBike', 'workoutTimeSportBtnSwim']),
+          getControlGroup('Measure', ['workoutTimeMeasureBtnCount', 'workoutTimeMeasureBtnDuration', 'workoutTimeMeasureBtnDistance'])
         ],
         trainingCalendar: [
           getControlGroup('Palette', ['trainingCalendarPaletteGreen', 'trainingCalendarPaletteBlue', 'trainingCalendarPaletteFire']),
@@ -193,6 +194,7 @@
         workoutTime: [
           { label: 'Granularity', value: getActiveButtonText(['workoutTimeGranularityBtnDay', 'workoutTimeGranularityBtnWeek', 'workoutTimeGranularityBtnMonth', 'workoutTimeGranularityBtnYear']) },
           { label: 'Sport', value: getActiveButtonText(['workoutTimeSportBtnAll', 'workoutTimeSportBtnRun', 'workoutTimeSportBtnBike', 'workoutTimeSportBtnSwim']) },
+          { label: 'Measure', value: getActiveButtonText(['workoutTimeMeasureBtnCount', 'workoutTimeMeasureBtnDuration', 'workoutTimeMeasureBtnDistance']) },
           { label: 'Date range', value: document.getElementById('workoutTimeRangeLabel')?.textContent.trim() }
         ],
         trainingCalendar: [
@@ -862,7 +864,7 @@
       });
       if (row.length) legendRows.push(row);
 
-      const annotationHeight = target.pinnedSelection ? getExportTooltipLayout(ctx, target, contentWidth).height : 0;
+      const annotationHeight = 0;
       const legendTitleHeight = legendItems.length && target.legend?.title ? 38 : 0;
       const legendHeight = legendRows.length * 38 + legendTitleHeight;
       const footerHeight = 88;
@@ -884,13 +886,32 @@
       if (!specialized) ctx.drawImage(captured, drawX, drawY, fit.drawWidth, fit.drawHeight);
 
       if (target.pinnedSelection) {
-        const annotation = getExportTooltipLayout(ctx, target, contentWidth);
-        const box = { x: margin, y: visualization.y + visualization.height + 8, width: contentWidth, height: annotation.height };
-        ctx.fillStyle = '#10292b';
-        ctx.fillRect(box.x, box.y, box.width, box.height);
-        ctx.fillStyle = '#f1f5f9';
+        const visualizationRect = {
+          x: drawX,
+          y: drawY,
+          width: specialized ? visualization.width : fit.drawWidth,
+          height: specialized ? visualization.height : fit.drawHeight
+        };
+        const protectedRects = [{ x: 0, y: 0, width: canvasWidth, height: contentTop }];
+        (target.captureProtectedRects || []).forEach(rect => protectedRects.push({
+          x: visualizationRect.x + rect.x * visualizationRect.width,
+          y: visualizationRect.y + rect.y * visualizationRect.height,
+          width: rect.width * visualizationRect.width, height: rect.height * visualizationRect.height
+        }));
+        if (legendItems.length) {
+          const legendTop = layout.visualization.y + layout.visualization.height + 4;
+          protectedRects.push({ x: margin, y: legendTop, width: contentWidth, height: canvasHeight - legendTop });
+        }
+        const annotation = getExportTooltipLayout(ctx, target, visualizationRect, protectedRects, {
+          x: margin, y: visualization.y, width: contentWidth, height: visualization.height
+        });
+        drawExportTooltipBody(ctx, annotation);
+        const box = annotation.body;
+        ctx.fillStyle = '#111827';
         ctx.font = `500 ${annotation.fontSize}px system-ui, sans-serif`;
-        annotation.lines.forEach((line, index) => ctx.fillText(line, box.x + annotation.padding, box.y + annotation.padding + index * annotation.lineHeight));
+        ctx.textBaseline = 'alphabetic';
+        annotation.lines.forEach((line, index) => ctx.fillText(line, box.x + annotation.padding, box.y + annotation.padding + annotation.fontSize + index * annotation.lineHeight));
+        ctx.textBaseline = 'top';
       }
 
       let legendY = visualization.y + visualization.height + annotationHeight + 20;
@@ -933,18 +954,54 @@
       return finalCanvas.toDataURL('image/png');
     }
 
-    function getExportTooltipLayout(ctx, target, maxWidth) {
+    function drawExportTooltipBody(ctx, annotation) {
+      const { x, y, width, height } = annotation.body;
+      const radius = 8;
+      const tail = annotation.tail;
+      const insertTail = (side, reverse = false) => {
+        if (!tail || annotation.side !== side) return;
+        const first = reverse ? tail.end : tail.start;
+        const last = reverse ? tail.start : tail.end;
+        ctx.lineTo(first.x, first.y);
+        ctx.lineTo(tail.tip.x, tail.tip.y);
+        ctx.lineTo(last.x, last.y);
+      };
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      insertTail('below');
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      insertTail('left');
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      insertTail('above', true);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      insertTail('right', true);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+      ctx.fillStyle = '#f8fafc';
+      ctx.strokeStyle = '#111827';
+      ctx.lineWidth = 3;
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    function getExportTooltipLayout(ctx, target, visualizationRect, protectedRects, bounds) {
       const selected = target.pinnedSelection;
-      ctx.font = '500 30px system-ui, sans-serif';
-      const associationNote = selected.anchor.visibility === 'outside-view'
-        ? 'Selected item is outside the current view'
-        : selected.anchor.visibility === 'not-in-export' ? selected.anchor.associationLabel : '';
-      return window.exportUtils.computeTooltipAnnotationLayout({ content: selected.content, maxWidth, maxHeight: 280, measureText: text => ctx.measureText(text), fontSize: 30, lineHeight: 36, padding: 16, associationNote });
+      ctx.font = '500 18px system-ui, sans-serif';
+      return window.exportUtils.computeTooltipCalloutLayout({
+        content: selected.content, anchor: selected.anchor, visualizationRect,
+        bounds, protectedRects,
+        measureText: text => ctx.measureText(text)
+      });
     }
 
     function createExportCaptureSnapshot(targetEl, tabId, options = {}) {
+      const { selection = null, target = null } = options;
       const adapter = window.dashboardTooltips?.adapters.get(tabId);
-      const renderer = adapter?.snapshotCapture?.(options.chartCapture || {});
+      const renderer = adapter?.snapshotCapture?.({ ...options.chartCapture, ...(selection ? { selection } : {}) });
       const clonedTarget = targetEl.cloneNode ? targetEl.cloneNode(true) : { ...targetEl };
       const sourceCanvases = targetEl.tagName === 'CANVAS' ? [targetEl] : Array.from(targetEl.querySelectorAll?.('canvas') || []);
       const clonedCanvases = clonedTarget.tagName === 'CANVAS' ? [clonedTarget] : Array.from(clonedTarget.querySelectorAll?.('canvas') || []);
@@ -952,8 +1009,9 @@
         const copy = clonedCanvases[index];
         if (!copy) throw new Error('Could not isolate the chart for export');
         const source = renderer?.sourceCanvas === canvas ? renderer.canvas : canvas;
-        const width = canvas.width > 0 ? canvas.width : source.width;
-        const height = canvas.height > 0 ? canvas.height : source.height;
+  const exportResolution = tabId === 'workoutTime' && renderer?.sourceCanvas === canvas;
+  const width = exportResolution ? source.width : canvas.width > 0 ? canvas.width : source.width;
+  const height = exportResolution ? source.height : canvas.height > 0 ? canvas.height : source.height;
         if (!(width > 0 && height > 0)) throw new Error('Visualization is not ready to export. Wait for it to finish rendering and try again.');
         copy.width = width;
         copy.height = height;
@@ -973,7 +1031,23 @@
         clonedTarget.setAttribute('aria-hidden', 'true');
         document.body.appendChild(clonedTarget);
       }
-      return { element: clonedTarget, prepare: () => mediaLease?.prepare(clonedTarget), release() { mediaLease?.release(); if (clonedTarget.nodeType === 1) clonedTarget.remove(); } };
+      const chartImage = tabId === 'pieCharts'
+        ? renderer?.canvas ? renderer.canvas.toDataURL('image/png') : window.pieChartsDashboard?.getExportChartImage?.(560)
+        : null;
+      return {
+        element: clonedTarget, chartImage,
+        resolveExportAnchor(element) {
+          if (!selection) return null;
+          const captureContext = { element, target };
+          const resolved = renderer?.resolveExportAnchor
+            ? renderer.resolveExportAnchor(captureContext)
+            : adapter?.resolveExportAnchor?.(selection, captureContext);
+          if (!resolved) throw new Error('Could not resolve the selected item in the export');
+          return resolved;
+        },
+        prepare: () => mediaLease?.prepare(clonedTarget),
+        release() { mediaLease?.release(); if (clonedTarget.nodeType === 1) clonedTarget.remove(); }
+      };
     }
 
     // Chart.js exposes no consistent cross-version "isAnimating" API, so a short settle
@@ -1173,19 +1247,29 @@
           }
 
           if (fileHandle) {
+            let writable = null;
             try {
-              const writable = await fileHandle.createWritable();
+              writable = await fileHandle.createWritable();
               await writable.write(image.blob);
               await writable.close();
               attempt.outcome = 'saved';
               return attempt.outcome;
             } catch (error) {
-              attempt.outcome = 'failed';
-              console.error('Could not save exported image', error);
-              if (lastExportedImage === image) {
-                showExportToast(`Could not save export image. ${error && error.message || 'Please try again.'}`);
+              if (error && error.name === 'NotAllowedError') {
+                try {
+                  await writable?.abort?.();
+                } catch (abortError) {
+                  console.error('Could not abort the restricted export write', abortError);
+                }
+                showExportToast('Writing to the selected file was blocked; that file may be empty or incomplete. The complete PNG will use the browser download, with its location controlled by browser settings.');
+              } else {
+                attempt.outcome = 'failed';
+                console.error('Could not save exported image', error);
+                if (lastExportedImage === image) {
+                  showExportToast(`Could not save export image. ${error && error.message || 'Please try again.'}`);
+                }
+                return attempt.outcome;
               }
-              return attempt.outcome;
             }
           }
         } else {
@@ -1253,8 +1337,9 @@
       try {
         const tabId = target.kind === 'pb-tile' ? 'personalBests' : target.key;
         target = JSON.parse(JSON.stringify(target));
-        target.format = selectedExportFormat;
-        target.pinnedSelection = window.dashboardTooltips?.getPinned(tabId) || null;
+  target.format = selectedExportFormat;
+        const selected = window.dashboardTooltips?.getPinned(tabId);
+        target.pinnedSelection = selected ? JSON.parse(JSON.stringify(selected)) : null;
         const heatmapPalette = document.getElementById('heatmapColorScheme')?.value;
         if (target.key === 'wordcloud') {
           if (!window.wordcloudDashboard.hasExportableCloud()) throw new Error('The Wordcloud is not ready to export. Wait for the cloud to finish rendering and try again.');
@@ -1262,12 +1347,14 @@
         const chartCapture = ['totalDistance', 'paceMetrics', 'distributions', 'workoutTime'].includes(tabId)
           ? { width: 960, height: 500, minFontSize: 30, ...(tabId === 'workoutTime' ? { axisTextColor: '#f8fafc' } : {}) }
           : undefined;
-        snapshot = createExportCaptureSnapshot(targetEl, tabId, { chartCapture });
+        snapshot = createExportCaptureSnapshot(targetEl, tabId, { chartCapture, selection: target.pinnedSelection, target });
         if (window.tooltipSelectionUtils) target = window.tooltipSelectionUtils.freezePlain(window.tooltipSelectionUtils.copyPlain(target));
         await snapshot.prepare();
         await waitForExportFonts();
         const assets = await loadExportAssets();
 
+        let resolvedAnchor = null;
+        let captureProtectedRects = [];
         const createCaptureOptions = pageTarget => ({
           backgroundColor: '#020617',
           useCORS: true,
@@ -1277,6 +1364,7 @@
             const clonedTarget = clonedDocument.getElementById(snapshot.element.id || target.targetElementId)
               || clonedDocument.getElementById(target.targetElementId);
             if (!clonedTarget) return;
+            try {
             clonedTarget.style.border = 'none';
             clonedTarget.style.borderRadius = '0px';
             clonedTarget.style.backgroundColor = 'transparent';
@@ -1384,9 +1472,10 @@
                   grid.style.alignItems = 'center';
                 }
               }
-              if (chart && window.pieChartsDashboard && typeof window.pieChartsDashboard.getExportChartImage === 'function') {
+              if (chart && snapshot.chartImage) {
                 const image = clonedDocument.createElement('img');
-                image.src = window.pieChartsDashboard.getExportChartImage(560);
+                image.src = snapshot.chartImage;
+                image.setAttribute?.('data-export-chart-image', 'true');
                 image.alt = 'Pie chart';
                 image.style.width = '560px';
                 image.style.height = '560px';
@@ -1458,6 +1547,18 @@
             });
             clonedTarget.style.width = `${captureWidth}px`;
             clonedTarget.style.maxWidth = 'none';
+            } finally {
+              if (target.pinnedSelection) {
+                resolvedAnchor = snapshot.resolveExportAnchor(clonedTarget);
+                const bounds = clonedTarget.getBoundingClientRect?.();
+                if (bounds?.width > 0 && bounds?.height > 0) {
+                  captureProtectedRects = Array.from(clonedTarget.querySelectorAll?.('#pieChartsLegend, .leaflet-control-attribution') || []).map(element => {
+                    const rect = element.getBoundingClientRect();
+                    return { x: (rect.left - bounds.left) / bounds.width, y: (rect.top - bounds.top) / bounds.height, width: rect.width / bounds.width, height: rect.height / bounds.height };
+                  }).filter(rect => rect.width > 0 && rect.height > 0);
+                }
+              }
+            }
           }
         });
         const capture = pageTarget => html2canvas(snapshot.element, createCaptureOptions(pageTarget));
@@ -1479,7 +1580,10 @@
             ? await window.heatmapDashboard.captureAtExportSize(captureCurrentTarget)
             : await captureCurrentTarget();
         }
-        lastExportCaptureState = { captured, target, assets, pbOpening, calendarCapturesByFormat };
+        if (target.pinnedSelection && !resolvedAnchor) resolvedAnchor = snapshot.resolveExportAnchor(snapshot.element);
+        const compositionTarget = resolvedAnchor ? { ...target, captureProtectedRects, pinnedSelection: { ...target.pinnedSelection, anchor: resolvedAnchor } } : target;
+        if (window.tooltipSelectionUtils) window.tooltipSelectionUtils.freezePlain(compositionTarget);
+        lastExportCaptureState = { captured, target: compositionTarget, assets, pbOpening, calendarCapturesByFormat };
         await composeCurrentExportImages(lastExportCaptureState);
 
         exportRequestState = 'previewing';

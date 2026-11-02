@@ -103,6 +103,19 @@ test('private chart capture disables native tooltips and leaves the live configu
   expect(destroy).toHaveBeenCalledTimes(1);
 });
 
+test('capture projection accounts for nested canvas offsets and source-relative points without DPR drift', () => {
+  const { window } = makeController();
+  const selection = makeSelection();
+  const element = { getBoundingClientRect: () => ({ left: 140, top: 100, width: 400, height: 200 }) };
+  const captureContext = { element: { getBoundingClientRect: () => ({ left: 100, top: 50, width: 800, height: 400 }) } };
+  expect(window.dashboardTooltips.resolveCaptureAnchor(selection, captureContext, element, { x: 0.25, y: 0.5 }).capturePoint).toEqual({ x: 0.175, y: 0.375 });
+  expect(selection.anchor.capturePoint).toBeUndefined();
+  const line = { getBoundingClientRect: () => ({ left: 140, top: 100, width: 0, height: 200 }) };
+  expect(window.dashboardTooltips.resolveCaptureAnchor(selection, captureContext, line).capturePoint).toEqual({ x: 0.05, y: 0.375 });
+  expect(() => window.dashboardTooltips.resolveCaptureAnchor(selection, captureContext, null)).toThrow(/resolve/);
+  expect(() => window.dashboardTooltips.resolveCaptureAnchor(selection, captureContext, line, { x: Infinity, y: 0.5 })).toThrow(/finite/);
+});
+
 test('private chart capture falls back to visible wrapper dimensions when Chart.js reports zero size', () => {
   const { window, document } = makeController();
   window.Chart = jest.fn(function () { this.setDatasetVisibility = jest.fn(); this.update = jest.fn(); this.destroy = jest.fn(); });
@@ -185,6 +198,40 @@ test('pin stays visible after leave and hover, toggles, replaces and dismisses s
   expect(document.getElementById('pinnedVisualizationTooltip')).toBeNull();
 });
 
+test('replacement clears old pressed state and ignored hover does not steal the pin origin', () => {
+  const { controller, document } = makeController();
+  const first = document.createElement('article');
+  const second = document.createElement('article');
+  controller.show('totalDistance', makeSelection(), true, first);
+  controller.show('totalDistance', makeSelection({ selectionKey: 'other' }), false, second);
+  expect(first.getAttribute('aria-pressed')).toBe('true');
+  expect(second.getAttribute('aria-pressed')).toBeNull();
+  controller.show('totalDistance', makeSelection({ selectionKey: 'other' }), true, second);
+  expect(first.getAttribute('aria-pressed')).toBe('false');
+  expect(second.getAttribute('aria-pressed')).toBe('true');
+  controller.invalidate();
+  expect(second.getAttribute('aria-pressed')).toBe('false');
+});
+
+test('rerender can transfer origin and dismiss never focuses a detached target', () => {
+  const { controller, document } = makeController();
+  const original = document.createElement('article');
+  const replacement = document.createElement('article');
+  original.focus = jest.fn();
+  replacement.focus = jest.fn();
+  original.isConnected = false;
+  controller.show('totalDistance', makeSelection(), true, original);
+  controller.refreshOrigin(replacement);
+  expect(original.getAttribute('aria-pressed')).toBe('false');
+  expect(replacement.getAttribute('aria-pressed')).toBe('true');
+  controller.dismiss();
+  expect(replacement.focus).toHaveBeenCalledTimes(1);
+  expect(original.focus).not.toHaveBeenCalled();
+  controller.show('totalDistance', makeSelection(), true, original);
+  controller.dismiss();
+  expect(original.focus).not.toHaveBeenCalled();
+});
+
 test('pins have no timer expiry and invalidation clears exportable state', () => {
   jest.useFakeTimers();
   const { controller } = makeController();
@@ -224,4 +271,47 @@ test.each(require('../src/tooltip-selection-utils').TAB_IDS)('%s uses the shared
   expect(dispose).toHaveBeenCalledTimes(1);
   expect(controller.getState()).toBeNull();
   expect(document.getElementById('pinnedVisualizationTooltip')).toBeNull();
+});
+
+test('opt-in chart inspection describes zero/null categories without native tooltip rows or metadata', () => {
+  const { window, document } = makeController();
+  const canvas = document.createElement('canvas');
+  const chart = { canvas, width: 800, height: 400,
+    data: { labels: ['Empty', 'Unavailable'], datasets: [{ label: 'Duration (h)', data: [0, null], inspectionKeys: ['day:duration:empty', 'day:duration:unavailable'] }] },
+    config: { type: 'bar', plugins: [], options: {} }, options: {},
+    getDatasetMeta: () => ({ data: [] }), isDatasetVisible: () => true, update: jest.fn(), draw: jest.fn(),
+    getElementsAtEventForMode: jest.fn(() => []) };
+  const hooks = {
+    resolveHits: jest.fn(event => event.outside ? [] : [{ datasetIndex: 0, index: 1 }]),
+    describeContent: jest.fn((source, hits) => ({ title: source.data.labels[hits[0].index], sections: [], notes: ['No usable duration values'] })),
+    anchorPoint: jest.fn((source, hit) => ({ x: source.width * (hit.index ? 0.75 : 0.25), y: source.height - 20 }))
+  };
+  window.dashboardTooltips.attachChart('workoutTime', chart, hooks);
+  canvas.dispatchEvent({ type: 'pointermove' });
+  expect(window.dashboardTooltips.getState().content.title).toBe('Unavailable');
+  canvas.dispatchEvent({ type: 'click' });
+  const selected = window.dashboardTooltips.getPinned('workoutTime');
+  expect(selected.selectionKey).toBe('workoutTime:day:duration:unavailable');
+  expect(selected.anchor.capturePoint).toEqual({ x: 0.75, y: 0.95 });
+  expect(chart.getElementsAtEventForMode).not.toHaveBeenCalled();
+  canvas.dispatchEvent({ type: 'pointerleave' });
+  expect(window.dashboardTooltips.getPinned('workoutTime')).not.toBeNull();
+  window.dashboardTooltips.dismiss();
+  canvas.dispatchEvent({ type: 'click', outside: true });
+  expect(window.dashboardTooltips.getPinned('workoutTime')).toBeNull();
+  const event = { type: 'keydown', key: 'Enter', preventDefault: jest.fn() };
+  canvas.dispatchEvent(event);
+  expect(window.dashboardTooltips.getPinned('workoutTime').selectionKey).toBe('workoutTime:day:duration:empty');
+  window.Chart = jest.fn(function (privateCanvas, config) {
+    this.width = privateCanvas.width; this.height = privateCanvas.height;
+    this.data = config.data; this.setDatasetVisibility = jest.fn(); this.update = jest.fn(); this.destroy = jest.fn();
+    this.getDatasetMeta = () => ({ data: [] });
+  });
+  const snapshot = window.dashboardTooltips.adapters.get('workoutTime').snapshotCapture(selected);
+  const cloned = document.createElement('canvas');
+  const anchor = snapshot.resolveExportAnchor({ element: cloned });
+  expect(anchor.capturePoint).toEqual({ x: 0.75, y: 0.96 });
+  expect(snapshot.canvas).toMatchObject({ width: 960, height: 500 });
+  expect(hooks.anchorPoint.mock.calls.at(-1)[0]).not.toBe(chart);
+  expect(window.Chart.mock.calls[0][1].options.plugins.tooltip.enabled).toBe(false);
 });

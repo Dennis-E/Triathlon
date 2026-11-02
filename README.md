@@ -22,13 +22,15 @@ See [TrainingPeaks export instructions](docs/trainingpeaks-export-how-to.html) f
 
 ## Export images
 
-Use a visualization's Export action to prepare a local PNG preview, then select Download. Each click starts one browser-managed download. Your browser settings determine whether a save dialog appears and which folder is used, normally Downloads; enable the browser's ask-where-to-save setting to choose a folder or filename each time.
+Use a visualization's Export action to prepare a local PNG preview, then select Download. Where supported, a save picker lets you choose the destination and filename. Otherwise the app uses the browser's ordinary download behavior, with the destination controlled by browser settings, normally Downloads.
 
 Click a visualization item to pin its detail tooltip, or tap it on a touch screen. Selecting another item replaces the pin; selecting the same item again, using Close, or pressing Escape releases it. Charts support focused arrow-key inspection and Enter/Space selection; calendar cells and item-level pin buttons use normal keyboard activation. Media pin buttons remain separate from opening an image or selecting a collage item. Changing data filters, switching tabs, or importing replacement data clears the pin; map movement and resizing retain it.
 
-Pinned detail is included in the export preview and downloaded image. If the full tooltip does not fit readably, the image uses its complete headline instead; the live tooltip remains complete. The export retains the view and selection present when Export was requested, even if you change the live view during preparation. Without a pin, transient hover tooltips are excluded from the image.
+In Lifetime Statistics, select the statistic itself or focus it and press Enter/Space. There are no separate pin-symbol buttons on its statistics.
 
-The app does not open a separate native save picker before downloading. This avoids a second save dialog when a native write is restricted and the browser would otherwise retry through its ordinary download flow. Browser security checks and download errors remain managed by the browser.
+Pinned detail appears in the export preview and downloaded image as a compact, outlined speech bubble near its selected item, with a tail pointing toward it. If the selected item is outside the visible area or omitted from the export layout, the bubble identifies that distinction without pointing at unrelated content. If the full tooltip does not fit readably, the image uses its complete headline instead; the live tooltip remains complete. The export retains the view and selection present when Export was requested, even if you change the live view during preparation. Without a pin, transient hover tooltips are excluded from the image.
+
+Destination selection and writing can be restricted independently. If writing is denied after a destination was selected, the app hands the complete prepared PNG to the browser's ordinary download route once. The originally selected file may be empty or incomplete; use the PNG from the browser download instead. Genuine storage failures and write safety-check rejections remain errors with a retryable preview, rather than triggering an automatic download.
 
 The export preview and its originating Personal Bests detail close after browser download handoff. If handoff fails, the preview remains available for retry. Browser handoff does not confirm that a file finished saving; later cancellation or storage errors are managed by the browser. Images are prepared and saved locally without uploading the export or activity data.
 
@@ -56,6 +58,12 @@ The export preview and its originating Personal Bests detail close after browser
   - Track when each piece of equipment was active
   - Toggle between continuous and activity views
   - Filter by All, Shoes, or Bikes
+
+- Workout Time
+  - Switch between Workout number (default), total Duration, and total Distance without changing the existing grouping, sport, or date range
+  - Each workout contributes its full recorded values to the field of its local start time, even when it crosses a time boundary
+  - Duration uses hours on the axis and cumulative hours/minutes/seconds in detail; distance uses kilometers
+  - Detail distinguishes missing measurements from recorded zeros and identifies partial totals; the selected measure is retained for the page session and included in local exports
 
 - Personal Bests
   - Explore new bests for Swim, Run, and Bike
@@ -105,6 +113,11 @@ Read the latest development updates on the [TriAnalytica News page](news.html).
 The first article announces the alpha launch and welcomes feedback, suggestions,
 and wishes from fellow athletes. You can also use the existing feedback address
 shown on the News page to get in touch.
+
+## About
+
+Meet Dennis on the [TriAnalytica About page](about.html) and read the personal
+story behind his triathlon, training data, and AI side project.
 
 ## Local development
 

@@ -202,6 +202,8 @@
       const nativeInput = event.type === 'input' && target.matches && target.matches('select, input[type="range"], input[type="checkbox"], input[type="radio"]');
       const filterClick = event.type === 'click' && target.closest && target.closest('button') && target.closest('[data-keyboard-filter-group]');
       if (!nativeInput && !filterClick) return;
+      if (filterClick && target.closest('[data-keyboard-filter-group]').id === 'workoutTimeMeasure'
+        && target.closest('button').getAttribute('aria-pressed') === 'true') return;
       advanceDashboardRevision();
       window.setTimeout(() => updateNavigationCueAvailability(), 0);
     }

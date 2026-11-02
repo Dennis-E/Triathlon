@@ -17,6 +17,10 @@ function registerTrainingCalendarTooltipAdapter() {
   if (!api?.registerAdapter || trainingCalendarTooltipAdapter) return;
   const adapter = {
     readContext: () => api.readContext('trainingCalendar'),
+    resolveExportAnchor(selection, captureContext) {
+      const target = Array.from(captureContext.element.querySelectorAll?.('[data-date-key]') || []).find(item => item.dataset.dateKey === selection.anchor.itemId);
+      return api.resolveCaptureAnchor(selection, captureContext, target);
+    },
     projectAnchor: selection => {
       const target = Array.from(document.querySelectorAll?.('[data-date-key]') || []).find(button => button.dataset.dateKey === selection.anchor.itemId);
       return target ? trainingCalendarAnchor(selection.anchor.itemId, target) : selection.anchor;

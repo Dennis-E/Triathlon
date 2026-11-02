@@ -4,8 +4,9 @@
   let sourceCountries = null;
   let statisticDetails = new Map();
 
-  function pinMarkup(key, exportMode = false) {
-    return exportMode ? '' : `<button type="button" data-statistic-pin="${escapeHtml(key)}" data-tooltip-inspector="true" aria-label="Pin details for ${escapeHtml(key)}" title="Pin details" class="inline-flex h-7 w-7 items-center justify-center rounded border border-slate-600 text-slate-200"><i data-lucide="pin" class="h-4 w-4" aria-hidden="true"></i></button>`;
+  function inspectionAttributes(key, exportMode = false) {
+    const identity = `data-statistic-key="${escapeHtml(key)}"`;
+    return exportMode ? identity : `${identity} data-tooltip-inspector="true" role="button" tabindex="0" aria-pressed="false" aria-label="Inspect ${escapeHtml(key)}"`;
   }
 
   function statisticAnchor(key, target) {
@@ -55,22 +56,37 @@
     if (!tooltipAdapter) {
       const adapter = {
         readContext: () => api.readContext('lifetimeStatistics'),
+        resolveExportAnchor(selection, captureContext) {
+          const target = Array.from(captureContext.element.querySelectorAll?.('[data-statistic-key]') || []).find(item => item.dataset.statisticKey === selection.anchor.itemId);
+          if (!target && selection.anchor.itemId.startsWith('sport:')) return { ...selection.anchor, visibility: 'not-in-export', capturePoint: null, associationLabel: `${selection.content.itemLabel}: sport breakdown is not included in this KPI export` };
+          return api.resolveCaptureAnchor(selection, captureContext, target);
+        },
         projectAnchor: selection => {
-          const target = Array.from(area.querySelectorAll?.('[data-statistic-pin]') || []).find(button => button.dataset.statisticPin === selection.anchor.itemId);
+          const target = Array.from(area.querySelectorAll?.('[data-statistic-key]') || []).find(item => item.dataset.statisticKey === selection.anchor.itemId);
           return target ? statisticAnchor(selection.anchor.itemId, target) : selection.anchor;
         },
-        dispose() { area.onclick = null; tooltipAdapter = null; }
+        dispose() { area.onclick = null; area.onkeydown = null; tooltipAdapter = null; }
       };
       api.registerAdapter('lifetimeStatistics', adapter);
       tooltipAdapter = adapter;
     }
-    area.onclick = event => {
-      const button = event.target?.closest?.('[data-statistic-pin]');
-      const key = button?.dataset.statisticPin;
+    const activate = event => {
+      const target = event.target?.closest?.('[data-statistic-key]');
+      const key = target?.dataset.statisticKey;
       const content = statisticDetails.get(key);
-      if (content) api.show('lifetimeStatistics', { selectionKey: `lifetimeStatistics:${key}`, content, anchor: statisticAnchor(key, button) }, true, button);
+      if (content) api.show('lifetimeStatistics', { selectionKey: `lifetimeStatistics:${key}`, content, anchor: statisticAnchor(key, target) }, true, target);
     };
-    root.lucide?.createIcons?.();
+    area.onclick = activate;
+    area.onkeydown = event => {
+      if (!['Enter', ' '].includes(event.key) || !event.target?.closest?.('[data-statistic-key]')) return;
+      event.preventDefault();
+      if (!event.repeat) activate(event);
+    };
+    const pinned = api.getPinned?.('lifetimeStatistics');
+    if (pinned) {
+      const target = Array.from(area.querySelectorAll?.('[data-statistic-key]') || []).find(item => item.dataset.statisticKey === pinned.anchor.itemId);
+      if (target) api.refreshOrigin?.(target);
+    }
     api.refreshAnchor?.();
   }
 
@@ -126,11 +142,10 @@
       : exportMode
         ? 'mt-3 break-words text-3xl font-bold leading-tight tabular-nums text-white'
       : 'mt-2 break-words text-2xl font-semibold tabular-nums text-white';
-    return `<article class="${cardClass}">
+    return `<article ${inspectionAttributes(label, exportMode)} class="${cardClass}">
       <h3 class="${labelClass}">${escapeHtml(label)}</h3>
       <p class="${valueClass}">${escapeHtml(metricValue(metric, formatter, unit))}</p>
       ${metricStatusMarkup(metric)}
-      ${pinMarkup(label, exportMode)}
     </article>`;
   }
 
@@ -138,7 +153,7 @@
     const distance = metricValue(sportSummary.distance, value => formatNumber(value), 'km');
     const movingTime = metricValue(sportSummary.movingTime, formatMovingTime, '');
     return `<tr class="border-t border-slate-800">
-      <th scope="row" class="py-3 pr-4 text-left font-medium text-white">${escapeHtml(sportSummary.sport)} ${pinMarkup(`sport:${sportSummary.sport}`)}</th>
+      <th scope="row" class="py-3 pr-4 text-left font-medium text-white"><span ${inspectionAttributes(`sport:${sportSummary.sport}`)}>${escapeHtml(sportSummary.sport)}</span></th>
       <td class="px-3 py-3 text-right tabular-nums text-slate-200">${formatNumber(sportSummary.workoutCount, 0)}</td>
       <td class="px-3 py-3 text-right tabular-nums text-slate-200">${escapeHtml(distance)}</td>
       <td class="py-3 pl-3 text-right tabular-nums text-slate-200">${escapeHtml(movingTime)}</td>
@@ -155,10 +170,9 @@
     const labelClass = exportMode
       ? 'text-base font-medium uppercase tracking-wide text-slate-400'
       : 'text-xs font-medium uppercase tracking-wide text-slate-400';
-    return `<article class="${cardClass}">
+    return `<article ${inspectionAttributes(label, exportMode)} class="${cardClass}">
       <h3 class="${labelClass}">${escapeHtml(label)}</h3>
       <p class="${valueClass}">${formatNumber(value, 0)}</p>
-      ${pinMarkup(label, exportMode)}
     </article>`;
   }
 
@@ -170,11 +184,10 @@
       ? 'text-base font-medium uppercase tracking-wide text-slate-400'
       : 'text-xs font-medium uppercase tracking-wide text-slate-400';
     if (!activity) {
-      return `<article class="${cardClass}">
+      return `<article ${inspectionAttributes(label, exportMode)} class="${cardClass}">
         <h3 class="${labelClass}">${escapeHtml(label)}</h3>
         <p class="mt-2 text-xl font-semibold text-slate-300">Not available</p>
         <p class="mt-2 text-xs text-slate-400">No activity has a usable recorded value</p>
-        ${pinMarkup(label, exportMode)}
       </article>`;
     }
 
@@ -182,12 +195,11 @@
       ? activity.date.toLocaleDateString()
       : 'Date unavailable';
     const value = `${formatter(activity.value)}${unit ? ` ${unit}` : ''}`;
-    return `<article class="${cardClass}">
+    return `<article ${inspectionAttributes(label, exportMode)} class="${cardClass}">
       <h3 class="${labelClass}">${escapeHtml(label)}</h3>
       <p class="mt-2 break-words text-xl font-semibold tabular-nums text-white">${escapeHtml(value)}</p>
       <p class="mt-2 break-words text-sm text-slate-300">${escapeHtml(activity.name)}</p>
       <p class="mt-1 ${exportMode ? 'text-sm' : 'text-xs'} text-slate-500">${escapeHtml(activityDate)}</p>
-      ${pinMarkup(label, exportMode)}
     </article>`;
   }
 
@@ -251,12 +263,11 @@
     const labelClass = exportMode
       ? 'text-base font-medium uppercase tracking-wide text-slate-400'
       : 'text-xs font-medium uppercase tracking-wide text-slate-400';
-    return `<article aria-label="Countries visited" class="${cardClass}">
+    return `<article ${inspectionAttributes('Countries visited', exportMode)} class="${cardClass}">
       <h3 class="${labelClass}">Countries visited</h3>
       <p class="${valueClass}">${escapeHtml(value)}</p>
       <p class="mt-2 break-words text-sm text-slate-200">${escapeHtml(namesText)}</p>
       ${coverageText ? `<p class="mt-1 break-words text-xs text-slate-500">${escapeHtml(coverageText)}</p>` : ''}
-      ${pinMarkup('Countries visited', exportMode)}
     </article>`;
   }
 
@@ -285,10 +296,9 @@
         ${renderPrimaryMetric('Moving time', summary.movingTime, formatMovingTime, '', exportMode)}
         ${exportMode
           ? renderCountMilestone('Workouts', summary.workoutCount, true)
-          : `<article class="min-w-0 rounded-xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
+          : `<article ${inspectionAttributes('Workouts')} class="min-w-0 rounded-xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
               <h3 class="text-xs font-medium uppercase tracking-wide text-slate-400">Workouts</h3>
               <p class="mt-2 break-words text-2xl font-semibold tabular-nums text-white">${formatNumber(summary.workoutCount, 0)}</p>
-              ${pinMarkup('Workouts')}
             </article>`}
             ${renderCountriesVisited(countrySummary, exportMode)}
       </div>

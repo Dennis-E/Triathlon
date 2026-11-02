@@ -32,7 +32,9 @@ describe('Wordcloud dashboard contract', () => {
 
   it.each([292, 640])('pins real frequencies with a readable word size at canvas width %s', width => {
     const nodes = new Map();
+    const canvasContext = { fillText: jest.fn(), measureText: () => ({ width: 50 }), getTransform: () => ({ a: 1, b: 0, c: 0, d: 1, e: 100, f: 80 }) };
     const makeNode = tag => ({ tag, value: '50', style: {}, children: [], listeners: {},
+      getContext: () => canvasContext,
       parentElement: { clientWidth: width }, classList: { contains: () => false, toggle() {} },
       append(...children) { this.children.push(...children); }, appendChild(child) { this.children.push(child); },
       replaceChildren() { this.children = []; }, setAttribute(name, value) { this[name] = value; },
@@ -51,12 +53,17 @@ describe('Wordcloud dashboard contract', () => {
     expect(api.registerAdapter).toHaveBeenCalledWith('wordcloud', expect.objectContaining({ dispose: expect.any(Function) }));
     const options = WordCloud.mock.calls[0][1];
     expect(options.weightFactor(2)).toBe(width < 480 ? 36 : 68);
+    canvasContext.fillText('alpha', 10, 20);
     options.click(['alpha', 0.2], { x: 10, y: 20, w: 30, h: 10 }, { clientX: 70, clientY: 90 });
     expect(api.show).toHaveBeenLastCalledWith('wordcloud', expect.objectContaining({ selectionKey: 'wordcloud:alpha',
       content: expect.objectContaining({ sections: [{ heading: '', rows: [{ label: 'Occurrences', value: '2' }] }] }) }), true, expect.anything());
     const adapter = api.registerAdapter.mock.calls[0][1];
     const selected = api.show.mock.calls.at(-1)[1];
     expect(adapter.projectAnchor(selected).normalizedPoint).toEqual(selected.anchor.normalizedPoint);
+    const exportAnchor = adapter.snapshotCapture(selected).resolveExportAnchor();
+    expect(exportAnchor.capturePoint.x).toBeCloseTo(135 / nodes.get('wordcloudCanvas').width);
+    expect(exportAnchor.capturePoint.y).toBeCloseTo(100 / nodes.get('wordcloudCanvas').height);
+    expect(adapter.snapshotCapture({ ...selected, anchor: { ...selected.anchor, itemId: 'absent' } }).resolveExportAnchor().visibility).toBe('not-in-export');
     options.hover(null);
     expect(api.send).toHaveBeenCalledWith({ type: 'leave' });
     const row = nodes.get('wordcloudWordList').children[0];
@@ -246,7 +253,7 @@ describe('Wordcloud dashboard contract', () => {
     expect(dashboardExport.includes('wordcloud: !!(window.wordcloudDashboard && window.wordcloudDashboard.canRequestExport())')).toBe(true);
     expect(dashboardExport.includes('await window.wordcloudDashboard.waitForCurrentRender()')).toBe(false);
     expect(dashboardExport.includes('if (!window.wordcloudDashboard.hasExportableCloud())')).toBe(true);
-    expect(dashboardExport.includes('snapshot = createExportCaptureSnapshot(targetEl, tabId, { chartCapture })')).toBe(true);
+  expect(dashboardExport.includes('snapshot = createExportCaptureSnapshot(targetEl, tabId, { chartCapture, selection: target.pinnedSelection, target })')).toBe(true);
     expect(wordcloudDashboard.includes('hasExportableCloud')).toBe(true);
     expect(wordcloudDashboard.includes('waitForCurrentRender')).toBe(true);
   });

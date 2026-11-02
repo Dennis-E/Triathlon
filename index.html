@@ -357,8 +357,25 @@
           <i data-lucide="x" class="w-4 h-4"></i>
         </button>
       </div>
+      <div id="exportFormatSelector" role="group" aria-label="Export image format" class="mt-4 inline-flex rounded-lg border border-slate-700 bg-slate-950 p-1">
+        <button type="button" id="exportFormatSquare" aria-pressed="true" onclick="setExportFormat('square')" class="rounded-md bg-teal-700 px-3 py-2 text-sm font-semibold text-white" title="Square, 1080 by 1080 pixels">Square</button>
+        <button type="button" id="exportFormatPortrait" aria-pressed="false" onclick="setExportFormat('portrait')" class="rounded-md px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800" title="Portrait, 1080 by 1350 pixels">Portrait</button>
+      </div>
+      <label for="exportHumorEnabled" class="ml-4 inline-flex items-center gap-2 text-sm font-medium text-slate-300">
+        <input type="checkbox" id="exportHumorEnabled" onchange="setExportHumorEnabled(this.checked)" class="h-4 w-4 rounded border-slate-600 bg-slate-950 text-teal-500 focus:ring-teal-500" />
+        Add a light line
+      </label>
       <div class="mt-4 flex items-center justify-center rounded-xl border border-slate-800 bg-slate-950 p-2">
         <img id="exportPreviewImage" alt="Exported visualization preview" class="max-h-[70vh] w-full rounded-lg object-contain" />
+      </div>
+      <div id="exportPreviewSeriesControls" class="hidden mt-3 flex items-center justify-between gap-3">
+        <button type="button" id="exportPreviewSeriesPrevious" onclick="setExportSeriesPage('previous')" class="rounded-lg p-2 text-slate-300 transition hover:bg-slate-800 disabled:opacity-40" aria-label="Previous image" disabled>
+          <i data-lucide="chevron-left" class="h-5 w-5"></i>
+        </button>
+        <span id="exportPreviewSeriesStatus" role="status" aria-live="polite" class="text-sm font-medium text-slate-300">Page 1 of 1</span>
+        <button type="button" id="exportPreviewSeriesNext" onclick="setExportSeriesPage('next')" class="rounded-lg p-2 text-slate-300 transition hover:bg-slate-800 disabled:opacity-40" aria-label="Next image" disabled>
+          <i data-lucide="chevron-right" class="h-5 w-5"></i>
+        </button>
       </div>
       <p id="exportPreviewError" class="hidden mt-3 text-sm text-red-300"></p>
       <div class="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">

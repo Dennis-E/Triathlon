@@ -401,6 +401,30 @@ function getPaceMetricsExportSeries() {
     .map(dataset => ({ label: String(dataset.year), color: dataset.borderColor }));
 }
 
+function getPaceMetricsExportPresentationData() {
+  if (!paceMetricsChartInstance) return null;
+  const scales = paceMetricsChartInstance.options?.scales || {};
+  const trendLines = paceMetricsChartInstance.data.datasets
+    .map((dataset, index) => ({ dataset, index }))
+    .filter(({ dataset }) => dataset.type === 'line')
+    .filter(({ index }) => typeof paceMetricsChartInstance.isDatasetVisible !== 'function'
+      || paceMetricsChartInstance.isDatasetVisible(index))
+    .map(({ dataset }) => ({
+      label: dataset.label || `${dataset.year} trend`,
+      color: dataset.borderColor
+    }));
+  return {
+    sport: selectedPaceMetricsSport,
+    metric: selectedPaceMetric,
+    xAxisTitle: scales.x?.title?.text || '',
+    yAxisTitle: scales.y?.title?.text || '',
+    series: getPaceMetricsExportSeries(),
+    trendLines,
+    pointSizeMeaning: 'Duration'
+  };
+}
+
 window.paceMetricsDashboard = {
-  getExportSeries: getPaceMetricsExportSeries
+  getExportSeries: getPaceMetricsExportSeries,
+  getExportPresentationData: getPaceMetricsExportPresentationData
 };

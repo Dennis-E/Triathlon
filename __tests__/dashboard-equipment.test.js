@@ -110,6 +110,42 @@ function harness(width = 768) {
 }
 
 describe('equipment chart', () => {
+  it('exposes sorted ranking labels and native values for social export', () => {
+    const h = harness();
+    h.sandbox.renderEquipmentChart();
+
+    expect(h.sandbox.window.equipmentDashboard.getExportData()).toEqual({
+      metric: 'distance',
+      equipmentFilter: 'All',
+      unit: 'km',
+      items: [
+        { name: 'Road Fast', value: 40, displayValue: '40.0 km' },
+        { name: 'Road Slow', value: 40, displayValue: '40.0 km' },
+        { name: 'Nike Fast', value: 10, displayValue: '10.0 km' },
+        { name: 'Asics Slow', value: 10, displayValue: '10.0 km' }
+      ]
+    });
+  });
+
+  it('exposes equipment timeline spans in the dashboard ordering', () => {
+    const h = harness();
+    h.sandbox.processedActivities = [
+      { equipment: 'Nike Fast', date: new Date('2024-01-01'), distance: 10, sport: 'Run' },
+      { equipment: 'Road Fast', date: new Date('2024-03-01'), distance: 20, sport: 'Bike' },
+      { equipment: 'Nike Fast', date: new Date('2024-02-01'), distance: 5, sport: 'Run' }
+    ];
+
+    expect(h.sandbox.window.equipmentDashboard.getTimelineExportData()).toEqual({
+      mode: 'continuous',
+      equipmentFilter: 'All',
+      periodMeaning: 'Usage span',
+      items: [
+        { name: 'Road Fast', type: 'Bikes', firstDate: new Date('2024-03-01'), lastDate: new Date('2024-03-01'), totalKm: 20, activityCount: 1 },
+        { name: 'Nike Fast', type: 'Shoes', firstDate: new Date('2024-01-01'), lastDate: new Date('2024-02-01'), totalKm: 15, activityCount: 2 }
+      ]
+    });
+  });
+
   it('attaches every equipment metric and preserves native display values', () => {
     const h = harness();
     for (const [metric, expected] of [['distance', '40.0 km'], ['pace', '4:00 /km'], ['count', '1'], ['avgLength', '40']]) {

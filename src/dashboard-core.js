@@ -722,6 +722,36 @@
       );
     }
 
+    function getTotalDistanceExportData() {
+      const totalKm = Number.parseFloat(document.getElementById('cardTotalKm')?.textContent);
+      if (!chartInstance || !Number.isFinite(totalKm)) return null;
+      const { minDate, maxDate } = getTimeframeRange();
+      const firstYear = minDate.getFullYear();
+      const lastYear = maxDate.getFullYear();
+      const currentYear = new Date().getFullYear();
+      const incompleteYear = lastYear === currentYear ? String(lastYear) : null;
+      const chartData = chartInstance.data || chartInstance.config?.data || {};
+      return {
+        sport: selectedSportFilter,
+        metric: 'Distance',
+        period: firstYear === lastYear ? String(firstYear) : `${firstYear}-${lastYear}`,
+        unit: 'km',
+        centralValue: totalKm,
+        aggregation: selectedAggregationLevel,
+        periodLabels: (chartData.labels || []).map(String),
+        series: (chartData.datasets || []).map(dataset => ({
+          label: dataset.label,
+          color: Array.isArray(dataset.backgroundColor) ? dataset.backgroundColor[0] : dataset.backgroundColor,
+          values: Array.isArray(dataset.data) ? dataset.data.slice() : []
+        })),
+        incompleteYear
+      };
+    }
+
+    if (typeof window !== 'undefined') {
+      window.totalDistanceDashboard = { getExportData: getTotalDistanceExportData };
+    }
+
     function setBtnActive(btnId) {
       const btn = document.getElementById(btnId);
       if (btn) {

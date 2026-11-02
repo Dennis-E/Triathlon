@@ -56,7 +56,7 @@ function harness(years = [2020, 2021, 2022, 2023, 2024, 2025]) {
     processedActivities: activities, Chart,
     formatDateIso: date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
     formatShortDate: date => date.toISOString().slice(0, 10),
-    getPerformanceMetaForSport: () => ({ axisTitle: 'Pace', tooltipLabel: 'Pace', metricType: 'pace', reverseXAxis: false }),
+    getPerformanceMetaForSport: sport => ({ axisTitle: sport === 'Bike' ? 'Speed' : 'Pace', tooltipLabel: sport === 'Bike' ? 'Speed' : 'Pace', metricType: sport === 'Bike' ? 'speed' : 'pace', reverseXAxis: false }),
     formatPerformanceValue: () => '5:00 /km', formatDuration: () => '1h 0m'
   };
   vm.createContext(sandbox);
@@ -106,6 +106,41 @@ describe('Pace vs years controls', () => {
     h.sandbox.processedActivities = [];
     h.sandbox.renderPaceMetricsChart();
     expect(h.sandbox.window.paceMetricsDashboard.getExportSeries()).toEqual([]);
+  });
+
+  it('exposes rendered axes, visible series, trend lines, and duration point sizing for export', () => {
+    const h = harness([2023, 2024]);
+
+    expect(h.sandbox.window.paceMetricsDashboard.getExportPresentationData()).toEqual({
+      sport: 'Run',
+      metric: 'heartRate',
+      xAxisTitle: 'Pace',
+      yAxisTitle: 'Average heart rate (bpm)',
+      series: [
+        { label: '2023', color: '#f00' },
+        { label: '2024', color: '#0f0' }
+      ],
+      trendLines: [
+        { label: '2023 trend', color: '#f00' },
+        { label: '2024 trend', color: '#0f0' }
+      ],
+      pointSizeMeaning: 'Duration'
+    });
+  });
+
+  it('preserves selected sport axes and plotted values in export metadata', () => {
+    const h = harness([2024]);
+    h.sandbox.processedActivities = h.sandbox.processedActivities.map(activity => ({ ...activity, sport: 'Bike' }));
+    h.sandbox.setPaceMetricsSport('Bike');
+
+    expect(h.sandbox.window.paceMetricsDashboard.getExportPresentationData()).toMatchObject({
+      sport: 'Bike',
+      metric: 'heartRate',
+      xAxisTitle: 'Speed',
+      yAxisTitle: 'Average heart rate (bpm)',
+      pointSizeMeaning: 'Duration'
+    });
+    expect(h.charts.at(-1).data.datasets.find(dataset => dataset.type === 'bubble').data).toHaveLength(2);
   });
 
   it('attaches the activity and regression chart without losing formatted metric detail', () => {

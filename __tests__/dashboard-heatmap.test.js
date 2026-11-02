@@ -135,7 +135,7 @@ function harness({ realGeometry = false, inspection = false } = {}) {
     L: {
       polyline() {},
       map: jest.fn(() => map),
-      tileLayer: () => tileLayer,
+      tileLayer: (_url, options) => { tileLayer.options = options; return tileLayer; },
       Util: { setOptions: (layer, options) => { layer.options = options; } },
       DomUtil: { create: () => sandbox.document.createElement('canvas'), setPosition() {}, remove() {} },
       Layer: { extend: definition => {
@@ -187,7 +187,7 @@ function harness({ realGeometry = false, inspection = false } = {}) {
     await Promise.resolve();
   }
 
-  return { sandbox, map, elements, renders, boundsFits, sizeInvalidations, tileContainer, setDataset, render, filter, setScheme };
+  return { sandbox, map, elements, renders, boundsFits, sizeInvalidations, tileContainer, tileLayer, setDataset, render, filter, setScheme };
 }
 
 describe('heatmap pinned inspection', () => {
@@ -339,6 +339,24 @@ describe('heatmap pinned inspection', () => {
 });
 
 describe('heatmap viewport lifecycle', () => {
+  it('exposes the selected heatmap sport, palette, and exact visible viewport for export', async () => {
+    const h = harness();
+    h.setDataset({ id: 'export-view' }, { run1: 'Run' });
+    await h.render();
+    h.map.center = [40.7128, -74.006];
+    h.map.zoom = 13;
+
+    expect(h.sandbox.window.heatmapDashboard.getExportData()).toMatchObject({
+      sport: 'All',
+      colorScheme: 'blue-red',
+      viewport: {
+        center: [40.7128, -74.006],
+        zoom: 13,
+        bounds: [-90, -180, 90, 180]
+      }
+    });
+  });
+
   it('exposes sport and palette as keyboard dimensions and renders one final selection', async () => {
     const h = harness();
     h.sandbox.window.dashboardTabNavigation = require('../src/tab-navigation');
@@ -356,7 +374,7 @@ describe('heatmap viewport lifecycle', () => {
     expect(h.renders[0].scheme).toBe('yellow-red');
   });
 
-  it('captures the map at export size and restores its original dimensions and viewport', async () => {
+  it('captures the current map viewport without resizing or changing its bounds', async () => {
     const h = harness();
     h.setDataset({ id: 'export-size' }, { run1: 'Run' });
     await h.render();
@@ -365,6 +383,11 @@ describe('heatmap viewport lifecycle', () => {
     h.elements.heatmapMapContainer.style.maxWidth = '';
     const originalCenter = h.map.getCenter();
     const originalZoom = h.map.getZoom();
+    const readBounds = () => {
+      const bounds = h.map.getBounds();
+      return [bounds.getSouth(), bounds.getWest(), bounds.getNorth(), bounds.getEast()];
+    };
+    const originalBounds = readBounds();
     const invalidationCount = h.sizeInvalidations.length;
     let capturedLayout;
 
@@ -372,6 +395,7 @@ describe('heatmap viewport lifecycle', () => {
       capturedLayout = {
         width: h.elements.heatmapMapContainer.style.width,
         height: h.elements.heatmapMapContainer.style.height,
+        bounds: readBounds(),
         center: h.map.getCenter(),
         zoom: h.map.getZoom()
       };
@@ -379,12 +403,70 @@ describe('heatmap viewport lifecycle', () => {
     });
 
     expect(result).toBe('captured');
-    expect(capturedLayout).toEqual({ width: '960px', height: '500px', center: originalCenter, zoom: originalZoom });
+    expect(capturedLayout).toEqual({ width: '', height: '', bounds: originalBounds, center: originalCenter, zoom: originalZoom });
     expect(h.elements.heatmapMapContainer.style.width).toBe('');
     expect(h.elements.heatmapMapContainer.style.height).toBe('');
     expect(h.map.getCenter()).toBe(originalCenter);
     expect(h.map.getZoom()).toBe(originalZoom);
-    expect(h.sizeInvalidations).toHaveLength(invalidationCount + 2);
+    expect(readBounds()).toEqual(originalBounds);
+    expect(h.sizeInvalidations).toHaveLength(invalidationCount);
+  });
+
+  it.each(['square', 'portrait'])('preserves identical selected bounds for %s export composition', async format => {
+    const h = harness();
+    h.setDataset({ id: `viewport-${format}` }, { run1: 'Run' });
+    await h.render();
+    h.map.center = [40.7128, -74.006];
+    h.map.zoom = format === 'square' ? 12 : 13;
+    const bounds = h.map.getBounds();
+    let capturedBounds;
+
+    await h.sandbox.window.heatmapDashboard.captureAtExportSize(async () => {
+      capturedBounds = h.map.getBounds();
+      return format;
+    });
+
+    const read = value => [value.getSouth(), value.getWest(), value.getNorth(), value.getEast()];
+    expect(read(capturedBounds)).toEqual(read(bounds));
+    expect(h.map.getCenter()).toEqual([40.7128, -74.006]);
+    expect(h.map.getZoom()).toBe(format === 'square' ? 12 : 13);
+  });
+
+  it('waits for visible map tiles before capturing and rejects tile failures', async () => {
+    const h = harness();
+    h.setDataset({ id: 'tile-readiness' }, { run1: 'Run' });
+    await h.render();
+    h.tileLayer.isLoading = () => true;
+    const listeners = new Map();
+    h.tileLayer.once = jest.fn((event, callback) => listeners.set(event, callback));
+    h.tileLayer.off = jest.fn((event, callback) => {
+      if (listeners.get(event) === callback) listeners.delete(event);
+    });
+    h.sandbox.setTimeout = callback => { h.tileTimeout = callback; return 1; };
+    h.sandbox.clearTimeout = jest.fn();
+    const capture = jest.fn().mockResolvedValue('captured');
+
+    const pending = h.sandbox.window.heatmapDashboard.captureAtExportSize(capture);
+    await Promise.resolve();
+    expect(capture).not.toHaveBeenCalled();
+    listeners.get('load')();
+    await expect(pending).resolves.toBe('captured');
+
+    const failedCapture = jest.fn();
+    const failed = h.sandbox.window.heatmapDashboard.captureAtExportSize(failedCapture);
+    await Promise.resolve();
+    listeners.get('tileerror')();
+    await expect(failed).rejects.toThrow(/map tile/i);
+    expect(failedCapture).not.toHaveBeenCalled();
+  });
+
+  it('retains required OpenStreetMap attribution on the captured map layer', async () => {
+    const h = harness();
+    h.setDataset({ id: 'attributed-export' }, { run1: 'Run' });
+    await h.render();
+
+    expect(h.tileLayer.options.attribution).toContain('OpenStreetMap');
+    expect(h.tileLayer.options.attribution).toContain('copyright');
   });
 
   it('restores map dimensions and viewport when capture rejects', async () => {

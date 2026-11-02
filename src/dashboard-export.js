@@ -132,6 +132,7 @@
         personalBests: [],
         heatmap: [
           getControlGroup('Sport', ['heatmapSportBtnAll', 'heatmapSportBtnRun', 'heatmapSportBtnBike', 'heatmapSportBtnSwim']),
+          getSelectControlGroup('Year', 'heatmapYear'),
           getSelectControlGroup('Color scheme', 'heatmapColorScheme')
         ],
         workoutTime: [
@@ -186,6 +187,7 @@
         personalBests: [],
         heatmap: [
           { label: 'Sport', value: getActiveButtonText(['heatmapSportBtnAll', 'heatmapSportBtnRun', 'heatmapSportBtnBike', 'heatmapSportBtnSwim']) },
+          { label: 'Year', value: document.getElementById('heatmapYear')?.selectedOptions[0]?.textContent.trim() },
           { label: 'Color scheme', value: document.getElementById('heatmapColorScheme')?.selectedOptions[0]?.textContent.trim() }
         ],
         workoutTime: [
@@ -481,6 +483,8 @@
         title: presentation.headline,
         targetElementId: targetId,
         hasData: flags[tabName],
+        sampleProvenance: typeof importedDataset !== 'undefined' && importedDataset?.sourceType === 'sample'
+          ? importedDataset.sampleProvenance : null,
         filters: getExportContext(tabName),
         availableControls: getAvailableControlContext(tabName),
         legend: tabName === 'paceMetrics' && window.paceMetricsDashboard
@@ -802,6 +806,19 @@
         const contextLines = wrapSocialExportText(ctx, contextText, contentWidth, 2);
         contextLines.forEach((line, index) => ctx.fillText(line, margin, contentTop + index * 36));
         contentTop += contextLines.length * 36 + 20;
+      }
+
+      if (target.sampleProvenance?.synthetic) {
+        ctx.fillStyle = '#a7f3d0';
+        ctx.font = '500 26px system-ui, -apple-system, "Segoe UI", sans-serif';
+        ctx.fillText('Synthetic sample training data', margin, contentTop);
+        contentTop += 38;
+        if (target.key === 'heatmap') {
+          ctx.fillStyle = style.colors.secondary;
+          ctx.font = '500 22px system-ui, -apple-system, "Segoe UI", sans-serif';
+          ctx.fillText('OpenStreetMap contributors | https://www.openstreetmap.org/copyright', margin, contentTop);
+          contentTop += 32;
+        }
       }
 
       const milestones = target.kind === 'pb-tile' ? []
@@ -1491,6 +1508,8 @@
         title: presentation.headline,
         targetElementId: 'pbDetailCaptureTarget',
         hasData: true,
+        sampleProvenance: typeof importedDataset !== 'undefined' && importedDataset?.sourceType === 'sample'
+          ? importedDataset.sampleProvenance : null,
         filters: [{ label: 'Metric', value: model.axisLabel }],
         availableControls: getAvailableControlContext('personalBests'),
         metricLabel: model.axisLabel,

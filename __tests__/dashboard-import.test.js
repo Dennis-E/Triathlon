@@ -9,6 +9,265 @@ const dashboardImportSource = fs.readFileSync(
 const importExperienceCatalog = require('../src/import-experience-catalog');
 const countryCountUtils = require('../src/country-count-utils');
 
+function deferredImport() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function loadImportOperationRuntime() {
+  const context = {
+    window: { importExperienceCatalog },
+    Papa: { parse: jest.fn() },
+    updateStatusBadge: jest.fn(),
+    recordCompletedAnalysis: jest.fn(),
+    console: { error: jest.fn() }
+  };
+  vm.createContext(context);
+  vm.runInContext(`${dashboardImportSource}
+    processData = () => [{ id: 'csv-test', sport: 'Run', distance: 5, duration: 1800 }];
+    applyImportedDataset = dataset => { this.applied.push(dataset); };
+    this.applied = [];
+    this.begin = beginImportOperation;
+    this.isCurrent = isCurrentImportOperation;
+    this.runTrainingPeaks = executeTrainingPeaksZipImport;
+    this.runCsv = importCsvText;
+    this.runSample = handleSampleDataIngest;
+  `, context);
+  return context;
+}
+
+function prepareStravaOperationRuntime(runtime, archive) {
+  let input;
+  const node = { textContent: '', classList: { add() {}, remove() {} } };
+  runtime.document = { createElement: () => (input = { click() {} }),
+    getElementById: id => id === 'sampleDataBtn' || id === 'sampleDataStatus' ? null : node };
+  runtime.importStravaZip = jest.fn(() => archive.promise);
+  runtime.showImportProgressModal = jest.fn();
+  runtime.setImportModalVisualState = jest.fn();
+  runtime.updateImportProgress = jest.fn();
+  runtime.hideImportProgressModal = jest.fn();
+  runtime.setTimeout = jest.fn();
+  runtime.handleStravaIngest();
+  return input.onchange({ target: { files: [{ name: 'synthetic-strava.zip' }] } });
+}
+
+describe('shared dashboard import operations', () => {
+  it('discards an old Strava archive and its media after a newer CSV commits', async () => {
+    const runtime = loadImportOperationRuntime();
+    const archive = deferredImport();
+    const release = jest.fn();
+    const strava = prepareStravaOperationRuntime(runtime, archive);
+    const personal = runtime.runCsv('newer synthetic CSV');
+    runtime.Papa.parse.mock.calls[0][1].complete({ data: [['header'], ['row']] });
+    await personal;
+    archive.resolve({ csvText: 'old synthetic CSV', mediaLibrary: { release } });
+    await strava;
+    expect(runtime.applied).toHaveLength(1);
+    expect(runtime.recordCompletedAnalysis).toHaveBeenCalledTimes(1);
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(runtime.setTimeout).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])('lets a newer Strava replace a pending sample (sample completes first: %s)', async sampleFirst => {
+    const runtime = loadImportOperationRuntime();
+    const pending = deferredImport();
+    const sample = runtime.runSample({ loadPayload: () => pending.promise, hydrateDataset: () => ({ activities: [] }) });
+    const archive = deferredImport();
+    const strava = prepareStravaOperationRuntime(runtime, archive);
+    if (sampleFirst) { pending.resolve({}); expect(await sample).toBeNull(); }
+    archive.resolve({ csvText: 'latest synthetic Strava' });
+    await new Promise(resolve => setImmediate(resolve));
+    runtime.Papa.parse.mock.calls[0][1].complete({ data: [['header'], ['row']] });
+    await strava;
+    if (!sampleFirst) { pending.resolve({}); expect(await sample).toBeNull(); }
+    expect(runtime.applied).toHaveLength(1);
+    expect(runtime.applied[0].sourceLabel).toBe('Strava ZIP import');
+    expect(runtime.recordCompletedAnalysis).toHaveBeenCalledTimes(1);
+    const hideOldDialog = runtime.setTimeout.mock.calls[0][0];
+    runtime.begin('personal');
+    hideOldDialog();
+    expect(runtime.hideImportProgressModal).not.toHaveBeenCalled();
+  });
+
+  it('loads one sample candidate for repeated clicks and never counts a personal analysis', async () => {
+    const runtime = loadImportOperationRuntime();
+    const pending = deferredImport();
+    const loadPayload = jest.fn(() => pending.promise);
+    const dataset = { activities: [{ id: 'sample-1', sport: 'Run', distance: 5, duration: 1800 }], sourceType: 'sample' };
+    const hydrateDataset = jest.fn(() => dataset);
+    const first = runtime.runSample({ loadPayload, hydrateDataset });
+    const duplicate = runtime.runSample({ loadPayload, hydrateDataset });
+    pending.resolve({ synthetic: true });
+    expect(await first).toBe(dataset);
+    await duplicate;
+    expect(loadPayload).toHaveBeenCalledTimes(1);
+    expect(runtime.applied).toEqual([dataset]);
+    expect(runtime.recordCompletedAnalysis).not.toHaveBeenCalled();
+  });
+
+  it('does not let a delayed sample replace a newer personal CSV', async () => {
+    const runtime = loadImportOperationRuntime();
+    const pending = deferredImport();
+    const sample = runtime.runSample({ loadPayload: () => pending.promise, hydrateDataset: () => ({ activities: [] }) });
+    const personal = runtime.runCsv('personal synthetic CSV');
+    runtime.Papa.parse.mock.calls[0][1].complete({ data: [['header'], ['row']] });
+    await personal;
+    pending.resolve({});
+    expect(await sample).toBeNull();
+    expect(runtime.applied).toHaveLength(1);
+    expect(runtime.applied[0].activities[0].id).toBe('csv-test');
+  });
+
+  it('keeps the previous history on a sample error and allows retry', async () => {
+    const runtime = loadImportOperationRuntime();
+    const previous = { activities: [{ id: 'previous' }] };
+    runtime.applied.push(previous);
+    expect(await runtime.runSample({ loadPayload: async () => { throw new Error('Unavailable sample'); } })).toBeNull();
+    expect(runtime.applied).toEqual([previous]);
+    const replacement = { activities: [] };
+    await runtime.runSample({ loadPayload: async () => ({}), hydrateDataset: () => replacement });
+    expect(runtime.applied).toEqual([previous, replacement]);
+    expect(runtime.recordCompletedAnalysis).not.toHaveBeenCalled();
+  });
+
+  it('supersedes prior operations without reviving them after a later failure', () => {
+    const runtime = loadImportOperationRuntime();
+    const previous = runtime.begin('sample');
+    const latest = runtime.begin('personal');
+    latest.failed = true;
+    expect(runtime.isCurrent(previous)).toBe(false);
+    expect(runtime.isCurrent(latest)).toBe(true);
+    expect(latest.generation).toBeGreaterThan(previous.generation);
+  });
+
+  it('does not start an operation for an empty TrainingPeaks selection', async () => {
+    const runtime = loadImportOperationRuntime();
+    const current = runtime.begin('sample');
+    await expect(runtime.runTrainingPeaks([])).resolves.toBeNull();
+    expect(runtime.isCurrent(current)).toBe(true);
+  });
+
+  it.each([true, false])('accepts only the latest TrainingPeaks result (older completes first: %s)', async olderFirst => {
+    const runtime = loadImportOperationRuntime();
+    const older = deferredImport();
+    const newer = deferredImport();
+    const applyDataset = jest.fn();
+    const recordAnalysis = jest.fn();
+    const staleRelease = jest.fn();
+    const previous = runtime.runTrainingPeaks([{ name: 'older.zip' }], {
+      importZips: () => older.promise, applyDataset, recordAnalysis
+    });
+    const latest = runtime.runTrainingPeaks([{ name: 'newer.zip' }], {
+      importZips: () => newer.promise, applyDataset, recordAnalysis
+    });
+    const oldResult = { activities: [], mediaLibrary: { release: staleRelease } };
+    if (olderFirst) {
+      older.resolve(oldResult);
+      await previous;
+      newer.resolve({ activities: [] });
+    } else {
+      newer.resolve({ activities: [] });
+      await latest;
+      older.resolve(oldResult);
+    }
+    expect(await previous).toBeNull();
+    await latest;
+    expect(applyDataset).toHaveBeenCalledTimes(1);
+    expect(recordAnalysis).toHaveBeenCalledTimes(1);
+    expect(staleRelease).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores stale progress and does not commit an older result when the latest fails', async () => {
+    const runtime = loadImportOperationRuntime();
+    const pending = deferredImport();
+    let reportOldProgress;
+    const reportProgress = jest.fn();
+    const applyDataset = jest.fn();
+    const recordAnalysis = jest.fn();
+    const older = runtime.runTrainingPeaks([{ name: 'old.zip' }], {
+      importZips: (files, progress) => { reportOldProgress = progress; return pending.promise; },
+      reportProgress, applyDataset, recordAnalysis
+    });
+    await expect(runtime.runTrainingPeaks([{ name: 'invalid.zip' }], {
+      importZips: async () => { throw new Error('Invalid archive'); }
+    })).rejects.toThrow('Invalid archive');
+    reportOldProgress({ percent: 99 });
+    pending.resolve({ activities: [] });
+    expect(await older).toBeNull();
+    expect(reportProgress).not.toHaveBeenCalled();
+    expect(applyDataset).not.toHaveBeenCalled();
+    expect(recordAnalysis).not.toHaveBeenCalled();
+  });
+
+  it('lets a newer standalone CSV supersede an older archive', async () => {
+    const runtime = loadImportOperationRuntime();
+    const archive = deferredImport();
+    const applyDataset = jest.fn();
+    const recordAnalysis = jest.fn();
+    const older = runtime.runTrainingPeaks([{ name: 'old.zip' }], {
+      importZips: () => archive.promise, applyDataset, recordAnalysis
+    });
+    const csv = runtime.runCsv('synthetic CSV');
+    runtime.Papa.parse.mock.calls[0][1].complete({ data: [['header'], ['row']] });
+    await csv;
+    archive.resolve({ activities: [] });
+    expect(await older).toBeNull();
+    expect(runtime.applied).toHaveLength(1);
+    expect(runtime.recordCompletedAnalysis).toHaveBeenCalledTimes(1);
+    expect(applyDataset).not.toHaveBeenCalled();
+    expect(recordAnalysis).not.toHaveBeenCalled();
+  });
+
+  it('drops stale CSV errors and releases an uncommitted media candidate once', async () => {
+    const runtime = loadImportOperationRuntime();
+    const release = jest.fn();
+    const older = runtime.runCsv('old CSV', { mediaLibrary: { release } });
+    const oldCallbacks = runtime.Papa.parse.mock.calls[0][1];
+    runtime.begin('sample');
+    oldCallbacks.error(new Error('Delayed parser failure'));
+    expect(await older).toBeNull();
+    expect(runtime.updateStatusBadge).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses an inherited CSV operation without incrementing its generation or counting sample work', async () => {
+    const runtime = loadImportOperationRuntime();
+    const operation = runtime.begin('sample');
+    const pending = runtime.runCsv('synthetic CSV', { operation });
+    runtime.Papa.parse.mock.calls[0][1].complete({ data: [['header'], ['row']] });
+    await pending;
+    expect(runtime.isCurrent(operation)).toBe(true);
+    expect(operation.committed).toBe(true);
+    expect(runtime.recordCompletedAnalysis).not.toHaveBeenCalled();
+  });
+
+  it('does not supersede a pending selection when standalone CSV input is empty', async () => {
+    const runtime = loadImportOperationRuntime();
+    const operation = runtime.begin('personal');
+    await expect(runtime.runCsv('  ')).rejects.toThrow('CSV is empty or invalid');
+    expect(runtime.isCurrent(operation)).toBe(true);
+  });
+
+  it('counts an accepted personal operation once even when post-commit rendering throws', async () => {
+    const runtime = loadImportOperationRuntime();
+    const recordAnalysis = jest.fn();
+    await expect(runtime.runTrainingPeaks([{ name: 'valid.zip' }], {
+      importZips: async () => ({ activities: [] }),
+      applyDataset: (dataset, options) => {
+        options.operation.committed = true;
+        throw new Error('Rendering failed');
+      },
+      recordAnalysis
+    })).rejects.toThrow('Rendering failed');
+    expect(recordAnalysis).toHaveBeenCalledTimes(1);
+  });
+});
+
 function loadRuntimeProcessData() {
   const context = {
     parseGermanDate(value) {
@@ -133,7 +392,7 @@ describe('runtime dashboard-import metric availability', () => {
 
 function loadRuntimeDatasetApplicator() {
   const nodes = Object.fromEntries([
-    'previewCardsContainer', 'enterDashboardContainer', 'emptyStateMessage'
+    'previewCardsContainer', 'enterDashboardContainer', 'emptyStateMessage', 'sampleDataStatus'
   ].map(id => [id, { classList: { add() {}, remove() {} } }]));
   const context = {
     importedDataset: null,
@@ -203,6 +462,14 @@ function loadRuntimeTrainingPeaksImportStatus(importResult) {
 }
 
 describe('runtime import success status copy', () => {
+  it('clears landing sample identification when personal data replaces it', () => {
+    const runtime = loadRuntimeDatasetApplicator();
+    const status = runtime.context.document.getElementById('sampleDataStatus');
+    status.textContent = 'Synthetic sample training data';
+    runtime.applyDataset({ rawCsvData: [], activities: [], sourceLabel: 'Strava ZIP import' });
+    expect(status.textContent).toBe('');
+  });
+
   it('uses source-only success labels for both import sources', () => {
     const runtime = loadRuntimeDatasetApplicator();
     const trainingPeaksDataset = {
@@ -248,6 +515,25 @@ describe('runtime import success status copy', () => {
 });
 
 describe('runtime imported dataset availability refresh', () => {
+  it('leaves active references and media intact when index preparation fails', () => {
+    const runtime = loadRuntimeDatasetApplicator();
+    const release = jest.fn();
+    const previous = { rawCsvData: [], activities: [{ id: 'old' }], mediaLibrary: { release } };
+    runtime.applyDataset(previous);
+    runtime.context.window.heatmapUtils.buildActivitySummaryIndex = () => { throw new Error('Invalid candidate'); };
+    expect(() => runtime.applyDataset({ rawCsvData: [], activities: [{ id: 'next' }] })).toThrow('Invalid candidate');
+    expect(runtime.context.importedDataset).toBe(previous);
+    expect(runtime.context.processedActivities).toBe(previous.activities);
+    expect(release).not.toHaveBeenCalled();
+  });
+
+  it('closes the old PB detail on an accepted dataset change', () => {
+    const runtime = loadRuntimeDatasetApplicator();
+    runtime.context.closePbDetail = jest.fn();
+    runtime.applyDataset({ rawCsvData: [], activities: [] });
+    expect(runtime.context.closePbDetail).toHaveBeenCalledTimes(1);
+  });
+
   it('clears the pinned detail before releasing live media and replacing the dataset', () => {
     const runtime = loadRuntimeDatasetApplicator();
     const events = [];
@@ -255,7 +541,7 @@ describe('runtime imported dataset availability refresh', () => {
     runtime.context.window.dashboardTooltips = { invalidate: jest.fn(() => { pinned = null; events.push('clear'); }) };
     const first = { rawCsvData: [], activities: [], mediaLibrary: { release: jest.fn(() => {
       expect(pinned).toBeNull();
-      expect(runtime.context.importedDataset).toBe(first);
+      expect(runtime.context.importedDataset).toBe(replacement);
       events.push('release');
     }) } };
     const replacement = { rawCsvData: [], activities: [] };
@@ -464,7 +750,10 @@ describe('runtime TrainingPeaks import orchestration', () => {
     expect(dataset.gpsTracksByActivityId).toHaveProperty('tp-1');
     expect(dataset.fitBestEffortsByActivityId).toHaveProperty('tp-2');
     expect(applyDataset).toHaveBeenCalledTimes(1);
-    expect(applyDataset).toHaveBeenCalledWith(dataset, { openDashboard: true });
+    expect(applyDataset).toHaveBeenCalledWith(dataset, expect.objectContaining({
+      openDashboard: true,
+      operation: expect.objectContaining({ sourceType: 'personal', committed: true, counted: true })
+    }));
     expect(recordAnalysis).toHaveBeenCalledTimes(1);
   });
 

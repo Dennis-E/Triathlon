@@ -592,6 +592,23 @@ describe('dashboard export target inventory', () => {
 });
 
 describe('dashboard export composition', () => {
+  it('prints the full OSM attribution URL in a sample map image', () => {
+    const runtime = createDownloadRuntime();
+    runtime.context.__drawComposition({ width: 960, height: 500 }, {
+      kind: 'tab', key: 'heatmap', title: 'Routes', sampleProvenance: { synthetic: true }
+    }, { logo: { naturalWidth: 120, naturalHeight: 60 }, qrCode: { naturalWidth: 120, naturalHeight: 120 } });
+    expect(runtime.canvasCalls.text.join(' ')).toContain('https://www.openstreetmap.org/copyright');
+  });
+
+  it.each(['square', 'portrait'])('reserves synthetic attribution in %s images independently of optional context', format => {
+    const runtime = createDownloadRuntime();
+    runtime.context.__drawComposition({ width: 960, height: 500 }, {
+      kind: 'tab', key: 'totalDistance', title: 'Distance', format,
+      sampleProvenance: { synthetic: true, label: 'Synthetic sample training data' }
+    }, { logo: { naturalWidth: 120, naturalHeight: 60 }, qrCode: { naturalWidth: 120, naturalHeight: 120 } });
+    expect(runtime.canvasCalls.text.join(' ')).toContain('Synthetic sample training data');
+  });
+
   it('omits filter context and expands the chart into the available square canvas', () => {
     const runtime = createDownloadRuntime();
     const captured = { width: 600, height: 900 };

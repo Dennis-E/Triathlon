@@ -171,7 +171,8 @@ function renderMediaGallery(mediaLibrary, options = {}) {
       const source = asset.mediaType === 'video'
         ? createVideoPreview(asset, mediaLibrary, doc)
         : mediaLibrary.getObjectUrl(asset);
-      Promise.resolve(source).then(url => { image.src = url; }).catch(() => {
+      Promise.resolve(source).then(url => { if (mediaGallerySession === session) image.src = url; }).catch(() => {
+        if (mediaGallerySession !== session) return;
         window.dashboardTooltips?.invalidate?.();
         asset.status = 'corrupt';
         image.alt = 'Media could not be read';
@@ -252,6 +253,7 @@ function renderMediaGallery(mediaLibrary, options = {}) {
     status.textContent = 'Loading media preview...';
     try {
       const source = await mediaLibrary.getObjectUrl(asset);
+      if (mediaGallerySession !== session) return;
       const media = doc.createElement(asset.mediaType === 'video' ? 'video' : 'img');
       media.src = source;
       media.className = 'max-h-[85vh] max-w-[90vw] object-contain';
@@ -287,6 +289,7 @@ function renderMediaGallery(mediaLibrary, options = {}) {
       preview.classList.remove('hidden');
       status.textContent = 'Media preview opened.';
     } catch (error) {
+      if (mediaGallerySession !== session) return;
       window.dashboardTooltips?.invalidate?.();
       asset.status = 'corrupt';
       mediaLibrary.hasReadableMedia = assets.some(item => item.status === 'readable');
@@ -369,6 +372,7 @@ async function createMediaExport(kind, options = {}) {
       const src = asset.mediaType === 'video'
         ? await createVideoPreview(asset, library, doc)
         : await library.getObjectUrl(asset);
+      if (mediaGallerySession !== session) return;
       const captions = `<figcaption>${escapeMediaGalleryHtml(asset.caption || asset.filename)}</figcaption>`;
       const routeSvgs = includeRoutes ? (asset.activityIds || []).map(activityId => {
         const track = library.gpsTracksByActivityId && library.gpsTracksByActivityId[String(activityId)];
@@ -377,6 +381,7 @@ async function createMediaExport(kind, options = {}) {
       cards.push(`<figure><img data-export-asset-key="${escapeMediaGalleryHtml(asset.key)}" src="${escapeMediaGalleryHtml(src)}" alt="${escapeMediaGalleryHtml(asset.caption || asset.mediaType)}" style="width:100%;height:200px;object-fit:cover;"/>${captions}${routeSvgs}</figure>`);
     }
   } catch (error) {
+    if (mediaGallerySession !== session) return;
     doc.getElementById('mediaGalleryStatus').textContent = 'A selected media file could not be prepared for export.';
     return;
   }
@@ -460,6 +465,13 @@ function clearMediaGallery() {
     mediaGallerySession.thumbnailObserver.disconnect();
   }
   mediaGallerySession = null;
+  if (typeof document !== 'undefined') {
+    const preview = document.getElementById('mediaGalleryPreview');
+    preview?.classList?.add('hidden');
+    document.getElementById('mediaGalleryPreviewContent')?.replaceChildren?.();
+    const area = document.getElementById('mediaGalleryExportArea');
+    if (area) area.innerHTML = '';
+  }
 }
 
 if (typeof window !== 'undefined') {

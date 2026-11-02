@@ -773,7 +773,8 @@ describe('index.html inline script syntax', () => {
     expect(dashboardImportSource).toContain('Array.from(event.target.files || [])');
     expect(html).toContain('./docs/trainingpeaks-export-how-to.html');
     expect(html).toContain('are not uploaded or stored by TriAnalytica');
-    expect(html).toContain('still makes network requests for libraries and its analysis counter');
+    expect(html).toContain('still makes network requests for libraries, public sample data and its analysis counter');
+    expect(html).toMatch(/id="sampleDataBtn"[\s\S]*?onclick="handleSampleDataIngest\(\)"[\s\S]*?<span>Use exemplary data<\/span>/);
     expect(trainingPeaksGuide).toContain('204985370-Data-Export');
     expect(trainingPeaksGuide).toContain('12 months or less');
     expect(trainingPeaksGuide).toContain('Workout Files');

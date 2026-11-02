@@ -162,7 +162,7 @@ function harness({ realGeometry = false, inspection = false } = {}) {
   }
   const stateSource = fs.readFileSync(path.join(__dirname, '../src/dashboard-state.js'), 'utf8');
   const heatmapSource = fs.readFileSync(path.join(__dirname, '../src/dashboard-heatmap.js'), 'utf8');
-  vm.runInContext(`${stateSource}\n${heatmapSource}\nselectedVisualizationTab = 'heatmap'; this.heatmapTestApi = { renderHeatmap, setHeatmapSportFilter, setHeatmapColorScheme, getHeatmapKeyboardAdapter, showHeatmapActivityTooltip };`, sandbox);
+  vm.runInContext(`${stateSource}\n${heatmapSource}\nselectedVisualizationTab = 'heatmap'; this.heatmapTestApi = { renderHeatmap, setHeatmapSportFilter, setHeatmapColorScheme, setHeatmapYear, getHeatmapKeyboardAdapter, showHeatmapActivityTooltip };`, sandbox);
   const api = sandbox.heatmapTestApi;
 
   function setDataset(dataset, tracks) {
@@ -189,6 +189,34 @@ function harness({ realGeometry = false, inspection = false } = {}) {
 
   return { sandbox, map, elements, renders, boundsFits, sizeInvalidations, tileContainer, tileLayer, setDataset, render, filter, setScheme };
 }
+
+describe('heatmap year selection', () => {
+  it('combines year and sport without losing the map viewport', async () => {
+    const runtime = harness();
+    runtime.setDataset({ activities: [
+      { id: 'oldRun', date: new Date(2021, 5, 1) },
+      { id: 'newRun', date: new Date(2025, 5, 1) },
+      { id: 'oldBike', date: new Date(2021, 5, 2) }
+    ] }, { oldRun: 'Run', newRun: 'Run', oldBike: 'Bike' });
+    await runtime.render();
+    runtime.map.zoom = 14;
+    await runtime.sandbox.heatmapTestApi.setHeatmapYear('2021');
+    await runtime.filter('Run');
+    expect(Object.keys(runtime.renders.at(-1).segments)).toEqual(['oldRun']);
+    expect(runtime.map.zoom).toBe(14);
+    expect(runtime.sandbox.window.heatmapDashboard.getExportData().year).toBe(2021);
+  });
+
+  it('resets an unavailable year on dataset replacement and restores all years', async () => {
+    const runtime = harness();
+    runtime.setDataset({ activities: [{ id: 'old', date: new Date(2021, 1, 1) }] }, { old: 'Run' });
+    await runtime.sandbox.heatmapTestApi.setHeatmapYear('2021');
+    runtime.setDataset({ activities: [{ id: 'next', date: new Date(2025, 1, 1) }] }, { next: 'Run' });
+    await runtime.render();
+    expect(Object.keys(runtime.renders.at(-1).segments)).toEqual(['next']);
+    expect(runtime.sandbox.window.heatmapDashboard.getExportData().year).toBeNull();
+  });
+});
 
 describe('heatmap pinned inspection', () => {
   async function setup() {

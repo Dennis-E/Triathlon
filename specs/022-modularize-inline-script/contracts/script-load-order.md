@@ -26,6 +26,7 @@ werden, sonst schlagen `ReferenceError`s zur Laufzeit fehl.
 <script src="./src/training-calendar-utils.js"></script>
 <script src="./src/wordcloud-utils.js"></script>
 <script src="./src/analysis-counter.js"></script>
+<script src="./src/sample-data-utils.js"></script>
 
 <!-- NEU: Dashboard-Orchestrierung, in dieser exakten Reihenfolge -->
 <script src="./src/dashboard-state.js"></script>

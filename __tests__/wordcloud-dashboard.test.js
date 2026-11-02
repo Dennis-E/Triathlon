@@ -9,10 +9,31 @@ const wordcloudDashboard = fs.readFileSync(path.join(ROOT, 'src', 'dashboard-wor
 const dashboardExport = fs.readFileSync(path.join(ROOT, 'src', 'dashboard-export.js'), 'utf8');
 
 describe('Wordcloud dashboard contract', () => {
-  it('pins real frequencies through cloud hits and independent ranked-list buttons', () => {
+  it.each([[true, false, true], [true, true, false], [false, false, false]])('handles partial layout (drawn=%s, stale=%s, exportable=%s)', async (drawn, stale, exportable) => {
+    const nodes = new Map();
+    const makeNode = () => ({ value: '50', style: {}, parentElement: { clientWidth: 292 }, listeners: {},
+      classList: { contains: () => false, toggle() {}, add() {}, remove() {} },
+      replaceChildren() {}, appendChild() {}, append() {}, setAttribute() {},
+      addEventListener(type, handler) { this.listeners[type] = handler; }, removeEventListener() {} });
+    const WordCloud = jest.fn();
+    WordCloud.isSupported = true;
+    const context = vm.createContext({ window: { wordcloudUtils: require('../src/wordcloud-utils'), WordCloud, addEventListener() {} },
+      document: { createElement: makeNode, getElementById(id) { if (!nodes.has(id)) nodes.set(id, makeNode()); return nodes.get(id); } },
+      processedActivities: [{ name: 'Alpha Bravo' }], Map, Set });
+    vm.runInContext(wordcloudDashboard, context);
+    context.window.renderWordcloud();
+    const canvas = nodes.get('wordcloudCanvas');
+    if (drawn) canvas.listeners.wordclouddrawn({ detail: { item: ['alpha', 1], drawn: true } });
+    if (stale) context.processedActivities = [];
+    canvas.listeners.wordcloudabort();
+    expect(context.window.wordcloudDashboard.hasExportableCloud()).toBe(exportable);
+    await expect(context.window.wordcloudDashboard.waitForCurrentRender()).resolves.toBe(exportable);
+  });
+
+  it.each([292, 640])('pins real frequencies with a readable word size at canvas width %s', width => {
     const nodes = new Map();
     const makeNode = tag => ({ tag, value: '50', style: {}, children: [], listeners: {},
-      parentElement: { clientWidth: 640 }, classList: { contains: () => false, toggle() {} },
+      parentElement: { clientWidth: width }, classList: { contains: () => false, toggle() {} },
       append(...children) { this.children.push(...children); }, appendChild(child) { this.children.push(child); },
       replaceChildren() { this.children = []; }, setAttribute(name, value) { this[name] = value; },
       getBoundingClientRect: () => ({ left: 40, top: 60, width: 640, height: 400 }),
@@ -29,6 +50,7 @@ describe('Wordcloud dashboard contract', () => {
     context.window.renderWordcloud();
     expect(api.registerAdapter).toHaveBeenCalledWith('wordcloud', expect.objectContaining({ dispose: expect.any(Function) }));
     const options = WordCloud.mock.calls[0][1];
+    expect(options.weightFactor(2)).toBe(width < 480 ? 36 : 68);
     options.click(['alpha', 0.2], { x: 10, y: 20, w: 30, h: 10 }, { clientX: 70, clientY: 90 });
     expect(api.show).toHaveBeenLastCalledWith('wordcloud', expect.objectContaining({ selectionKey: 'wordcloud:alpha',
       content: expect.objectContaining({ sections: [{ heading: '', rows: [{ label: 'Occurrences', value: '2' }] }] }) }), true, expect.anything());

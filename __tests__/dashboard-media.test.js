@@ -56,6 +56,27 @@ function loadDashboardMedia() {
 }
 
 describe('dashboard media gallery', () => {
+  it.each(['preview', 'collage'])('discards a late %s after the gallery session is cleared', async mode => {
+    const runtime = loadDashboardMedia();
+    let finishRead;
+    const library = {
+      hasReadableMedia: true,
+      assets: [{ key: 'old.jpg', filename: 'old.jpg', mediaType: 'photo', status: 'readable', activityIds: [] }],
+      getObjectUrl: () => new Promise(resolve => { finishRead = resolve; })
+    };
+    runtime.render(library);
+    const pending = mode === 'collage' ? runtime.window.mediaGalleryDashboard.createCollage()
+      : runtime.nodes.mediaGalleryGrid.onclick({ target: { closest: selector => selector === '[data-media-key]' ? { dataset: { mediaKey: 'old.jpg' } } : null } });
+    runtime.window.mediaGalleryDashboard.clear();
+    runtime.nodes.mediaGalleryStatus.textContent = 'New sample dataset';
+    finishRead('blob:old');
+    await pending;
+    expect(runtime.nodes.mediaGalleryPreviewContent.children).toEqual([]);
+    expect(runtime.nodes.mediaGalleryExportArea.innerHTML).toBe('');
+    expect(runtime.nodes.mediaGalleryStatus.textContent).toBe('New sample dataset');
+    expect(runtime.window.exportVisualizationTab).not.toHaveBeenCalled();
+  });
+
   it('pins media without opening it and invalidates before filters or collage selection change', async () => {
     const runtime = loadDashboardMedia();
     const api = { registerAdapter: jest.fn(), readContext: jest.fn(), show: jest.fn(), invalidate: jest.fn(),

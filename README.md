@@ -4,12 +4,19 @@ This dashboard helps you explore training history from Strava or TrainingPeaks i
 
 ## How it works
 
+To explore immediately, choose **Use exemplary data** on the landing page. It loads
+1,600 fictional Run/Bike/Swim activities from 2021-2025, including 923 GPS tracks
+around Silicon Valley and nearby training destinations. All non-media analyses,
+sport/year filters, and image exports are available. The dashboard and exported
+images identify this as synthetic sample training; photos/videos are not fabricated.
+See [sample-data/README.md](sample-data/README.md) for sources, licensing and regeneration.
+
 1. Open the app.
 2. Choose Strava or TrainingPeaks on the landing page.
 3. Select the provider's export ZIP. For TrainingPeaks histories longer than 12 months, create period exports of 12 months or less and select all required ZIPs together.
 4. Explore the dashboard with your own data.
 
-Selected workout files are processed locally in the browser and are not uploaded or persisted by TriAnalytica. No login is required. The app still makes network requests for third-party libraries and its aggregate analysis counter; workout files and activity fields are not included in the counter request.
+Selected workout files are processed locally in the browser and are not uploaded or persisted by TriAnalytica. No login is required. The app still makes network requests for third-party libraries, public sample resources and its aggregate analysis counter; workout files and activity fields are not included in the counter request. Sample exploration does not increment the personal-analysis counter. Importing your own data replaces rather than merges with the examples; a failed sample load leaves the prior dataset intact.
 
 See [TrainingPeaks export instructions](docs/trainingpeaks-export-how-to.html) for the provider's Workout Files export flow and [docs/IMPORT_FEATURE.md](docs/IMPORT_FEATURE.md) for import behavior and privacy details.
 
@@ -61,6 +68,7 @@ The export preview and its originating Personal Bests detail close after browser
   - Group recordings of the same route within a 30-meter GPS tolerance while preserving route direction and continuity
   - Hover route lines to inspect all contributing activities or a random sample of ten for frequently traveled routes
   - Filter routes by All Sports, Run, Bike, or Swim
+  - Combine sport with All years or an individual represented year; switching filters preserves map zoom
 
 - Pie charts
   - See how your training splits up by sport, duration, pace, equipment, length, or power

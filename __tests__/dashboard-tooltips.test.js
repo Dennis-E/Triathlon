@@ -205,7 +205,9 @@ test('data revision and import reset hooks clear pins before replacing data', ()
   vm.runInContext('advanceDashboardRevision(true)', context);
   expect(invalidate).toHaveBeenCalledTimes(1);
   const source = fs.readFileSync(path.join(__dirname, '../src/dashboard-import.js'), 'utf8');
-  expect(source.indexOf('window.dashboardTooltips?.invalidate();', source.indexOf('function applyImportedDataset'))).toBeLessThan(source.indexOf('importedDataset.mediaLibrary.release();'));
+  const releaseIndex = source.indexOf('previousDataset.mediaLibrary.release();');
+  expect(releaseIndex).toBeGreaterThan(-1);
+  expect(source.indexOf('window.dashboardTooltips?.invalidate();', source.indexOf('function applyImportedDataset'))).toBeLessThan(releaseIndex);
 });
 
 test.each(require('../src/tooltip-selection-utils').TAB_IDS)('%s uses the shared replacement, dismissal and teardown contract', tabId => {

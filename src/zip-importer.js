@@ -256,6 +256,7 @@ async function extractMediaFromZip(zip, activityCsvText) {
     .filter(reference => reference.status === 'matched')
     .map(reference => String(reference.activityId)));
   const activitiesById = new Map(activities.map(activity => [String(activity.id), activity]));
+  let liveMediaReleased = false;
   const objectUrls = new Map();
   const exportReaders = new Map(reconciled.assets
     .filter(asset => typeof asset.readContent === 'function')
@@ -279,8 +280,11 @@ async function extractMediaFromZip(zip, activityCsvText) {
       return createMediaExportSourceLease(sources);
     },
     getObjectUrl: async asset => {
+      if (liveMediaReleased) throw new Error('Media library was released.');
       if (objectUrls.has(asset.key)) return objectUrls.get(asset.key);
       const bytes = await asset.readContent();
+      if (liveMediaReleased) throw new Error('Media library was released.');
+      if (objectUrls.has(asset.key)) return objectUrls.get(asset.key);
       if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
         throw new Error('Local media preview is unavailable in this browser.');
       }
@@ -295,6 +299,8 @@ async function extractMediaFromZip(zip, activityCsvText) {
       return objectUrl;
     },
     release: () => {
+      if (liveMediaReleased) return;
+      liveMediaReleased = true;
       if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
         objectUrls.forEach(objectUrl => URL.revokeObjectURL(objectUrl));
       }

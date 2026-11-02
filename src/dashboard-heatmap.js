@@ -1,4 +1,55 @@
      let selectedHeatmapSportFilter = 'All';
+    let selectedHeatmapYear = null;
+    let heatmapYearTracksDataset = null;
+    let heatmapYearTracksSource = null;
+    const heatmapYearTracksCache = new Map();
+
+    function getHeatmapYearValues() {
+      const activities = Array.isArray(importedDataset?.activities) ? importedDataset.activities : processedActivities;
+      return ['All', ...Array.from(new Set(activities.map(activity => new Date(activity.date).getFullYear())
+        .filter(Number.isFinite))).sort((left, right) => right - left).map(String)];
+    }
+
+    function refreshHeatmapYearControls() {
+      const values = getHeatmapYearValues();
+      if (selectedHeatmapYear !== null && !values.includes(String(selectedHeatmapYear))) selectedHeatmapYear = null;
+      const selector = document.getElementById('heatmapYear');
+      if (!selector) return;
+      const key = values.join(',');
+      if (selector.dataset.years !== key) {
+        selector.replaceChildren(...values.map(value => {
+          const option = document.createElement('option');
+          option.value = value;
+          option.textContent = value === 'All' ? 'All years' : value;
+          return option;
+        }));
+        selector.dataset.years = key;
+      }
+      selector.value = selectedHeatmapYear === null ? 'All' : String(selectedHeatmapYear);
+    }
+
+    function getHeatmapYearTracks() {
+      if (selectedHeatmapYear === null) return gpsTracksByActivityId;
+      if (heatmapYearTracksDataset !== importedDataset || heatmapYearTracksSource !== gpsTracksByActivityId) {
+        heatmapYearTracksCache.clear();
+        heatmapYearTracksDataset = importedDataset;
+        heatmapYearTracksSource = gpsTracksByActivityId;
+      }
+      if (!heatmapYearTracksCache.has(selectedHeatmapYear)) {
+        const activities = Array.isArray(importedDataset?.activities) ? importedDataset.activities : processedActivities;
+        const ids = new Set(activities.filter(activity => new Date(activity.date).getFullYear() === selectedHeatmapYear)
+          .map(activity => String(activity.id)));
+        heatmapYearTracksCache.set(selectedHeatmapYear, Object.fromEntries(Object.entries(gpsTracksByActivityId)
+          .filter(([id]) => ids.has(id))));
+      }
+      return heatmapYearTracksCache.get(selectedHeatmapYear);
+    }
+
+    function setHeatmapYear(value) {
+      selectedHeatmapYear = value !== 'All' && getHeatmapYearValues().includes(String(value)) ? Number(value) : null;
+      refreshHeatmapYearControls();
+      return renderHeatmap();
+    }
     const HEATMAP_COLOR_SCHEMES = ['blue-red', 'yellow-red', 'blue', 'black-fire'];
     let selectedHeatmapColorScheme = 'blue-red';
      let heatmapMapInstance = null;
@@ -10,7 +61,7 @@
     let heatmapDisplayedData = null;
 
     function syncHeatmapDisplayedData(overrides = {}) {
-      const next = { dataset: importedDataset, tracks: gpsTracksByActivityId, summaries: heatmapActivitySummaryIndex, dataRevision: typeof dashboardDataRevision === 'number' ? dashboardDataRevision : 0, sport: selectedHeatmapSportFilter, palette: selectedHeatmapColorScheme, ...overrides };
+      const next = { dataset: importedDataset, tracks: gpsTracksByActivityId, summaries: heatmapActivitySummaryIndex, dataRevision: typeof dashboardDataRevision === 'number' ? dashboardDataRevision : 0, sport: selectedHeatmapSportFilter, year: selectedHeatmapYear, palette: selectedHeatmapColorScheme, ...overrides };
       if (heatmapDisplayedData && Object.keys(next).some(key => next[key] !== heatmapDisplayedData[key])) {
         window.dashboardTooltips?.invalidate?.();
         heatmapTooltipSegmentKey = null;
@@ -379,13 +430,16 @@
 
     function getHeatmapKeyboardAdapter() {
       return window.dashboardTabNavigation.createDashboardFilterAdapter(
-        () => ({ values: { sport: selectedHeatmapSportFilter, palette: selectedHeatmapColorScheme } }),
+        () => ({ values: { sport: selectedHeatmapSportFilter, palette: selectedHeatmapColorScheme, year: selectedHeatmapYear === null ? 'All' : String(selectedHeatmapYear) } }),
         prefix => {
           if (prefix.length === 0) return { id: 'sport', values: ['All', 'Run', 'Bike', 'Swim'] };
           if (prefix.length === 1) return { id: 'palette', values: HEATMAP_COLOR_SCHEMES };
+          if (prefix.length === 2 && getHeatmapYearValues().length > 1) return { id: 'year', values: getHeatmapYearValues() };
           return null;
         },
         values => {
+          selectedHeatmapYear = values.year && values.year !== 'All' ? Number(values.year) : null;
+          refreshHeatmapYearControls();
           syncHeatmapDisplayedData({ sport: values.sport, palette: HEATMAP_COLOR_SCHEMES.includes(values.palette) ? values.palette : 'blue-red' });
           selectedHeatmapColorScheme = HEATMAP_COLOR_SCHEMES.includes(values.palette) ? values.palette : 'blue-red';
           const selector = document.getElementById('heatmapColorScheme');
@@ -546,20 +600,23 @@
       const container = document.getElementById('heatmapMapContainer');
       const emptyState = document.getElementById('heatmapEmptyState');
       if (!container) return;
+      refreshHeatmapYearControls();
       syncHeatmapDisplayedData();
       const revision = ++heatmapRenderRevision;
       const token = captureDashboardRenderToken('heatmap', selectedHeatmapSportFilter);
       const dataset = importedDataset;
       const tracks = gpsTracksByActivityId;
+      const year = selectedHeatmapYear;
       const isCurrent = () => revision === heatmapRenderRevision && dataset === importedDataset && tracks === gpsTracksByActivityId &&
-        isDashboardRenderTokenCurrent(token, selectedHeatmapSportFilter);
+        year === selectedHeatmapYear && isDashboardRenderTokenCurrent(token, selectedHeatmapSportFilter);
 
       if (heatmapViewportDataset !== importedDataset) {
         heatmapViewportDataset = importedDataset;
         heatmapInitialFitPending = importedDataset !== null;
       }
 
-      const hasData = window.heatmapUtils.hasGpsData(gpsTracksByActivityId);
+      const visibleTracks = getHeatmapYearTracks();
+      const hasData = window.heatmapUtils.hasGpsData(visibleTracks);
 
       if (!hasData) {
         container.classList.add('hidden');
@@ -568,7 +625,7 @@
         return;
       }
 
-      const segments = window.heatmapUtils.buildRouteSegments(gpsTracksByActivityId, { sportFilter: selectedHeatmapSportFilter });
+      const segments = window.heatmapUtils.buildRouteSegments(visibleTracks, { sportFilter: selectedHeatmapSportFilter });
       const segmentList = Object.values(segments);
 
       if (segmentList.length === 0) {
@@ -746,12 +803,13 @@
     }
 
     function getHeatmapExportData() {
-      if (!heatmapMapInstance) return { sport: selectedHeatmapSportFilter, colorScheme: selectedHeatmapColorScheme, viewport: null };
+      if (!heatmapMapInstance) return { sport: selectedHeatmapSportFilter, year: selectedHeatmapYear, colorScheme: selectedHeatmapColorScheme, viewport: null };
       const center = heatmapMapInstance.getCenter();
       const bounds = heatmapMapInstance.getBounds();
       const normalizedCenter = Array.isArray(center) ? center.slice() : [center.lat, center.lng];
       return {
         sport: selectedHeatmapSportFilter,
+        year: selectedHeatmapYear,
         colorScheme: selectedHeatmapColorScheme,
         viewport: {
           center: normalizedCenter,

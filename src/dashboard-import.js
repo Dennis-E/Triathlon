@@ -177,44 +177,152 @@
       };
     }
 
+    let dashboardImportGeneration = 0;
+    let sampleImportOperation = null;
+    let sampleImportPromise = null;
+
+    function setSampleImportFeedback(message) {
+      const status = typeof document !== 'undefined' ? document.getElementById('sampleDataStatus') : null;
+      if (status) status.textContent = message;
+    }
+
+    function handleSampleDataIngest(dependencies = {}) {
+      if (sampleImportOperation && isCurrentImportOperation(sampleImportOperation)) return sampleImportPromise;
+      const operation = beginImportOperation('sample');
+      sampleImportOperation = operation;
+      const button = typeof document !== 'undefined' ? document.getElementById('sampleDataBtn') : null;
+      if (button) { button.disabled = true; button.setAttribute('aria-busy', 'true'); }
+      setSampleImportFeedback('Loading sample training data...');
+      sampleImportPromise = (async () => {
+        try {
+          const loadPayload = dependencies.loadPayload || (async () => {
+            const response = await fetch('./sample-data/silicon-valley-training.json');
+            if (!response.ok) throw new Error('Sample training data is currently unavailable.');
+            return response.json();
+          });
+          const payload = await loadPayload();
+          if (!isCurrentImportOperation(operation)) return null;
+          const hydrateDataset = dependencies.hydrateDataset || window.sampleDataUtils.hydrateSampleDataset;
+          const dataset = hydrateDataset(payload);
+          const accumulator = window.importExperienceCatalog.createStatisticsAccumulator();
+          dataset.activities.forEach(activity => window.importExperienceCatalog.accumulateActivityStatistics(accumulator, activity));
+          dataset.importExperienceStatistics = window.importExperienceCatalog.finalizeStatistics(accumulator);
+          if (!isCurrentImportOperation(operation)) return null;
+          const applyDataset = dependencies.applyDataset || applyImportedDataset;
+          applyDataset(dataset, { openDashboard: true, operation });
+          operation.committed = true;
+          setSampleImportFeedback('Synthetic sample training data');
+          return dataset;
+        } catch (error) {
+          if (!isCurrentImportOperation(operation)) return null;
+          operation.failed = !operation.committed;
+          setSampleImportFeedback(operation.committed ? 'Sample loaded, but a view could not be displayed. Try another view.'
+            : 'Could not load sample data. Try again or import your own export.');
+          return null;
+        } finally {
+          if (sampleImportOperation === operation) {
+            if (button) { button.disabled = false; button.setAttribute('aria-busy', 'false'); }
+            if (!isCurrentImportOperation(operation)) setSampleImportFeedback('');
+            sampleImportOperation = null;
+            sampleImportPromise = null;
+          }
+        }
+      })();
+      return sampleImportPromise;
+    }
+
+    function beginImportOperation(sourceType) {
+      return { generation: ++dashboardImportGeneration, sourceType, committed: false,
+        counted: false, failed: false, releasedMedia: new WeakSet() };
+    }
+
+    function isCurrentImportOperation(operation) {
+      return !!operation && operation.generation === dashboardImportGeneration;
+    }
+
+    function releaseUncommittedImportMedia(operation, candidate) {
+      const library = candidate && candidate.mediaLibrary;
+      if (!operation || operation.committed || !library || typeof library.release !== 'function'
+          || operation.releasedMedia.has(library)) return;
+      operation.releasedMedia.add(library);
+      library.release();
+    }
+
+    function recordImportOperation(operation, recordAnalysis = recordCompletedAnalysis) {
+      if (!operation.committed || operation.counted || operation.sourceType === 'sample') return;
+      operation.counted = true;
+      return recordAnalysis();
+    }
+
     async function executeTrainingPeaksZipImport(zipFiles, dependencies = {}) {
       const selectedFiles = Array.from(zipFiles || []);
       if (selectedFiles.length === 0) return null;
 
+      const operation = dependencies.operation || beginImportOperation('personal');
       const importZips = dependencies.importZips || importTrainingPeaksZips;
-      const reportProgress = typeof dependencies.reportProgress === 'function' ? dependencies.reportProgress : () => {};
-      const importResult = await importZips(selectedFiles, reportProgress);
-      const dataset = createTrainingPeaksImportedDataset(importResult, selectedFiles.map(file => file.name));
-      if (typeof dependencies.onDatasetPrepared === 'function') dependencies.onDatasetPrepared(dataset);
-
-      const applyDataset = dependencies.applyDataset || applyImportedDataset;
-      applyDataset(dataset, { openDashboard: true });
-
       const recordAnalysis = dependencies.recordAnalysis || recordCompletedAnalysis;
-      await recordAnalysis();
-      return dataset;
+      let candidate = null;
+      try {
+        const importResult = await importZips(selectedFiles, progress => {
+          if (isCurrentImportOperation(operation) && typeof dependencies.reportProgress === 'function') {
+            dependencies.reportProgress(progress);
+          }
+        });
+        candidate = importResult;
+        if (!isCurrentImportOperation(operation)) {
+          releaseUncommittedImportMedia(operation, candidate);
+          return null;
+        }
+        const dataset = createTrainingPeaksImportedDataset(importResult, selectedFiles.map(file => file.name));
+        if (typeof dependencies.onDatasetPrepared === 'function') dependencies.onDatasetPrepared(dataset);
+        if (!isCurrentImportOperation(operation)) {
+          releaseUncommittedImportMedia(operation, candidate);
+          return null;
+        }
+        const applyDataset = dependencies.applyDataset || applyImportedDataset;
+        applyDataset(dataset, { openDashboard: true, operation });
+        operation.committed = true;
+        await recordImportOperation(operation, recordAnalysis);
+        return dataset;
+      } catch (error) {
+        releaseUncommittedImportMedia(operation, candidate);
+        if (operation.committed) await recordImportOperation(operation, recordAnalysis);
+        if (!isCurrentImportOperation(operation)) return null;
+        operation.failed = !operation.committed;
+        throw error;
+      }
     }
 
     function applyImportedDataset(dataset, options = {}) {
-      window.dashboardTooltips?.invalidate();
-      if (importedDataset && importedDataset !== dataset && importedDataset.mediaLibrary &&
-          typeof importedDataset.mediaLibrary.release === 'function') {
-        if (window.mediaGalleryDashboard && typeof window.mediaGalleryDashboard.clear === 'function') {
-          window.mediaGalleryDashboard.clear();
-        }
-        importedDataset.mediaLibrary.release();
+      if (options.operation && !isCurrentImportOperation(options.operation)) {
+        releaseUncommittedImportMedia(options.operation, dataset);
+        return false;
       }
+      const nextSummaryIndex = window.heatmapUtils.buildActivitySummaryIndex(dataset.activities);
+      const previousDataset = importedDataset;
+      window.dashboardTooltips?.invalidate();
       importedDataset = dataset;
       rawCsvData = dataset.rawCsvData;
       processedActivities = dataset.activities;
       fitBestEffortsByActivityId = dataset.fitBestEffortsByActivityId || {};
       gpsTracksByActivityId = dataset.gpsTracksByActivityId || {};
+      heatmapActivitySummaryIndex = nextSummaryIndex;
+      if (options.operation) options.operation.committed = true;
+      if (typeof closePbDetail === 'function') closePbDetail();
+      if (previousDataset && previousDataset !== dataset && previousDataset.mediaLibrary &&
+          typeof previousDataset.mediaLibrary.release === 'function') {
+        if (window.mediaGalleryDashboard && typeof window.mediaGalleryDashboard.clear === 'function') {
+          window.mediaGalleryDashboard.clear();
+        }
+        previousDataset.mediaLibrary.release();
+      }
       const countryCountResult = refreshCountryCountSummary(options.countryCountResourcesLoader);
-      heatmapActivitySummaryIndex = window.heatmapUtils.buildActivitySummaryIndex(processedActivities);
       hideHeatmapActivityTooltip();
 
-      const importLabel = dataset.sourceLabel === 'TrainingPeaks ZIP import' ? 'Imported TrainingPeaks history' : 'Imported Strava history';
+      const importLabel = dataset.sourceType === 'sample' ? 'Synthetic sample training data'
+        : dataset.sourceLabel === 'TrainingPeaks ZIP import' ? 'Imported TrainingPeaks history' : 'Imported Strava history';
       updateStatusBadge('success', importLabel);
+      if (dataset.sourceType !== 'sample') setSampleImportFeedback('');
 
       document.getElementById('previewCardsContainer').classList.remove('hidden');
       document.getElementById('enterDashboardContainer').classList.remove('hidden');
@@ -228,6 +336,7 @@
       initScatterDateSlider();
       initDistributionsDateSlider();
       initTrainingCalendarControls();
+      if (typeof refreshHeatmapYearControls === 'function') refreshHeatmapYearControls();
       refreshVisualizationTabs();
 
       renderDashboard();
@@ -354,14 +463,31 @@
     }
 
     function importCsvText(csvText, options = {}) {
+      if (typeof csvText !== 'string' || !csvText.trim()) return Promise.reject(new Error('CSV is empty or invalid'));
+      const operation = options.operation || beginImportOperation('personal');
       return new Promise((resolve, reject) => {
+        const fail = error => {
+          releaseUncommittedImportMedia(operation, options);
+          if (!isCurrentImportOperation(operation)) {
+            resolve(null);
+            return;
+          }
+          operation.failed = !operation.committed;
+          if (operation.committed) recordImportOperation(operation);
+          updateStatusBadge('error', error.message || 'Could not process imported data');
+          reject(error);
+        };
         Papa.parse(csvText, {
           header: false, // We'll process indexes manually to avoid header collisions
           skipEmptyLines: true,
           complete: function(results) {
+            if (!isCurrentImportOperation(operation)) {
+              releaseUncommittedImportMedia(operation, options);
+              resolve(null);
+              return;
+            }
             if (results.data.length < 2) {
-              updateStatusBadge('error', 'CSV is empty or invalid');
-              reject(new Error('CSV is empty or invalid'));
+              fail(new Error('CSV is empty or invalid'));
               return;
             }
 
@@ -376,18 +502,22 @@
               if (options.mediaLibrary && typeof options.mediaLibrary === 'object') {
                 dataset.mediaLibrary = options.mediaLibrary;
               }
-                  if (typeof options.onDatasetPrepared === 'function') options.onDatasetPrepared(dataset);
-                  applyImportedDataset(dataset, options);
+              if (typeof options.onDatasetPrepared === 'function') options.onDatasetPrepared(dataset);
+              if (!isCurrentImportOperation(operation)) {
+                releaseUncommittedImportMedia(operation, options);
+                resolve(null);
+                return;
+              }
+              applyImportedDataset(dataset, { ...options, operation });
+              operation.committed = true;
+              recordImportOperation(operation);
               resolve(dataset);
             } catch (err) {
-              updateStatusBadge('error', err.message || 'Could not process imported data');
-              reject(err);
+              fail(err);
             }
           },
           error: function(err) {
-            updateStatusBadge('error', 'CSV parsing failed');
-            console.error("Csv parsing error", err);
-            reject(err);
+            fail(err);
           }
         });
       });
@@ -606,6 +736,8 @@
         const file = e.target.files[0];
         if (!file) return;
 
+        const operation = beginImportOperation('personal');
+        let importResult = null;
         try {
           // Show progress modal
           const errorDiv = document.getElementById('importProgressError');
@@ -615,14 +747,20 @@
           updateImportProgress(0, 'Reading archive...');
 
           // Import the ZIP file
-          const importResult = await importStravaZip(file, (progress) => {
+          importResult = await importStravaZip(file, (progress) => {
+            if (!isCurrentImportOperation(operation)) return;
             const percent = progress.percent || 50;
             updateImportProgress(percent, progress.stage);
           });
+          if (!isCurrentImportOperation(operation)) {
+            releaseUncommittedImportMedia(operation, importResult);
+            return;
+          }
 
           // Parse the CSV
           updateImportProgress(null, 'Processing data...');
-          await importCsvText(importResult.csvText, {
+          const dataset = await importCsvText(importResult.csvText, {
+            operation,
             sourceLabel: 'Strava ZIP import',
             openDashboard: true,
             onDatasetPrepared: dataset => {
@@ -635,7 +773,7 @@
             gpsTracksByActivityId: importResult.gpsTracksByActivityId || {},
             mediaLibrary: importResult.mediaLibrary
           });
-          recordCompletedAnalysis();
+          if (!dataset || !isCurrentImportOperation(operation)) return;
 
           // Update progress
           if (importExperienceSession) {
@@ -645,11 +783,13 @@
 
           // Hide modal after a short delay
           setTimeout(() => {
-            hideImportProgressModal();
+            if (isCurrentImportOperation(operation)) hideImportProgressModal();
           }, 1000);
         } catch (error) {
+          releaseUncommittedImportMedia(operation, importResult);
+          if (!isCurrentImportOperation(operation)) return;
           console.error('Import failed:', error);
-          updateImportProgress(null, 'Import failed', true);
+          updateImportProgress(null, operation.committed ? 'Could not display imported data' : 'Import failed', true);
           document.getElementById('importProgressError').classList.remove('hidden');
           document.getElementById('importProgressDetail').textContent = error.message || 'Unknown error occurred';
         }
@@ -666,6 +806,7 @@
         const selectedFiles = Array.from(event.target.files || []);
         if (selectedFiles.length === 0) return;
 
+        const operation = beginImportOperation('personal');
         try {
           const errorDiv = document.getElementById('importProgressError');
           showImportProgressModal();
@@ -674,6 +815,7 @@
           updateImportProgress(0, 'Reading TrainingPeaks archives...');
 
           const dataset = await executeTrainingPeaksZipImport(selectedFiles, {
+            operation,
             reportProgress: progress => updateImportProgress(progress.percent, progress.stage),
             onDatasetPrepared: preparedDataset => {
               if (!importExperienceSession || !importExperienceSession.active) return;
@@ -683,15 +825,18 @@
             }
           });
 
-          if (!dataset) return;
+          if (!dataset || !isCurrentImportOperation(operation)) return;
           updateStatusBadge('success', 'Imported TrainingPeaks history');
 
           if (importExperienceSession) window.importExperienceCatalog.setPhase(importExperienceSession, 'finalizing');
           updateImportProgress(null, 'Preparing visualizations...');
-          setTimeout(() => hideImportProgressModal(), 1000);
+          setTimeout(() => {
+            if (isCurrentImportOperation(operation)) hideImportProgressModal();
+          }, 1000);
         } catch (error) {
+          if (!isCurrentImportOperation(operation)) return;
           console.error('TrainingPeaks import failed:', error);
-          updateImportProgress(null, 'TrainingPeaks import failed', true);
+          updateImportProgress(null, operation.committed ? 'Could not display imported data' : 'TrainingPeaks import failed', true);
           document.getElementById('importProgressError').classList.remove('hidden');
           document.getElementById('importProgressDetail').textContent = error.message || 'Unknown error occurred';
         }

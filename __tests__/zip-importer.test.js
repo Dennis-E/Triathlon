@@ -23,6 +23,25 @@ const {
 const { createMediaZipFixture } = require('./fixtures/strava-media-export');
 
 describe('extractMediaFromZip', () => {
+  it('does not create a late preview URL after the live library was released', async () => {
+    const fixture = createMediaZipFixture({
+      activityRows: [{ id: 'run-1', sport: 'Run', date: '2025-03-01', media: 'photo.jpg' }],
+      mediaRows: [{ filename: 'photo.jpg' }],
+      mediaFiles: { 'media/photo.jpg': { content: 'synthetic-image' } }
+    });
+    const library = await extractMediaFromZip(fixture.zip, fixture.activityCsv);
+    let finishRead;
+    library.assets[0].readContent = () => new Promise(resolve => { finishRead = resolve; });
+    const createUrl = jest.spyOn(URL, 'createObjectURL');
+    try {
+      const pending = library.getObjectUrl(library.assets[0]);
+      library.release();
+      finishRead(new Uint8Array([1, 2, 3]));
+      await expect(pending).rejects.toThrow(/released/i);
+      expect(createUrl).not.toHaveBeenCalled();
+    } finally { createUrl.mockRestore(); }
+  });
+
   it('reconciles exact activity references with manifest filenames and archive entries', async () => {
     const fixture = createMediaZipFixture({
       activityRows: [

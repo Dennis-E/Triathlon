@@ -23,6 +23,20 @@ const {
   sortSegmentsForDrawOrder
 } = require('../src/heatmap-utils');
 
+test('processes a shared route geometry once while retaining all activity identities', () => {
+  let coordinateReads = 0;
+  const points = [[37.4, -122.1], [37.402, -122.102], [37.404, -122.101]];
+  Object.defineProperty(points[0], 0, { get: () => { coordinateReads++; return 37.4; } });
+  buildRouteSegments({ first: { sport: 'Run', points } });
+  const singleReads = coordinateReads;
+  coordinateReads = 0;
+  const tracks = Object.fromEntries(Array.from({ length: 100 }, (_, index) => [`activity-${String(index).padStart(3, '0')}`, { sport: 'Run', points }]));
+  const segments = Object.values(buildRouteSegments(tracks));
+  expect(coordinateReads).toBeLessThanOrEqual(singleReads + 2);
+  expect(segments.length).toBeGreaterThan(0);
+  expect(segments.every(segment => segment.count === 100 && new Set(segment.activityIds).size === 100)).toBe(true);
+});
+
 describe('imported Swim route visibility', () => {
   const { extractGpsAndPowerFromZip } = require('../src/zip-importer');
 

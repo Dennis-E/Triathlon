@@ -408,7 +408,7 @@
       <div class="mb-4 flex items-center justify-center gap-3">
         <img src="assets/logo.png" alt="TriAnalytica logo" class="h-16 w-auto shrink-0">
       </div>
-      <p class="text-slate-400 text-sm leading-relaxed">Import Strava or TrainingPeaks workout exports and explore your training locally. Workout files are processed in this browser and are not uploaded or stored by TriAnalytica. The app still makes network requests for libraries and its analysis counter.</p>
+      <p class="text-slate-400 text-sm leading-relaxed">Import Strava or TrainingPeaks workout exports and explore your training locally. Workout files are processed in this browser and are not uploaded or stored by TriAnalytica. The app still makes network requests for libraries, public sample data and its analysis counter.</p>
     </div>
 
     <!-- Import Actions -->
@@ -457,6 +457,12 @@
           </a>
         </div>
       </div>
+      <button id="sampleDataBtn" type="button" onclick="handleSampleDataIngest()" aria-busy="false"
+        class="inline-flex items-center gap-2.5 rounded-lg border border-emerald-500/50 bg-emerald-950/50 px-6 py-3 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-900/70 disabled:cursor-wait disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-400">
+        <i data-lucide="play" class="h-4 w-4" aria-hidden="true"></i>
+        <span>Use exemplary data</span>
+      </button>
+      <p id="sampleDataStatus" role="status" aria-live="polite" class="min-h-5 max-w-sm text-center text-xs text-emerald-200"></p>
       <p id="analysisCounter" class="hidden rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-4 py-2 font-mono text-base font-bold tabular-nums tracking-wide text-indigo-200 shadow-lg shadow-indigo-500/10" aria-live="polite"></p>
     </div>
 
@@ -1423,10 +1429,10 @@
 
       <div id="vizPanelHeatmap" role="tabpanel" aria-labelledby="vizTabHeatmap" class="hidden">
         <div class="space-y-5">
-          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+          <div class="flex flex-col md:flex-row md:flex-wrap md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
             <div class="space-y-1">
               <h2 class="text-2xl font-bold tracking-tight">GPS Heatmap</h2>
-              <p class="text-xs text-slate-400">Where you trained — built from the GPS tracks in your Strava export</p>
+              <p class="text-xs text-slate-400">GPS tracks from your selected training history</p>
             </div>
 
             <div data-keyboard-filter-group data-filter-summary data-filter-label="Sport" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
@@ -1436,6 +1442,12 @@
               <button onclick="setHeatmapSportFilter('Swim')" id="heatmapSportBtnSwim" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">Swim</button>
             </div>
 
+            <label data-filter-summary data-filter-label="Year" class="flex items-center gap-2 text-xs text-slate-400">
+              <span>Year</span>
+              <select id="heatmapYear" onchange="setHeatmapYear(this.value)" class="rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-300">
+                <option value="All">All years</option>
+              </select>
+            </label>
             <label data-filter-summary data-filter-label="Color scheme" class="flex items-center gap-2 text-xs text-slate-400">
               <span>Color scheme</span>
               <select id="heatmapColorScheme" onchange="setHeatmapColorScheme(this.value)" class="rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-300">
@@ -2333,6 +2345,7 @@
 
   <script src="./src/import-experience-catalog.js"></script>
   <script src="./src/country-count-utils.js"></script>
+  <script src="./src/sample-data-utils.js"></script>
   <script src="./src/dashboard-state.js"></script>
   <script src="./src/dashboard-tooltips.js"></script>
   <script src="./src/dashboard-core.js"></script>

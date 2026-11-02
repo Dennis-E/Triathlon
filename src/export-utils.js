@@ -524,6 +524,7 @@ function createExportTarget(input) {
     title: String(input.title),
     targetElementId: String(input.targetElementId),
     hasData: input.hasData,
+    ...(input.sampleProvenance ? { sampleProvenance: copyExportMetadata(input.sampleProvenance) } : {}),
     filters: summarizeFilters(input.filters),
     availableControls: summarizeAvailableControls(input.availableControls),
     legend: input.legend ? copyExportMetadata(input.legend) : null,

@@ -69,6 +69,20 @@ const geometryOperations = {
 };
 
 describe('aggregateCountryCount', () => {
+  it('does not re-test an already visited country for every repeated workout', () => {
+    const activities = Array.from({ length: 100 }, (_, index) => ({ id: `sample-${index}`, sport: 'Run' }));
+    const booleanIntersects = jest.fn(() => true);
+    const summary = aggregateCountryCount({
+      activities,
+      gpsTracksByActivityId: Object.fromEntries(activities.map(activity => [activity.id, { sport: 'Run', points: [[1, 1], [1.1, 1.1]] }])),
+      countryFeatures: [createCountryFeature('AAA', 0, 0, 2, 2)],
+      geometryOperations: { booleanIntersects, booleanPointInPolygon: pointIsInBounds }
+    });
+    expect(summary.countryCount).toBe(1);
+    expect(summary.trackedActivityCount).toBe(100);
+    expect(booleanIntersects).toHaveBeenCalledTimes(1);
+  });
+
   const countryFeatures = [
     createCountryFeature('AAA', 0, 0, 2, 2),
     createCountryFeature('BBB', 4, 0, 6, 2)

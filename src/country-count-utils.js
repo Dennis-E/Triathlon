@@ -128,6 +128,7 @@ function aggregateCountryCount(options = {}) {
         : null;
 
       countryFeatures.forEach(country => {
+        if (countryIds.has(country.countryId)) return;
         if (!boundsIntersect(route.bounds, country.bounds)) return;
 
         const intersects = lineFeature

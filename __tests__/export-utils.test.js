@@ -28,6 +28,14 @@ const {
 } = require('../src/export-utils');
 
 describe('export-utils', () => {
+  it('copies sample provenance into an immutable export snapshot', () => {
+    const sampleProvenance = { datasetId: 'sample-v1', synthetic: true, label: 'Synthetic sample training data' };
+    const target = createExportTarget({ kind: 'tab', key: 'totalDistance', title: 'Distance',
+      targetElementId: 'capture', hasData: true, sampleProvenance });
+    sampleProvenance.label = 'Changed active data';
+    expect(target.sampleProvenance).toEqual({ datasetId: 'sample-v1', synthetic: true, label: 'Synthetic sample training data' });
+  });
+
   describe('social export format and metadata', () => {
     it('defines specification minimums and passes text/mark contrast thresholds', () => {
       const style = getSocialExportStyleConfig();

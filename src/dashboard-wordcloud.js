@@ -226,7 +226,7 @@
     elements.canvas.height = dimensions.height;
     elements.canvas.style.height = `${dimensions.height}px`;
     const minimumSize = 16;
-    const maximumSize = 68;
+    const maximumSize = dimensions.width < 480 ? 36 : 68;
     const minimumCount = Math.min(...included.map(entry => entry.count));
     const maximumCount = Math.max(...included.map(entry => entry.count));
     const minLog = Math.log(minimumCount);
@@ -255,7 +255,7 @@
       cleanupListeners();
       if (!isCurrent()) { finishCloudRender(version, false, false); return; }
       renderUnplacedNotice(elements, included.filter(entry => !drawnWords.has(entry.word)).map(entry => entry.word));
-      finishCloudRender(version, false, false);
+      finishCloudRender(version, true, drawnWords.size > 0);
     };
     elements.canvas.addEventListener('wordclouddrawn', onWordDrawn);
     elements.canvas.addEventListener('wordcloudstop', onWordcloudStop);

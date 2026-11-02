@@ -153,7 +153,16 @@ function buildRouteSegments(gpsTracksByActivityId, options = {}) {
     .filter(([, track]) => sportFilter === 'All' || track.sport === sportFilter)
     .sort(([activityA], [activityB]) => activityA.localeCompare(activityB));
 
+  const sharedGeometrySegments = new WeakMap();
   for (const [activityId, track] of activities) {
+    const repeatedKeys = sharedGeometrySegments.get(track.points);
+    if (repeatedKeys) {
+      for (const key of repeatedKeys) {
+        segments[key].activityIds.push(activityId);
+        segments[key].count = segments[key].activityIds.length;
+      }
+      continue;
+    }
     const { probes, trueIndices } = interpolateTrackProbes(track.points, probeSpacingMeters, { includeTrueIndices: true });
     if (probes.length < 2) continue;
     const activityContinuitySteps = Math.min(continuitySteps, probes.length - 1);
@@ -223,6 +232,7 @@ function buildRouteSegments(gpsTracksByActivityId, options = {}) {
         segment.count = segment.activityIds.length;
       }
     }
+    sharedGeometrySegments.set(track.points, matchedKeys);
   }
 
   for (const segment of Object.values(segments)) delete segment._cellKey;

@@ -4,6 +4,23 @@
 
 TriAnalytica supports Strava and TrainingPeaks exports through separate import options on the landing page. Both import paths normalize supported activities into the same dashboard model.
 
+## Public Sample History
+
+Choose **Use exemplary data** to open the regular dashboard without selecting files.
+The public `sample-data/silicon-valley-training.json` payload contains 1,600
+synthetic activities and 923 geographic tracks across 2021-2025. All non-media
+analyses use the normal filters, tooltips and image-preview/download flow;
+the dashboard and images identify synthetic training. Source/license details and
+offline regeneration commands are in [sample-data/README.md](../sample-data/README.md).
+
+Sample loading fetches public app resources, not personal exports, and does not
+increment the personal-analysis counter. Loading feedback, recoverable errors and
+retry are available beside the button. A successful sample or personal import
+replaces the entire previous history. Failed preparation preserves the last valid
+dataset, and older operations cannot overwrite newer selections or their status.
+Superseded media reads cannot restore old gallery content; separately acquired
+export sources retain their own lifetime until the export completes.
+
 ## Visualization availability
 
 After each import, the dashboard shows only visualization tabs that can produce meaningful output from the imported activities and associated route or power data. Strava and TrainingPeaks imports use the same data-based rules; when a field is missing, only views that require that field are hidden. This changes dashboard visibility and selection only: imported files, activity records, and values are not modified or removed.
@@ -40,4 +57,4 @@ For provider-specific export steps, see [TrainingPeaks export instructions](trai
 
 ## Privacy and network behavior
 
-Selected ZIP contents are read and processed in the active browser session; workout files, activity fields, routes, and derived power data are not uploaded or persisted by TriAnalytica. The existing analysis-counter request contains no workout payload. This describes workout-file handling only: the app still makes network requests for third-party browser libraries and its aggregate analysis counter.
+Selected ZIP contents are read and processed in the active browser session; workout files, activity fields, routes, and derived power data are not uploaded or persisted by TriAnalytica. The existing analysis-counter request contains no workout payload. This describes workout-file handling only: the app still makes network requests for third-party browser libraries, public sample data and its aggregate analysis counter.

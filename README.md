@@ -106,6 +106,11 @@ The first article announces the alpha launch and welcomes feedback, suggestions,
 and wishes from fellow athletes. You can also use the existing feedback address
 shown on the News page to get in touch.
 
+## About
+
+Meet Dennis on the [TriAnalytica About page](about.html) and read the personal
+story behind his triathlon, training data, and AI side project.
+
 ## Local development
 
 If you want to run the project locally:

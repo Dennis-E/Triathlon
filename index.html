@@ -233,21 +233,23 @@
     .visualization-detail-dismiss { position: absolute; right: 8px; top: 8px; padding: 4px; cursor: pointer; }
     .visualization-detail-tooltip button:focus-visible, [data-tooltip-inspector]:focus-visible { outline: 2px solid #2dd4bf; outline-offset: 3px; }
     .visualization-detail-body > div { margin-top: 3px; }
+    .site-header-actions a:focus-visible, body > header > button:focus-visible { outline: 3px solid #fbbf24; outline-offset: 5px; }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 h-full flex flex-col font-sans antialiased">
 
   <!-- Header -->
   <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur px-6 py-4 flex flex-wrap items-center justify-between gap-y-3 shrink-0">
-    <button type="button" onclick="goToLanding()" class="flex items-center space-x-3 hover:opacity-80 transition-opacity cursor-pointer">
-      <img src="assets/logo.png" alt="TriAnalytica logo" class="h-9 w-auto shrink-0">
+    <button type="button" onclick="goToLanding()" class="flex max-w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-2 hover:opacity-80 transition-opacity cursor-pointer">
+      <img src="assets/logo.png" alt="TriAnalytica logo" class="h-9 w-auto max-w-full object-contain">
       <p class="hidden sm:block text-xs text-slate-400">Triathlon Performance Insights</p>
     </button>
-    <div class="ml-auto flex items-center space-x-4">
+    <div class="site-header-actions ml-auto flex min-w-0 max-w-full flex-wrap items-center gap-x-4 gap-y-3">
       <a href="./news.html" class="text-sm text-slate-300 hover:text-white transition-colors" aria-label="Read TriAnalytica News">News</a>
-      <div id="statusBadge" class="flex items-center space-x-2 text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 rounded-full">
-        <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-        <span id="statusText">Awaiting workout data import</span>
+      <a href="./about.html" class="text-sm text-slate-300 hover:text-white transition-colors" aria-label="About TriAnalytica">About</a>
+      <div id="statusBadge" class="flex min-w-0 max-w-full items-center space-x-2 text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 rounded-full">
+        <span class="w-2 h-2 shrink-0 rounded-full bg-amber-400 animate-pulse"></span>
+        <span id="statusText" class="min-w-0 break-words">Awaiting workout data import</span>
       </div>
     </div>
   </header>

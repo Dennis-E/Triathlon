@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Meet Dennis, the age grouper behind TriAnalytica, and the personal story behind his triathlon, training data, and AI side project.">
+  <title>About TriAnalytica</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --background: #020617;
+      --ink: #f8fafc;
+      --muted: #a8b4c5;
+      --line: #1e293b;
+      --accent: #fbbf24;
+      font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+      letter-spacing: 0;
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--background); color: var(--ink); -webkit-font-smoothing: antialiased; }
+    a { color: #cbd5e1; text-decoration: none; }
+    a:hover { color: var(--ink); }
+    a:focus-visible { outline: 3px solid var(--accent); outline-offset: 5px; }
+
+    .site-header { border-bottom: 1px solid var(--line); background: #0f172a; }
+    .header-inner {
+      max-width: 72rem;
+      margin-inline: auto;
+      padding: 1rem 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.25rem 2rem;
+    }
+    .brand { display: block; min-width: 0; max-width: 100%; }
+    .brand img { display: block; height: 2.25rem; width: auto; max-width: 100%; object-fit: contain; }
+    .site-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.5rem; min-width: 0; font-size: 0.875rem; }
+
+    .about-copy { width: min(65ch, 100% - 3rem); margin-inline: auto; padding-block: 3.5rem 5rem; overflow-wrap: anywhere; }
+    h1, h2 { color: var(--ink); font-weight: 600; }
+    h1 { margin: 0 0 1.5rem; font-size: 2.25rem; line-height: 1.2; }
+    h2 { margin: 0 0 1rem; font-size: 1.5rem; line-height: 1.35; }
+    p { margin: 0 0 1.25rem; color: var(--muted); font-size: 1rem; line-height: 1.85; }
+    .about-copy p a { color: #fcd34d; text-decoration: underline; text-underline-offset: 0.2em; }
+    .about-copy p a:hover { color: #fde68a; }
+    .introduction > p:first-of-type { color: #e2e8f0; font-size: 1.25rem; line-height: 1.65; }
+    .about-copy section + section { margin-top: 3rem; padding-top: 2.5rem; border-top: 1px solid var(--line); }
+    .sign-off { margin-top: 2rem; }
+    .signature { color: var(--ink); }
+    .explore-link {
+      display: inline-block;
+      max-width: 100%;
+      margin-top: 0.5rem;
+      padding: 0.875rem 1.125rem;
+      border: 1px solid #786027;
+      border-radius: 6px;
+      background: #201c18;
+      color: #fcd34d;
+      font-size: 1rem;
+      font-weight: 600;
+      line-height: 1.5;
+    }
+    .explore-link:hover { background: #302719; color: #fde68a; }
+
+    @media (min-width: 640px) {
+      .about-copy { padding-block: 5rem 6rem; }
+      h1 { font-size: 2.75rem; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="./index.html" aria-label="Back to TriAnalytica dashboard">
+        <img src="assets/logo.png" alt="TriAnalytica logo">
+      </a>
+      <nav class="site-nav" aria-label="Site navigation">
+        <a href="./news.html">News</a>
+        <a href="./index.html">Back to dashboard</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="aboutContent" class="about-copy">
+    <section class="introduction" aria-labelledby="aboutGreeting">
+      <h1 id="aboutGreeting">Hello fellow triathletes 👋</h1>
+      <p>I’m Dennis — just another age grouper with a soft spot for training data.</p>
+      <p>TriAnalytica is my fun side project: a place where my passion for triathlon meets my curiosity about AI. I’m learning what AI can do, how to build software with it, and what happens when I apply that learning to something I actually care about.</p>
+      <p>Turns out, my training history provides plenty to work with.</p>
+    </section>
+
+    <section aria-labelledby="lateStartHeading">
+      <h2 id="lateStartHeading">A late start. A long-lasting habit.</h2>
+      <p>I wasn’t a sporty kid who grew up racing. I got into endurance sport at university, when I quit smoking and started moving.</p>
+      <p>Somewhere along the way, that became swimming, cycling, and running. Now I happily belong to the large and distinguished group known as “just another age grouper”.</p>
+      <p>I enjoy training, racing, and occasionally convincing myself that looking at the data counts as recovery.</p>
+    </section>
+
+    <section aria-labelledby="familyHeading">
+      <h2 id="familyHeading">The kids joined a club. So did the rest of us.</h2>
+      <p>About two years ago, my kids took part in a children’s triathlon and wanted to join our local triathlon club.</p>
+      <p>As these things go, the whole family gradually got pulled into club life. These days, I happily manage the youth section: more than 80 kids and teens training and competing at local, regional, and national levels.</p>
+      <p>Lots of organisation. Lots of enthusiasm. Lots of fun. :-)</p>
+    </section>
+
+    <section aria-labelledby="whyHeading">
+      <h2 id="whyHeading">Why TriAnalytica?</h2>
+      <p>Because I wanted to explore my own training — and learn how to build something along the way.</p>
+      <p>TriAnalytica brings those interests together: endurance sport, training data, and developing with AI. It’s an evolving side project, shaped by curiosity and the occasional “I wonder if I could make it do this…”</p>
+      <p>If it helps you discover something interesting about your own training, have a smile, or find a visual worth sharing with your fellow athletes, even better.</p>
+      <p>I’d be very happy to hear your feedback. Drop me a line at <a href="mailto:myaidevproject@gmail.com?subject=TriAnalytica%20Feedback">myaidevproject@gmail.com</a>.</p>
+      <p>To stay up to date, you can sign up for the <a href="https://b7607f4e.sibforms.com/v2/serve/MUIFAJ8OOivDmU5Mx69AcESPOvh-2gWPGoi1WrjAS8AP30bZnuHSm2KG9XP2TBdY0i6jMP3oMW2fNIqs0VvuKtqSHoAK8PkPFueD4xCam-PnR9aiMUE5FA3fV7pWhN-6g-Lr_1u2RdEMaozKc1WRvBESwuNXn4xTNA_c3SZaWJpeVvKm7Va86oj0Zyl_9y0mBn6z5oU2Rvq7OGwJLw==" rel="noreferrer" referrerpolicy="no-referrer">newsletter (via Brevo)</a> or follow <a href="https://www.instagram.com/trianalytica/" rel="noreferrer" referrerpolicy="no-referrer">TriAnalytica on Instagram</a>.</p>
+      <p class="sign-off">See you at the start line.</p>
+      <p class="signature">Dennis</p>
+      <a id="exploreTrainingLink" class="explore-link" href="./index.html">Explore your training</a>
+    </section>
+  </main>
+</body>
+</html>

@@ -154,8 +154,6 @@
         mediaGallery: [
           getSelectControlGroup('Year', 'mediaGalleryYearFilter'),
           getSelectControlGroup('Sport', 'mediaGallerySportFilter'),
-          getSelectControlGroup('Activity', 'mediaGalleryActivityFilter'),
-          getCheckboxControlGroup('Include routes', 'mediaGalleryIncludeRoutes')
         ]
       };
       return window.exportUtils.summarizeAvailableControls(groups.concat(tabGroups[tabName] || []));

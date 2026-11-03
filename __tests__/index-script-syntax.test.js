@@ -772,7 +772,10 @@ describe('index.html inline script syntax', () => {
   it('provides accessible media filters and a live status for the gallery', () => {
     expect(html).toContain('aria-label="Filter media by year"');
     expect(html).toContain('aria-label="Filter media by sport"');
-    expect(html).toContain('aria-label="Filter media by activity"');
+    expect(html).not.toContain('id="mediaGalleryActivityFilter"');
+    expect(html).not.toContain('aria-label="Filter media by activity"');
+    expect(html).not.toContain('id="mediaGalleryIncludeRoutes"');
+    expect(html).not.toContain('Include visible routes in export');
     expect(html).toContain('id="mediaGalleryLoadMore"');
     expect(html).toContain('id="mediaGalleryStatus" role="status" aria-live="polite"');
   });

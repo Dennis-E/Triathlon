@@ -1201,12 +1201,11 @@ describe('dashboard export download destination', () => {
       mediaGalleryYearFilter: { value: '2025', selectedOptions: [{ textContent: '2025' }] },
       mediaGallerySportFilter: { value: 'Run', selectedOptions: [{ textContent: 'Run' }] },
       mediaGalleryActivityFilter: { value: 'all', selectedOptions: [{ textContent: 'All activities' }] },
-      mediaGalleryIncludeRoutes: { checked: false }
     };
     context.window.exportUtils = require('../src/export-utils');
     context.window.mediaGalleryDashboard = {
       getExportContext: () => [
-        { label: 'Year', value: '2025' }, { label: 'Sport', value: 'Run' }, { label: 'Routes', value: 'Excluded' }
+        { label: 'Year', value: '2025' }, { label: 'Sport', value: 'Run' }
       ]
     };
     context.document.getElementById = id => elements[id] || originalGetElementById(id);
@@ -1231,13 +1230,12 @@ describe('dashboard export download destination', () => {
       targetElementId: 'mediaGalleryExportArea',
       filters: expect.arrayContaining([
         { label: 'Year', value: '2025' },
-        { label: 'Sport', value: 'Run' },
-        { label: 'Routes', value: 'Excluded' }
-      ]),
-      availableControls: expect.arrayContaining([
-        { label: 'Include routes', controls: [{ label: 'Excluded', selected: false }] }
+        { label: 'Sport', value: 'Run' }
       ])
     });
+    expect(target.filters.map(filter => filter.label)).not.toContain('Routes');
+    expect(target.availableControls.map(group => group.label)).not.toContain('Activity');
+    expect(target.availableControls.map(group => group.label)).not.toContain('Include routes');
     expect(context.html2canvas).toHaveBeenCalledWith(captureTarget, expect.objectContaining({ useCORS: true }));
     expect(context.previewForTest).toBe(PNG_DATA_URL);
     await runtime.download();

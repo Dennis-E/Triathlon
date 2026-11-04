@@ -377,11 +377,13 @@ describe('extractGpxTrackpoints', () => {
       <gpx><trk><trkseg>
         <trkpt lat="48.1351" lon="11.5820"><ele>520</ele></trkpt>
         <trkpt lat="48.1360" lon="11.5830"></trkpt>
+        <trkpt lon="11.5840" lat="48.1370"></trkpt>
       </trkseg></trk></gpx>`;
 
     expect(extractGpxTrackpoints(gpx)).toEqual([
       { lat: 48.1351, lon: 11.5820 },
-      { lat: 48.1360, lon: 11.5830 }
+      { lat: 48.1360, lon: 11.5830 },
+      { lat: 48.1370, lon: 11.5840 }
     ]);
   });
 

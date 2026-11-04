@@ -1,0 +1,81 @@
+# Research: Apple Health Import
+
+Date: 2026-11-03. Scope: design only; no runtime dependency installation or importer implementation. Read-only research covered the existing import ownership boundary and versioned streaming-library sources. Full source-content evidence remains in the ignored private report, not this public artifact.
+
+## 1. Archive And XML Processing
+
+**Decision**: Use pinned `@zip.js/zip.js@2.8.11/dist/zip-native.min.js` and `sax@1.6.1/lib/sax.js` inside a same-origin classic worker. Load these from their versioned jsDelivr URLs through importScripts; preserve the repository's CDN/no-build pattern. Add matching exact-version root devDependencies during implementation; tests import the native CommonJS entry `@zip.js/zip.js/index-native.js` and `sax`, never fetch a CDN. Worker loading failures become recoverable import errors, not a fallback to whole-file parsing.
+
+**Rationale**: The versioned native UMD build exposes `zip`; SAX exposes `sax` in browser and CommonJS. zip.js supports BlobReader, per-entry WritableStream extraction, abort signals, checkSignature and disabling nested workers. The existing JSZip async-string path materializes entries and is unsuitable for the main health XML.
+
+**Alternatives considered**: JSZip whole-entry strings and DOMParser reject the scale constraint. saxes requires an additional browser bundle and xmlchars dependency. WASM zip.js adds CSP complexity before any measured need. Self-hosting pinned upstream artifacts is a possible later deployment policy, not required by this feature or a reason to introduce a build step.
+
+**Sources**: [zip.js 2.8.11 types](https://cdn.jsdelivr.net/npm/@zip.js/zip.js@2.8.11/index.d.ts), [native UMD](https://cdn.jsdelivr.net/npm/@zip.js/zip.js@2.8.11/dist/zip-native.min.js), [package exports](https://cdn.jsdelivr.net/npm/@zip.js/zip.js@2.8.11/package.json), [SAX source](https://cdn.jsdelivr.net/npm/sax@1.6.1/lib/sax.js), [worker importScripts](https://developer.mozilla.org/en-US/docs/Web/API/WorkerGlobalScope/importScripts). These are selected verified starting pins, not a completed vulnerability audit or claim of latest versions.
+
+## 2. Bounded Processing And Progress
+
+**Decision**: Pass File directly by structured clone, never via whole-file arrayBuffer. Use BlobReader and one entry extraction at a time, `zip.configure({ useWebWorkers: false, chunkSize: 65536 })`, a backpressured WritableStream, a streaming TextDecoder and strict SAX parser. Feed decoded text in bounded slices. First XML pass keeps supported workout candidates, tiny provenance/identity data, route references and aggregate diagnostics only. A second XML pass routes eligible record samples into per-workout reducers, not a retained all-day record list. Skip secondary clinical XML and ECG attachments without decompressing them.
+
+**Rationale**: XML ordering does not guarantee workouts precede samples. Two sequential passes exchange additional decompression time for bounded memory. `TextWriter` and `Response(stream).text()` still accumulate complete strings and are explicitly excluded. zip.js entry enumeration buffers the central directory, so an input-reader guard must cap large reads before allocation; generator naming alone does not establish bounded memory.
+
+**Alternatives considered**: Holding millions of samples until workouts are encountered, retaining the decompressed XML, and accepting unbounded library chunks are rejected. Persistent browser storage is unnecessary for this scope. Limits and actual-byte accounting are specified in the contract; time, memory plateau, heartbeat gaps and exact counts must be measured during implementation.
+
+**Acceptance decision**: Use three synthetic workloads with 1,000,000, 2,500,000 and 4,500,000 irrelevant records and identical workouts/relevant measurements/routes; run each three times after a discarded warm-up. Measure combined main-thread and worker memory, including backing-store/ArrayBuffer allocations, from immediately before start through completion/failure cleanup. Compare the worst peak of the largest workload against the smallest workload's worst peak; additional peak memory must be <=64 MiB. The [quickstart](quickstart.md) specifies sampling, baseline and failure handling. Missing worker coverage makes the memory gate unverified. These are agreed future acceptance thresholds, not measured performance claims.
+
+## 3. XML And Archive Safety
+
+**Decision**: Strict SAX parsing with `strictEntities: true`, default token-buffer checks and position tracking enabled. Permit Apple's inline HealthData element/attribute DTD declarations within a bounded DOCTYPE token; reject ENTITY declarations, parameter-entity references, and external SYSTEM/PUBLIC identifiers using a bounded declaration scanner that respects XML quotes and comments. Never resolve DTD resources or extend the entity map; unknown entities and malformed XML are fatal. Validate the HealthData root and direct-child grammar. Only UTF-8 (optional BOM) is accepted initially; reject incompatible declarations explicitly. Check ZIP signatures/CRC using version-specific checkSignature.
+
+**Rationale**: Apple exports may include an inline DTD, so rejecting every DOCTYPE rejects legitimate input. SAX does not automatically load a DTD or adopt declared entities, but explicit safety and structural checks remain necessary. Streaming does not by itself protect against archive bombs, huge directory allocations, oversized attributes, or output floods.
+
+**Alternatives considered**: Regex-removing the DOCTYPE, browser DOM parsing, continuing after a SAX error, and interpreting unrelated clinical representations are rejected. Names are normalized only within the selected export root; no host filesystem extraction or network fetching is performed. Security fixtures must split declarations across input chunks.
+
+**Sources**: [SAX DTD/entity behavior](https://github.com/isaacs/sax-js#regarding-doctypes-and-entitys), [worker CSP behavior](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers#content_security_policy). A normal static server has no guaranteed worker-response CSP; correctness cannot rely on deployment headers. Worker code must have no health-network sink. CDN dependency loads remain explicit app network activity.
+
+## 4. Normalization And Source-Local Time
+
+**Decision**: Map only explicit Apple Running/Cycling/Swimming enums. Prefer compatible WorkoutStatistics over equivalent legacy totals, and preserve measured-zero versus unavailable flags. Convert distance to km, duration to seconds and ascent to meters with explicit unit tables. Use strict numeric parsing, not parseFloat on unknown-unit strings. Device/source names never become equipment; the generic Activity fallback remains ignored by the existing word cloud.
+
+**Decision**: Keep startTime as the true instant Date. Add optional `sourceLocalStart` containing validated lexical year/month/day/hour/minute/second and offsetMinutes. Construct date/monday as browser-local calendar carriers from the recorded day, not from converting the instant to the viewer's zone. Extend workout-time grouping with an optional local-parts argument while preserving existing call signatures/fallback behavior for other providers. The explicit timestamp offset governs the instant and lexical local components; optional HKTimeZone is supporting provenance, not permission to silently rewrite conflicting timestamps.
+
+**Rationale**: Current getHours/getDay grouping follows the viewer timezone. A fake wall-clock startTime would fix a chart by corrupting the instant used for sample association. Separate optional context avoids that mismatch and preserves existing provider behavior.
+
+**Alternatives considered**: Browser-local interpretation of offset timestamps and synthetic shifted instants are rejected. No broad replacement of date objects or change to other sources is needed. Cross-timezone tests must run in UTC and Europe/Berlin, including DST and midnight.
+
+## 5. Identity And Measurement Attribution
+
+**Decision**: Stable activity IDs are a source-prefixed deterministic SHA-256 digest of normalized identity evidence. Prefer scoped external/sync IDs. Same ID plus conflicting workout content is not silently merged; retain distinct conflict-qualified records and report the conflict. Without explicit IDs, use a complete canonical workout fingerprint including timestamps, source/device, original sport, summaries, events and route references; exclude volatile export-generation metadata. Exact equal canonical workouts are duplicates; time proximity or a shared route alone is not proof.
+
+**Completeness decision**: Without a trusted source-scoped ID, require nonempty trimmed sourceName, sportRaw, valid start/end instants with end >= start and finite nonnegative recorded duration in a supported explicit unit. Optional device/summary/event/route content participates with typed missing/invalid markers but is not a prerequisite merely by being optional. Missing/invalid required evidence prevents fingerprint suppression; missing source scope also prevents trusting an external/sync ID. The version-controlled data model defines the canonical rules; the private report only records sample observations.
+
+**Decision**: Normalize workouts before any sample enrichment. Direct compatible workout summary averages win. In a second pass, match samples only by supported metric, absolute interval, exact sourceName and compatible device provenance. If the workout lacks device details, require exactly one candidate device stream for that metric. A sample matching multiple distinct workout windows is ambiguous and not assigned. Missing provenance is not repaired through fuzzy matching. Deduplicate identical samples before aggregation; conflicting values at the same sample identity invalidate that metric's derived result.
+
+**Time-series decision**: Separate needsScalarEnrichment from needsTimedPowerSeries. First-pass power-type presence plus a Bike candidate requires second-pass series attribution even with complete scalar summaries. Skip the second pass only when neither purpose applies. Keep source avgWatts while computing eligible interval efforts from the independently validated series. Require exact-source and unique compatible-device attribution, unique samples, point records, and no adjacent time gap over 5 seconds for timed efforts. Derive avgWatts from point series only when every active window is covered from within 5 seconds of both boundaries with no gap over 5 seconds; a short dense series can contribute only shorter efforts, not the workout average. Apple Health supplies no power-sample distance; `startKm`/`endKm` in emitted efforts remain null (internal calculator-only placeholders are not serialized). Test average-plus-series, average-only, fully covered series-only, short partial series and gapped/ambiguous inputs.
+
+**Aggregation policy**: Instantaneous heart-rate samples use the arithmetic mean of unique positive readings within the half-open active windows. Nonzero-length heart-rate/cadence/power samples use duration-weighted means only when fully contained, nonoverlapping, and from one stream; do not mix point and interval estimators for the same metric. No boundary prorating. Step totals require nonoverlapping valid count intervals covering the complete active windows; otherwise totalSteps stays null. Derived Run cadence additionally requires complete step coverage and trustworthy active duration; cadence is steps/minute, never halved. Complete paired pause/resume events define active windows; inconsistent pause data or unexplained active/elapsed discrepancies disable derived step/cadence totals instead of guessing. Positive source summary values can still be used independently.
+
+**Rationale**: Everyday pulse and step records are not automatically workout data. Conservative attribution can leave legitimate optional values unavailable; this is preferable to false measurements. No yield percentage is asserted before applying these rules to the private export.
+
+**Alternatives considered**: Nearest-time matching, merging device streams, counting daily steps, extrapolating partial counts, using swimming strokes as cadence, and converting calories to watts are rejected. Energy/sleep/recovery/body/clinical records remain outside the activity model. Cycling interval bests use existing power utilities only with a validated complete timed series and compatible timestamps; averages alone never create best efforts.
+
+## 6. Route Association And Segmentation
+
+**Decision**: Resolve FileReference paths relative to the selected export root, tolerating the observed leading separator while rejecting traversal, URLs, ambiguous normalized paths and unrelated directories. Deduplicate references within each activity, not globally across legitimate workouts. Reuse regex GPX parsing and explicit supported sport. Process one bounded GPX at a time. The existing heatmap accepts only points, so add optional `segments` (arrays of coordinate arrays) beside the legacy flattened `points`. The route aggregator must prefer segments, reset interpolation/continuity per subpath, and union matched corridor keys per activity before adding frequency visits. Shared geometry optimizations must include segmentation identity. Old points-only tracks retain unchanged behavior; all other route consumers must use the subpath-aware representation where they draw lines. No bridge is drawn across segment or file boundaries.
+
+**Rationale**: Shared file references are not duplicate workout evidence. Optional route failures must not discard a valid main workout. GPX files are not photos or clinical chart media.
+
+**Alternatives considered**: Sorting route filenames, nearest-time matching from the TrainingPeaks importer, and joining disconnected segments are rejected. Synthetic tracks with coincident corridors across separate subpaths must still count one visit per activity, not one visit per subpath. No unresolved route-interface decision remains.
+
+## 7. Transaction, Visibility And Export Ownership
+
+**Decision**: Add createAppleHealthImportedDataset and executeAppleHealthZipImport beside the existing provider adapters in dashboard-import.js, retaining dependency injection and beginImportOperation generation ownership. Complete primary XML validation, deduplication, normalization, route preparation and no-supported-workouts checks before applyImportedDataset. Use its prepared heatmap index and established commit boundary; no promised rollback after a post-commit renderer failure. Diagnostics remain aggregate and safe.
+
+**Decision**: At commit, clear old media/routes/power stores and old export preview/capture state, reset sport selection through the real state setter, refresh date controls and run the existing availability evaluation. Export target resolution must check the current available-tab set. Async captures and preview publication must compare the dataset revision after every await; stale results are disposed without replacing the new preview. Existing media export leases retain their independent cleanup ownership. Superseded import workers are terminated and stale messages ignored.
+
+**Rationale**: Existing applyImportedDataset commits before rendering; preparation errors already preserve the old dataset. refreshVisualizationTabs updates revisions and navigation, but getTabExportTarget currently relies on chart/DOM flags and old async captures can publish after a source switch. These are concrete adjacent requirements, not a new export redesign.
+
+**Alternatives considered**: Setting globals during parsing, source-label visibility allowlists, unconditional tab renaming and broad rollback/refactoring are rejected. Keep existing counter behavior: exactly once per committed personal import through the existing helper, no increment on failure/no-data/sample, no health body sent.
+
+## Research Completion
+
+Decisions resolve the identified unknowns, including the inspected points-only heatmap boundary. Performance, dependency browser execution, enrichment yield and final private-source deduplication counts are explicit acceptance measurements, not assumed results. No API service, constitution, branch, raw export, or production source was changed.

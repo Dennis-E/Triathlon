@@ -122,18 +122,37 @@ function getGroupDefinitions(granularity) {
   }
 }
 
-function getGroupIndex(startTime, granularity) {
+function isValidSourceLocalStart(value, startTime) {
+  if (!value || !Number.isInteger(value.year) || value.year < 100 ||
+      !Number.isInteger(value.month) || value.month < 1 || value.month > 12 ||
+      !Number.isInteger(value.day) || value.day < 1 ||
+      !Number.isInteger(value.hour) || value.hour < 0 || value.hour > 23 ||
+      !Number.isInteger(value.minute) || value.minute < 0 || value.minute > 59 ||
+      !Number.isInteger(value.second) || value.second < 0 || value.second > 59 ||
+      !Number.isInteger(value.offsetMinutes) || Math.abs(value.offsetMinutes) > 1439) return false;
+  const wallTime = Date.UTC(value.year, value.month - 1, value.day, value.hour, value.minute, value.second);
+  const date = new Date(wallTime);
+  if (date.getUTCFullYear() !== value.year || date.getUTCMonth() !== value.month - 1 || date.getUTCDate() !== value.day) return false;
+  if (!(startTime instanceof Date) || !Number.isFinite(startTime.getTime())) return false;
+  const expectedInstant = wallTime - value.offsetMinutes * 60000;
+  return startTime.getTime() >= expectedInstant && startTime.getTime() < expectedInstant + 1000;
+}
+
+function getGroupIndex(startTime, granularity, sourceLocalStart) {
+  const local = isValidSourceLocalStart(sourceLocalStart, startTime) ? sourceLocalStart : null;
   switch (granularity) {
     case GRANULARITIES.DAY:
-      return Math.floor(startTime.getHours() / 2);
+      return Math.floor((local ? local.hour : startTime.getHours()) / 2);
     case GRANULARITIES.WEEK: {
-      const day = startTime.getDay();
+      const day = local
+        ? new Date(Date.UTC(local.year, local.month - 1, local.day)).getUTCDay()
+        : startTime.getDay();
       return day === 0 ? 6 : day - 1;
     }
     case GRANULARITIES.MONTH:
-      return startTime.getDate() - 1;
+      return (local ? local.day : startTime.getDate()) - 1;
     case GRANULARITIES.YEAR:
-      return startTime.getMonth();
+      return (local ? local.month : startTime.getMonth() + 1) - 1;
     default:
       throw new Error(`Unsupported Workout Time granularity: ${granularity}`);
   }
@@ -151,7 +170,7 @@ function buildWorkoutTimeDataset(activities, filters = {}) {
   const groups = getGroupDefinitions(granularity).map(group => ({ ...group, ...initialTotals() }));
   for (const activity of Array.isArray(activities) ? activities : []) {
     if (!matchesFilters(activity, filters)) continue;
-    const groupIndex = getGroupIndex(activity.startTime, granularity);
+    const groupIndex = getGroupIndex(activity.startTime, granularity, activity.sourceLocalStart);
     const group = groups[groupIndex];
     if (!group) continue;
     group.count += 1;

@@ -217,6 +217,48 @@ describe('heatmap-utils', () => {
       expect(Object.keys(segments).length).toBeGreaterThan(0);
     });
 
+    it('does not connect GPX subpaths through the flattened compatibility points', () => {
+      const first = northRoute(0);
+      const second = northRoute(1200);
+      const boundaryStart = first[first.length - 1];
+      const boundaryEnd = second[0];
+      const midpoint = [(boundaryStart[0] + boundaryEnd[0]) / 2, (boundaryStart[1] + boundaryEnd[1]) / 2];
+      const tracks = {
+        apple: { sport: 'Run', points: [...first, ...second], segments: [first, second] }
+      };
+
+      const segments = Object.values(buildRouteSegments(tracks));
+
+      expect(segments.some(segment => distanceMeters(midpoint, segment.coords[0]) <= 30 ||
+        distanceMeters(midpoint, segment.coords[1]) <= 30)).toBe(false);
+      expect(segments.every(segment => segment.activityIds.length === new Set(segment.activityIds).size)).toBe(true);
+    });
+
+    it('counts repeated identical subpaths once per activity while preserving separate-subpath geometry', () => {
+      const route = northRoute(0);
+      const segments = Object.values(buildRouteSegments({
+        apple: { sport: 'Run', points: [...route, ...route], segments: [route, route] }
+      }));
+
+      expect(segments.length).toBeGreaterThan(0);
+      expect(segments.every(segment => Array.isArray(segment.activityIds))).toBe(true);
+      expect(segments.every(segment => segment.count === segment.activityIds.length && segment.activityIds.length === 1)).toBe(true);
+    });
+
+    it('treats an invalid coordinate as a break instead of interpolating across it', () => {
+      const first = northRoute(0);
+      const second = northRoute(1200);
+      const boundaryStart = first[first.length - 1];
+      const boundaryEnd = second[0];
+      const midpoint = [(boundaryStart[0] + boundaryEnd[0]) / 2, (boundaryStart[1] + boundaryEnd[1]) / 2];
+      const segments = Object.values(buildRouteSegments({
+        invalidBreak: { sport: 'Run', points: [...first, [NaN, 0], ...second] }
+      }));
+
+      expect(segments.some(segment => distanceMeters(midpoint, segment.coords[0]) <= 30 ||
+        distanceMeters(midpoint, segment.coords[1]) <= 30)).toBe(false);
+    });
+
     it('keeps a valid route shorter than the matching continuity threshold visible', () => {
       const segments = Object.values(buildRouteSegments({
         short: { sport: 'Run', points: [[48.1, 11.5], [48.10045, 11.5]] }

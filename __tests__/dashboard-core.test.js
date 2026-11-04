@@ -409,6 +409,24 @@ describe('dashboard core visualization readiness', () => {
     expect(nativeLegend).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps sport filter button pressed state synchronized with the selected sport', () => {
+    const runtime = loadDashboardForRendering(aggregationFixtures);
+    const { dashboard } = runtime;
+    const buttons = Object.fromEntries(['All', 'Run', 'Bike', 'Swim'].map(sport => [sport, {
+      id: `sportBtn${sport}`,
+      className: '',
+      attributes: {},
+      setAttribute(name, value) { this.attributes[name] = value; }
+    }]));
+    dashboard.document.querySelectorAll = () => Object.values(buttons);
+    dashboard.document.getElementById = id => Object.values(buttons).find(button => button.id === id) || null;
+
+    dashboard.setSportFilter('Bike', false);
+
+    expect(buttons.Bike.attributes['aria-pressed']).toBe('true');
+    expect(['All', 'Run', 'Swim'].every(sport => buttons[sport].attributes['aria-pressed'] === 'false')).toBe(true);
+  });
+
   it('invalidates before aggregation, timeframe and keyboard timeframe commits', () => {
     const runtime = loadDashboardForRendering(aggregationFixtures);
     runtime.render('weekly');

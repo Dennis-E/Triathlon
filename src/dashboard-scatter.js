@@ -51,6 +51,18 @@ function initPaceMetricsControls(options = {}) {
   if (options.reset) {
     selectedPaceMetricsSport = 'Run';
     selectedPaceMetric = 'heartRate';
+    const getPoints = window.scatterUtils && window.scatterUtils.getPaceMetricPoints;
+    if (typeof getPoints === 'function' && Array.isArray(processedActivities)) {
+      for (const sport of ['Run', 'Bike', 'Swim']) {
+        const availableMetric = ['heartRate', 'cadence', 'elevationGain', 'distance']
+          .find(metric => getPoints(processedActivities, { sport, metric }).length > 0);
+        if (availableMetric) {
+          selectedPaceMetricsSport = sport;
+          selectedPaceMetric = availableMetric;
+          break;
+        }
+      }
+    }
     disabledPaceMetricsYears.clear();
     visiblePaceMetricsYears = [];
     paceMetricsYearCheckboxes = new Map();

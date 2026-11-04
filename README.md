@@ -1,6 +1,6 @@
 # Welcome to TriAnalytica - my Triathlon Data Visualization Tool!
 
-This dashboard helps you explore training history from Strava or TrainingPeaks in a simple, browser-based view. Import a Strava export ZIP or multiple TrainingPeaks Workout Files ZIPs and turn supported activities into charts for training volume, pacing, equipment, and performance trends.
+This dashboard helps you explore training history from Strava, TrainingPeaks, or Apple Health in a simple, browser-based view. Import a Strava export ZIP, an Apple Health export ZIP, or multiple TrainingPeaks Workout Files ZIPs and turn supported activities into charts for training volume, pacing, equipment, and performance trends.
 
 ## How it works
 
@@ -12,13 +12,13 @@ images identify this as synthetic sample training; photos/videos are not fabrica
 See [sample-data/README.md](sample-data/README.md) for sources, licensing and regeneration.
 
 1. Open the app.
-2. Choose Strava or TrainingPeaks on the landing page.
-3. Select the provider's export ZIP. For TrainingPeaks histories longer than 12 months, create period exports of 12 months or less and select all required ZIPs together.
+2. Choose Strava, TrainingPeaks, or Apple Health on the landing page.
+3. Select the provider's original export ZIP. For Apple Health, keep the ZIP intact and do not extract or repackage it. For TrainingPeaks histories longer than 12 months, create period exports of 12 months or less and select all required ZIPs together.
 4. Explore the dashboard with your own data.
 
 Selected workout files are processed locally in the browser and are not uploaded or persisted by TriAnalytica. No login is required. The app still makes network requests for third-party libraries, public sample resources and its aggregate analysis counter; workout files and activity fields are not included in the counter request. Sample exploration does not increment the personal-analysis counter. Importing your own data replaces rather than merges with the examples; a failed sample load leaves the prior dataset intact.
 
-See [TrainingPeaks export instructions](docs/trainingpeaks-export-how-to.html) for the provider's Workout Files export flow and [docs/IMPORT_FEATURE.md](docs/IMPORT_FEATURE.md) for import behavior and privacy details.
+See [Apple Health export instructions](docs/apple-health-export-how-to.html), [TrainingPeaks export instructions](docs/trainingpeaks-export-how-to.html) for the provider's Workout Files export flow, and [docs/IMPORT_FEATURE.md](docs/IMPORT_FEATURE.md) for supported data, import behavior, and privacy details.
 
 ## Export images
 

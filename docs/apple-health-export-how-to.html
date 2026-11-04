@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TriAnalytica - Export Apple Health Data</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-full bg-slate-950 text-slate-100 antialiased">
+  <header class="border-b border-slate-800 px-6 py-4">
+    <div class="mx-auto flex max-w-3xl items-center justify-between gap-4">
+      <img src="../assets/logo.png" alt="TriAnalytica" class="h-8 w-auto">
+      <a href="../index.html" class="text-sm text-indigo-300 underline underline-offset-4">Back to dashboard</a>
+    </div>
+  </header>
+  <main class="mx-auto max-w-3xl px-6 py-10">
+    <h1 class="text-2xl font-semibold">Export Apple Health data</h1>
+    <ol class="mt-6 list-decimal space-y-4 pl-5 text-sm leading-relaxed text-slate-200">
+      <li>Open the Health app on your iPhone.</li>
+      <li>Tap your profile picture or initials in the upper-right corner.</li>
+      <li>Choose <strong>Export All Health Data</strong>, then confirm <strong>Export</strong>.</li>
+      <li>Save the original ZIP to Files or transfer it to your computer. Keep its contents unchanged; do not extract or repackage it.</li>
+      <li>Return to TriAnalytica, choose <strong>Import Apple Health</strong>, and select that one ZIP file.</li>
+    </ol>
+    <p class="mt-8 border-t border-slate-800 pt-6 text-sm leading-relaxed text-slate-300">Only running, cycling and swimming workouts are imported. Routes and optional measurements are available only when the export contains compatible data. Sleep, body measurements, ECGs and other clinical records do not become workouts.</p>
+    <p class="mt-4 text-sm leading-relaxed text-emerald-200">Selected health files are processed locally in your browser and are not uploaded or stored by TriAnalytica. The app still requests libraries, map resources and its analysis counter. Large exports may take several minutes; keep the page open.</p>
+    <p class="mt-4 text-xs leading-relaxed text-slate-400">Use a modern desktop browser over HTTP or HTTPS. If processing reaches a safety or browser resource limit, the previous dashboard remains available. Apple may change menu labels in future iOS versions.</p>
+  </main>
+</body>
+</html>

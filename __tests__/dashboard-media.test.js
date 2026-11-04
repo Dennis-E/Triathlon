@@ -13,7 +13,6 @@ function loadDashboardMedia() {
     mediaGalleryStatus: { textContent: '' },
     mediaGalleryYearFilter: { value: 'all', innerHTML: '' },
     mediaGallerySportFilter: { value: 'all', innerHTML: '' },
-    mediaGalleryActivityFilter: { value: 'all', innerHTML: '' },
     mediaGalleryLoadMore: {
       classList: { contains: name => this.hidden === name, toggle(name, hidden) { this.hidden = hidden ? name : null; } },
       onclick: null
@@ -27,7 +26,6 @@ function loadDashboardMedia() {
     mediaGalleryPreviewClose: { onclick: null },
     mediaGalleryCreateRecap: { onclick: null },
     mediaGalleryCreateCollage: { onclick: null },
-    mediaGalleryIncludeRoutes: { checked: false },
     mediaGalleryExportArea: {
       innerHTML: '',
       get childElementCount() { return this.innerHTML ? 1 : 0; }
@@ -35,7 +33,7 @@ function loadDashboardMedia() {
   };
   const createdElements = [];
   const document = {
-    getElementById: id => nodes[id] || null,
+    getElementById: jest.fn(id => nodes[id] || null),
     createElement: tagName => {
       const element = {
         tagName, className: '', src: '', controls: false, preload: '', alt: '', textContent: '', children: [],
@@ -52,7 +50,7 @@ function loadDashboardMedia() {
   vm.runInContext(`${dashboardMediaSource}\nthis.__renderMediaGallery = renderMediaGallery;`, context, {
     filename: 'src/dashboard-media.js'
   });
-  return { render: context.__renderMediaGallery, nodes, createdElements, window: context.window, context };
+  return { render: context.__renderMediaGallery, nodes, createdElements, document, window: context.window, context };
 }
 
 describe('dashboard media gallery', () => {
@@ -151,30 +149,27 @@ describe('dashboard media gallery', () => {
     expect(runtime.window.exportVisualizationTab).not.toHaveBeenCalled();
   });
 
-  it('pins media without opening it and invalidates before filters or collage selection change', async () => {
+  it('omits pin and select controls while retaining activity details in the media preview', async () => {
     const runtime = loadDashboardMedia();
-    const api = { registerAdapter: jest.fn(), readContext: jest.fn(), show: jest.fn(), invalidate: jest.fn(),
-      send: jest.fn(), getPinned: jest.fn(), refreshAnchor: jest.fn() };
+    const api = { registerAdapter: jest.fn(), readContext: jest.fn(), show: jest.fn(), invalidate: jest.fn(), send: jest.fn() };
     runtime.window.dashboardTooltips = api;
     const caption = '<unsafe> full caption';
     const library = { assets: [{ key: 'photo.jpg', filename: 'photo.jpg', caption, mediaType: 'photo', status: 'readable', activityIds: ['run'] }],
-      activityOptions: [{ id: 'run', name: 'Morning Run', sport: 'Run', date: '2025-01-02' }], getObjectUrl: jest.fn() };
+      activityOptions: [{ id: 'run', name: 'Morning Run', sport: 'Run', date: '2025-01-02' }], getObjectUrl: jest.fn().mockResolvedValue('blob:local-photo') };
     runtime.render(library);
-    expect(runtime.nodes.mediaGalleryGrid.innerHTML).toContain('data-media-pin-key="photo.jpg"');
-    const button = { dataset: { mediaPinKey: 'photo.jpg' }, getBoundingClientRect: () => ({ left: 30, top: 40, width: 20, height: 20 }) };
-    await runtime.nodes.mediaGalleryGrid.onclick({ target: { closest: selector => selector === '[data-media-pin-key]' ? button : null } });
-    expect(library.getObjectUrl).not.toHaveBeenCalled();
-    expect(api.show).toHaveBeenCalledWith('mediaGallery', expect.objectContaining({ selectionKey: 'mediaGallery:photo.jpg',
-      content: expect.objectContaining({ title: caption }), anchor: expect.objectContaining({ kind: 'media-item' }) }), true, button);
-    expect(JSON.stringify(api.show.mock.calls[0][1].content)).toContain('Morning Run');
-    api.invalidate.mockClear();
-    runtime.render(library);
-    expect(api.invalidate).not.toHaveBeenCalled();
-    runtime.nodes.mediaGalleryYearFilter.onchange();
-    expect(api.invalidate).toHaveBeenCalled();
-    api.invalidate.mockClear();
-    runtime.nodes.mediaGalleryGrid.onchange({ target: { closest: () => ({ dataset: { mediaSelectKey: 'photo.jpg' }, checked: true }) } });
-    expect(api.invalidate).toHaveBeenCalled();
+    expect(runtime.nodes.mediaGalleryGrid.innerHTML).not.toContain('data-media-pin-key');
+    expect(runtime.nodes.mediaGalleryGrid.innerHTML).not.toContain('data-media-select-key');
+    expect(runtime.nodes.mediaGalleryGrid.innerHTML).not.toContain('Pin details');
+    expect(runtime.nodes.mediaGalleryGrid.innerHTML).not.toContain('>Select</label>');
+    expect(runtime.nodes.mediaGalleryGrid.onchange).toBeUndefined();
+    expect(api.registerAdapter).not.toHaveBeenCalled();
+
+    await runtime.nodes.mediaGalleryGrid.onclick({
+      target: { closest: () => ({ dataset: { mediaKey: 'photo.jpg' }, disabled: false }) }
+    });
+
+    expect(library.getObjectUrl).toHaveBeenCalledWith(library.assets[0]);
+    expect(runtime.nodes.mediaGalleryPreviewContent.children.map(child => child.textContent).join(' ')).toContain('Morning Run');
   });
 
   it('renders readable media and an explicit unassigned status', () => {
@@ -186,6 +181,8 @@ describe('dashboard media gallery', () => {
     });
 
     expect(runtime.nodes.mediaGalleryGrid.innerHTML).toContain('photo-1.jpg');
+    expect(runtime.nodes.mediaGalleryGrid.innerHTML).toContain('alt="Synthetic"');
+    expect(runtime.nodes.mediaGalleryGrid.innerHTML).not.toContain('>Synthetic</span>');
     expect(runtime.nodes.mediaGalleryGrid.innerHTML).toContain('Unassigned');
   });
 
@@ -202,7 +199,7 @@ describe('dashboard media gallery', () => {
     expect(runtime.nodes.mediaGalleryGrid.innerHTML).toContain('Unlisted');
   });
 
-  it('summarizes all reconciled reference outcomes without exposing reference tokens', () => {
+  it('does not show media counts or reconciliation details in the gallery status', () => {
     const runtime = loadDashboardMedia();
     runtime.render({
       hasReadableMedia: true,
@@ -210,9 +207,7 @@ describe('dashboard media gallery', () => {
       assets: [{ key: 'photo.jpg', filename: 'photo.jpg', mediaType: 'photo', status: 'readable', activityIds: [] }]
     });
 
-    expect(runtime.nodes.mediaGalleryStatus.textContent).toContain('1456 references matched');
-    expect(runtime.nodes.mediaGalleryStatus.textContent).toContain('977 references missing');
-    expect(runtime.nodes.mediaGalleryStatus.textContent).not.toContain('photo.jpg');
+    expect(runtime.nodes.mediaGalleryStatus.textContent).toBe('');
   });
 
   it('shows a clear no-media state when nothing is readable', () => {
@@ -224,7 +219,7 @@ describe('dashboard media gallery', () => {
     expect(runtime.nodes.mediaGalleryGrid.innerHTML).toBe('');
   });
 
-  it('filters by year, sport, and activity using accessible native controls', () => {
+  it('filters by year and sport without an activity filter, preserving linked activity context', () => {
     const runtime = loadDashboardMedia();
     const library = {
       hasReadableMedia: true,
@@ -236,17 +231,17 @@ describe('dashboard media gallery', () => {
     };
 
     runtime.render(library);
-    expect(runtime.nodes.mediaGalleryActivityFilter.innerHTML).toContain('Morning Run');
+    expect(runtime.document.getElementById).not.toHaveBeenCalledWith('mediaGalleryActivityFilter');
     expect(runtime.nodes.mediaGalleryYearFilter.innerHTML).toContain('2025');
 
     runtime.nodes.mediaGalleryYearFilter.value = '2025';
     runtime.nodes.mediaGallerySportFilter.value = 'Run';
-    runtime.nodes.mediaGalleryActivityFilter.value = 'run-1';
     runtime.nodes.mediaGalleryYearFilter.onchange();
 
     expect(runtime.nodes.mediaGalleryGrid.innerHTML).toContain('run-photo.jpg');
     expect(runtime.nodes.mediaGalleryGrid.innerHTML).not.toContain('bike-photo.jpg');
     expect(runtime.nodes.mediaGalleryGrid.innerHTML).toContain('aria-label="Open Run"');
+    expect(runtime.nodes.mediaGalleryGrid.innerHTML).not.toContain('Morning Run');
   });
 
   it('renders a bounded page and loads more items on request', () => {
@@ -329,26 +324,35 @@ describe('dashboard media gallery', () => {
     expect(runtime.nodes.mediaGalleryStatus.textContent).toMatch(/no media match/i);
   });
 
-  it('builds local recaps and collages with route content excluded until explicit opt-in', async () => {
+  it('keeps routes excluded without an opt-in control and clears the redundant export status', async () => {
     const runtime = loadDashboardMedia();
     const library = {
       hasReadableMedia: true,
-      assets: [{ key: 'run-photo.jpg', filename: 'run-photo.jpg', caption: 'Finish', mediaType: 'photo', status: 'readable', date: new Date('2025-03-01'), sport: 'Run', activityIds: ['run-1'] }],
+      assets: [
+        { key: 'run-photo.jpg', filename: 'run-photo.jpg', caption: 'Finish', mediaType: 'photo', status: 'readable', date: new Date('2025-03-01'), sport: 'Run', activityIds: ['run-1'] },
+        { key: 'bike-photo.jpg', filename: 'bike-photo.jpg', caption: 'Ride', mediaType: 'photo', status: 'readable', date: new Date('2024-03-01'), sport: 'Bike', activityIds: [] }
+      ],
       activityOptions: [{ id: 'run-1', name: 'Morning Run', sport: 'Run', date: '2025-03-01', hasRoute: true }],
       gpsTracksByActivityId: { 'run-1': { points: [[48, 11], [48.01, 11.02]] } },
       getObjectUrl: jest.fn().mockResolvedValue('blob:local-photo')
     };
     runtime.render(library);
 
+    runtime.nodes.mediaGalleryYearFilter.value = '2025';
+    runtime.nodes.mediaGallerySportFilter.value = 'Run';
+    runtime.nodes.mediaGalleryYearFilter.onchange();
     await runtime.nodes.mediaGalleryCreateCollage.onclick();
     expect(runtime.nodes.mediaGalleryExportArea.innerHTML).toContain('blob:local-photo');
     expect(runtime.nodes.mediaGalleryExportArea.innerHTML).toContain('data-export-asset-key="run-photo.jpg"');
+    expect(runtime.nodes.mediaGalleryExportArea.innerHTML).not.toContain('<figcaption>');
+    expect(runtime.nodes.mediaGalleryExportArea.innerHTML).not.toContain('>Finish</figcaption>');
+    expect(runtime.nodes.mediaGalleryExportArea.innerHTML).not.toContain('bike-photo.jpg');
     expect(runtime.nodes.mediaGalleryExportArea.innerHTML).not.toContain('<svg');
+    expect(runtime.document.getElementById).not.toHaveBeenCalledWith('mediaGalleryIncludeRoutes');
+    expect(runtime.window.mediaGalleryDashboard.setIncludeRoutes).toBeUndefined();
+    expect(runtime.window.mediaGalleryDashboard.getExportContext().map(item => item.label)).not.toContain('Routes');
+    expect(runtime.nodes.mediaGalleryStatus.textContent).toBe('');
     expect(runtime.window.exportVisualizationTab).toHaveBeenCalledWith('mediaGallery');
-
-    runtime.nodes.mediaGalleryIncludeRoutes.checked = true;
-    await runtime.nodes.mediaGalleryCreateCollage.onclick();
-    expect(runtime.nodes.mediaGalleryExportArea.innerHTML).toContain('<svg');
 
     runtime.nodes.mediaGalleryYearFilter.value = '2025';
     runtime.nodes.mediaGalleryYearFilter.onchange();

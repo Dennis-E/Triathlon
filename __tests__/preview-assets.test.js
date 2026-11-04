@@ -37,25 +37,22 @@ describe('landing visualization previews', () => {
     expect(html).toContain('Distributions');
   });
 
-  it('shows the non-interactive And much more tile with only the requested bullets', () => {
+  it('shows all available visualizations in a compact non-interactive And much more tile', () => {
     const tileMatch = html.match(/<div id="andMuchMoreTile"[\s\S]*?<\/div>/);
     expect(tileMatch).not.toBeNull();
-    expect(tileMatch[0]).toMatch(/<h3\b[^>]*>And much more<\/h3>/);
-    expect(tileMatch[0]).toContain('<li>Wordcloud</li>');
-    expect(tileMatch[0]).toContain('<li>Calendar view</li>');
-    expect(tileMatch[0]).toContain('<li>Pie charts</li>');
-    expect(tileMatch[0]).toContain('<li>…</li>');
-    expect(tileMatch[0].indexOf('<li>Wordcloud</li>')).toBeLessThan(tileMatch[0].indexOf('<li>Calendar view</li>'));
-    expect(tileMatch[0].indexOf('<li>Calendar view</li>')).toBeLessThan(tileMatch[0].indexOf('<li>Pie charts</li>'));
-    expect(tileMatch[0].indexOf('<li>Pie charts</li>')).toBeLessThan(tileMatch[0].indexOf('<li>…</li>'));
-    expect(tileMatch[0]).not.toMatch(/<img|openDashboardTab|preview-card-image|<p\b/i);
+    expect(tileMatch[0]).toMatch(/<h3\b[^>]*text-xs[^>]*>And much more<\/h3>/);
+    expect(tileMatch[0]).toMatch(/<p\b[^>]*text-xs/);
+    ['Distance', 'Pace vs. Metrics', 'Equipment', 'Equipment Timeline', 'Personal Bests', 'Heatmap', 'Distributions',
+      'Workout Time', 'Training Calendar', 'Wordcloud', 'Pie Charts', 'Lifetime Statistics', 'Media']
+      .forEach(name => expect(tileMatch[0]).toContain(name));
+    expect(tileMatch[0]).not.toMatch(/<img|openDashboardTab|preview-card-image|<ul|<li/i);
     expect(html).not.toContain('id="previewCard-andMuchMore"');
   });
 
   it('preserves import-required guidance for data-dependent preview actions', () => {
     expect(html).toContain('id="previewGateModal"');
     expect(html).toContain('Import Training Data First');
-    expect(html).toContain('These dashboards become interactive after you import a Strava or TrainingPeaks export.');
+    expect(html).toContain('These dashboards become interactive after you import a Strava, TrainingPeaks or Apple Health export.');
   });
 
   it('does not reference private source data from landing-page runtime markup', () => {

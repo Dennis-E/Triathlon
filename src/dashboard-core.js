@@ -645,8 +645,11 @@
       // Update Buttons State
       document.querySelectorAll('[id^="sportBtn"]').forEach(btn => {
         btn.className = "px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200";
+        if (typeof btn.setAttribute === 'function') btn.setAttribute('aria-pressed', 'false');
       });
+      const activeButton = document.getElementById(`sportBtn${sport}`);
       setBtnActive(`sportBtn${sport}`);
+      if (activeButton && typeof activeButton.setAttribute === 'function') activeButton.setAttribute('aria-pressed', 'true');
       
       if (render) renderDashboard();
     }

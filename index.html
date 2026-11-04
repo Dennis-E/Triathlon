@@ -55,6 +55,7 @@
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.344.0/dist/umd/lucide.min.js"></script>
   <!-- ZIP Importer Utility -->
   <script src="./src/zip-importer.js"></script>
+  <script src="./src/apple-health-utils.js"></script>
   <script src="./src/heatmap-utils.js"></script>
   <script src="./src/training-calendar-utils.js"></script>
   <script src="./src/wordcloud-utils.js"></script>
@@ -314,7 +315,7 @@
           </div>
           <div>
             <h2 id="previewGateModalTitle" class="text-lg font-semibold text-white">Import Training Data First</h2>
-            <p class="mt-2 text-sm leading-relaxed text-slate-400">These dashboards become interactive after you import a Strava or TrainingPeaks export. Choose either data source on the landing page to unlock the visualizations.</p>
+            <p class="mt-2 text-sm leading-relaxed text-slate-400">These dashboards become interactive after you import a Strava, TrainingPeaks or Apple Health export. Choose a data source on the landing page to unlock the visualizations.</p>
           </div>
         </div>
         <button
@@ -411,7 +412,7 @@
       <div class="mb-4 flex items-center justify-center gap-3">
         <img src="assets/logo.png" alt="TriAnalytica logo" class="h-16 w-auto shrink-0">
       </div>
-      <p class="text-slate-400 text-sm leading-relaxed">Import Strava or TrainingPeaks workout exports and explore your training locally. Workout files are processed in this browser and are not uploaded or stored by TriAnalytica. The app still makes network requests for libraries, public sample data and its analysis counter.</p>
+      <p class="text-slate-400 text-sm leading-relaxed">Import Strava, TrainingPeaks or Apple Health workout exports and explore your training locally. Workout files are processed in this browser and are not uploaded or stored by TriAnalytica. The app still makes network requests for libraries, public sample data and its analysis counter.</p>
     </div>
 
     <!-- Import Actions -->
@@ -459,7 +460,17 @@
             How to export from TrainingPeaks
           </a>
         </div>
+        <div class="flex flex-col items-center gap-3">
+          <button id="appleHealthIngestBtn" type="button" onclick="handleAppleHealthIngest()"
+            class="inline-flex items-center gap-2.5 rounded-lg bg-rose-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-rose-600/20 transition hover:bg-rose-500">
+            <i data-lucide="heart-pulse" class="h-5 w-5 shrink-0" aria-hidden="true"></i>
+            <span>Import Apple Health</span>
+          </button>
+          <a href="./docs/apple-health-export-how-to.html" target="_blank" rel="noopener noreferrer"
+            class="text-xs text-indigo-300 hover:text-indigo-200 underline decoration-indigo-500/70 underline-offset-4 transition">How to export from Apple Health</a>
+        </div>
       </div>
+      <p id="appleHealthImportStatus" role="status" aria-live="polite" class="max-w-2xl text-center text-xs text-rose-200"></p>
       <button id="sampleDataBtn" type="button" onclick="handleSampleDataIngest()" aria-busy="false"
         class="inline-flex items-center gap-2.5 rounded-lg border border-emerald-500/50 bg-emerald-950/50 px-6 py-3 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-900/70 disabled:cursor-wait disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-400">
         <i data-lucide="play" class="h-4 w-4" aria-hidden="true"></i>
@@ -471,7 +482,7 @@
 
     <!-- Empty State Message -->
     <div id="emptyStateMessage" class="text-center text-slate-400 text-sm mt-2 mb-8 max-w-xl">
-      <p class="text-xs text-slate-500 mt-2">These example screenshots show what becomes available after importing a supported Strava or TrainingPeaks export.</p>
+      <p class="text-xs text-slate-500 mt-2">These example screenshots show what becomes available after importing a supported Strava, TrainingPeaks or Apple Health export.</p>
     </div>
 
     <!-- Tab Preview Cards -->
@@ -833,14 +844,9 @@
         </div>
       </button>
 
-      <div id="andMuchMoreTile" class="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-        <h3 class="font-semibold text-sm text-slate-100">And much more</h3>
-        <ul class="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-300">
-          <li>Wordcloud</li>
-          <li>Calendar view</li>
-          <li>Pie charts</li>
-          <li>…</li>
-        </ul>
+      <div id="andMuchMoreTile" class="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+        <h3 class="font-semibold text-xs text-slate-100">And much more</h3>
+        <p class="mt-2 text-xs leading-relaxed text-slate-400">Distance &middot; Pace vs. Metrics &middot; Equipment &middot; Equipment Timeline &middot; Personal Bests &middot; Heatmap &middot; Distributions &middot; Workout Time &middot; Training Calendar &middot; Wordcloud &middot; Pie Charts &middot; Lifetime Statistics &middot; Media</p>
       </div>
 
     </div>
@@ -1095,16 +1101,16 @@
 
             <!-- Sport Filter Selector -->
             <div data-keyboard-filter-group data-filter-summary data-filter-label="Sport" class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 shadow-inner">
-              <button onclick="setSportFilter('All')" id="sportBtnAll" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">
+              <button onclick="setSportFilter('All')" id="sportBtnAll" aria-pressed="true" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer bg-indigo-600 text-white shadow shadow-indigo-600/25">
                 All Sports
               </button>
-              <button onclick="setSportFilter('Run')" id="sportBtnRun" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
+              <button onclick="setSportFilter('Run')" id="sportBtnRun" aria-pressed="false" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
                 Run
               </button>
-              <button onclick="setSportFilter('Bike')" id="sportBtnBike" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
+              <button onclick="setSportFilter('Bike')" id="sportBtnBike" aria-pressed="false" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
                 Bike
               </button>
-              <button onclick="setSportFilter('Swim')" id="sportBtnSwim" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
+              <button onclick="setSportFilter('Swim')" id="sportBtnSwim" aria-pressed="false" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer text-slate-400 hover:text-slate-200">
                 Swim
               </button>
             </div>
@@ -1339,10 +1345,14 @@
               <h2 class="text-2xl font-bold tracking-tight">Personal Bests</h2>
               <p class="text-xs text-slate-400">Each vertical line marks a new PB — compact tiles show up to 10 results; full screen shows the complete record history</p>
             </div>
-            <div class="flex items-center gap-4 text-xs text-slate-400">
+            <div class="flex flex-wrap items-center justify-end gap-4 text-xs text-slate-400">
               <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-0.5 bg-[#06B6D4]"></span>Swim</span>
               <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-0.5 bg-[#14B8A6]"></span>Bike</span>
               <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-0.5 bg-[#EF4444]"></span>Run</span>
+              <button type="button" onclick="exportVisualizationTab('personalBests')" aria-label="Export for Insta / Strava: Personal Bests" class="viz-export-button inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">
+                <i data-lucide="image" class="h-4 w-4" aria-hidden="true"></i>
+                Export for Insta / Strava
+              </button>
             </div>
           </div>
 
@@ -1425,7 +1435,7 @@
           </div>
 
           <div id="pbEmptyState" class="hidden flex items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/80 px-6 py-16 text-center text-sm text-slate-400">
-            No activities found. Import your Strava data to see your personal bests.
+            No activities found. Import a supported training export to see your personal bests.
           </div>
         </div>
       </div>
@@ -1785,17 +1795,10 @@
           <label class="grid gap-1 text-xs text-slate-400">Sport
             <select id="mediaGallerySportFilter" aria-label="Filter media by sport" class="min-w-32 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-400"></select>
           </label>
-          <label class="grid gap-1 text-xs text-slate-400">Activity
-            <select id="mediaGalleryActivityFilter" aria-label="Filter media by activity" class="min-w-48 max-w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-400"></select>
-          </label>
         </div>
         <div class="flex flex-wrap items-center gap-3">
           <button id="mediaGalleryCreateRecap" type="button" class="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 transition hover:border-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400">Year recap</button>
           <button id="mediaGalleryCreateCollage" type="button" class="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 transition hover:border-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400">Create collage</button>
-          <label class="inline-flex items-center gap-2 text-sm text-slate-300">
-            <input id="mediaGalleryIncludeRoutes" type="checkbox" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-cyan-400 focus:ring-cyan-400">
-            Include visible routes in export
-          </label>
         </div>
         <div id="mediaGalleryStatus" role="status" aria-live="polite" class="text-sm text-slate-400"></div>
         <div id="mediaGalleryGrid" class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"></div>
@@ -1854,7 +1857,7 @@
     <div class="mx-auto mb-3 flex max-w-4xl flex-wrap items-center justify-center gap-x-3 gap-y-2 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 text-left sm:justify-between">
       <div class="min-w-0 flex-1">
         <p class="text-xs font-semibold text-cyan-100">TriAnalytica Newsletter</p>
-        <p class="mt-0.5 text-[11px] leading-relaxed text-slate-400">Get product news and updates. Signup details are handled by Brevo. Opening the form connects your browser to Brevo; training files are not included.</p>
+        <p class="mt-0.5 text-[11px] leading-relaxed text-slate-400">Stay updated on new features, visualizations and analytics</p>
       </div>
       <div class="flex flex-wrap items-center justify-center gap-2">
         <button id="newsletterPrivacyLink" type="button" class="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-slate-300 underline decoration-slate-600 underline-offset-2 transition hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-400" aria-haspopup="dialog" aria-controls="privacyPolicyModal">Privacy details</button>
@@ -1944,7 +1947,7 @@
 
           <section>
             <h3 class="mb-3 text-base font-semibold text-white">2. Verarbeitung importierter Aktivitätsdaten</h3>
-            <p>Nutzer können Strava- und TrainingPeaks-ZIP-Exporte sowie unterstützte GPX-/CSV-Dateien auswählen. TrainingPeaks-Exporte enthalten FIT.GZ-Workouts und können GPX.GZ-Routen enthalten. Dateien und daraus normalisierte Aktivitäten werden während der aktiven Browser-Sitzung im Arbeitsspeicher verarbeitet; TriAnalytica lädt sie nicht auf einen Anwendungsserver hoch und speichert Workout-Daten weder in Cookies, localStorage oder IndexedDB noch in einer Workout-Datenbank.</p>
+            <p>Nutzer können Strava-, TrainingPeaks- und Apple-Health-ZIP-Exporte sowie unterstützte GPX-/CSV-Dateien auswählen. TrainingPeaks-Exporte enthalten FIT.GZ-Workouts und können GPX.GZ-Routen enthalten. Apple-Health-Exporte werden nur für unterstützte Lauf-, Rad- und Schwimmworkouts ausgewertet; klinische und alltägliche Gesundheitsdaten werden nicht als Workouts importiert. Dateien und daraus normalisierte Aktivitäten werden während der aktiven Browser-Sitzung im Arbeitsspeicher verarbeitet; TriAnalytica lädt sie nicht auf einen Anwendungsserver hoch und speichert Workout-Daten weder in Cookies, localStorage oder IndexedDB noch in einer Workout-Datenbank.</p>
             <p>Nach einem erfolgreichen Import kann der separate Analyse-Zähler eine Anfrage an die Zähler-API senden. Diese Anfrage enthält nur die vorhandenen Zähler-Header (Ereignis-ID und Anwendungsschlüssel), keinen Request-Body und keine Workout-Felder, Dateinamen oder Routen. Firestore speichert für diese Funktion nur den aggregierten Analyse-Zähler und Ereignis-Metadaten (Ereignis-ID und Erstellungszeitpunkt), keine Trainingsdaten. Für die Bereitstellung externer Bibliotheken und den Zähler werden weiterhin Netzwerkverbindungen verwendet.</p>
           </section>
 
@@ -1970,6 +1973,8 @@
               <li><strong>Lucide</strong> über cdn.jsdelivr.net – Icons</li>
               <li><strong>Leaflet</strong> über unpkg.com – Heatmap-/Routenvisualisierung</li>
               <li><strong>JSZip</strong> über cdnjs.cloudflare.com – ZIP-Import</li>
+              <li><strong>zip.js</strong> über cdn.jsdelivr.net – Streaming-Import von Apple-Health-ZIP-Dateien</li>
+              <li><strong>SAX</strong> über cdn.jsdelivr.net – Streaming-Parsing der Apple-Health-XML-Datei</li>
               <li><strong>fit-file-parser</strong> über esm.sh – FIT-Workout-Parsing</li>
               <li><strong>GitHub Pages / GitHub infrastructure</strong> – Bereitstellung der Website</li>
               <li><strong>Google Cloud Run API</strong> – Analyse-Zähler-API unter <code class="rounded bg-slate-800 px-1 py-0.5 text-slate-200">https://trianalytics-api-520098173492.europe-west1.run.app</code> (nur über die Browser-Anwendung, wenn der Analyse-Zähler aktiv verwendet wird)</li>
@@ -2009,7 +2014,7 @@
 
           <section>
             <h3 class="mb-3 text-base font-semibold text-white">10. Speicherdauer</h3>
-            <p>Importierte GPX-/CSV-Dateien sowie Strava- und TrainingPeaks-Workout-Daten werden nur im Arbeitsspeicher der aktiven Browser-Sitzung verarbeitet. TriAnalytica speichert sie nicht dauerhaft auf dem Anwendungsserver und schreibt sie nicht in lokale Browser-Speicher.</p>
+            <p>Importierte GPX-/CSV-Dateien sowie Strava-, TrainingPeaks- und Apple-Health-Workout-Daten werden nur im Arbeitsspeicher der aktiven Browser-Sitzung verarbeitet. Nicht als Workout unterstützte Gesundheits- und klinische Daten werden nicht in das Dashboard übernommen. TriAnalytica speichert Dateien und normalisierte Aktivitäten nicht dauerhaft auf dem Anwendungsserver und schreibt sie nicht in lokale Browser-Speicher.</p>
             <p>Technische Protokolldaten und Server-Logs können je nach Hosting-/Service-Provider unterschiedlich lang aufbewahrt werden. Es gibt keine von TriAnalytica fest vorgegebene eigene Aufbewahrungsdauer für importierte Aktivitätsdaten auf der Applikationsseite.</p>
           </section>
 
@@ -2040,7 +2045,7 @@
 
           <section>
             <h3 class="mb-3 text-base font-semibold text-white">2. Processing of imported activity data</h3>
-            <p>Users may select Strava and TrainingPeaks ZIP exports, as well as supported GPX/CSV files. TrainingPeaks exports contain FIT.GZ workouts and may include GPX.GZ routes. Files and normalized activity data are processed in browser memory during the active page session; TriAnalytica does not upload them to its application server or write workout data to cookies, localStorage, IndexedDB, or a workout database.</p>
+            <p>Users may select Strava, TrainingPeaks and Apple Health ZIP exports, as well as supported GPX/CSV files. TrainingPeaks exports contain FIT.GZ workouts and may include GPX.GZ routes. Apple Health imports only supported running, cycling and swimming workouts; clinical and everyday health records are not imported as workouts. Files and normalized activity data are processed in browser memory during the active page session; TriAnalytica does not upload them to its application server or write workout data to cookies, localStorage, IndexedDB, or a workout database.</p>
             <p>After a successful import, the separate analysis counter may send a request to its API. That request contains only the existing counter headers (event ID and application key), has no request body, and contains no workout fields, filenames, or routes. Firestore stores only the aggregate analysis count and counter-event metadata (event ID and creation time), not training data. The app still makes network requests for external libraries and the counter.</p>
           </section>
 
@@ -2066,6 +2071,8 @@
               <li><strong>Lucide</strong> via cdn.jsdelivr.net – icons</li>
               <li><strong>Leaflet</strong> via unpkg.com – heatmap and route visualization</li>
               <li><strong>JSZip</strong> via cdnjs.cloudflare.com – ZIP import</li>
+              <li><strong>zip.js</strong> via cdn.jsdelivr.net – streaming Apple Health ZIP import</li>
+              <li><strong>SAX</strong> via cdn.jsdelivr.net – streaming Apple Health XML parsing</li>
               <li><strong>fit-file-parser</strong> via esm.sh – FIT workout parsing</li>
               <li><strong>GitHub Pages / GitHub infrastructure</strong> – website hosting</li>
               <li><strong>Google Cloud Run API</strong> at <code class="rounded bg-slate-800 px-1 py-0.5 text-slate-200">https://trianalytics-api-520098173492.europe-west1.run.app</code> when the analysis counter is used</li>
@@ -2105,7 +2112,7 @@
 
           <section>
             <h3 class="mb-3 text-base font-semibold text-white">10. Data retention</h3>
-            <p>Imported GPX/CSV files and Strava/TrainingPeaks workout data are processed only in memory during the active browser session. TriAnalytica does not persist them on its application server or write them to browser storage.</p>
+            <p>Imported GPX/CSV files and Strava, TrainingPeaks, and Apple Health workout data are processed only in memory during the active browser session. Health and clinical records that are not supported workouts are not added to the dashboard. TriAnalytica does not persist files or normalized activities on its application server or write them to browser storage.</p>
             <p>Technical log data and server logs may be retained by the hosting or infrastructure provider according to that provider's own retention policies. No specific retention period for imported activity files is imposed by TriAnalytica on its own application backend.</p>
           </section>
 

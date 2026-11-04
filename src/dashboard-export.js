@@ -12,6 +12,7 @@
     let exportAssetsPromise = null;
     let exportDownloadAttempt = null;
     let exportSessionSequence = 0;
+    let exportCaptureGeneration = 0;
 
     const EXPORT_CAPTURE_TARGET_IDS = {
       totalDistance: 'totalDistanceChartWrapper',
@@ -124,6 +125,17 @@
     }
 
     const EXPORT_DOMAIN = window.exportUtils.getExportBrandConfig().domain;
+
+    function getExportDashboardDataRevision() {
+      return typeof dashboardDataRevision === 'number' ? dashboardDataRevision : null;
+    }
+
+    function isCurrentExportCapture(captureState) {
+      if (!captureState) return false;
+      return (captureState.captureGeneration === undefined || captureState.captureGeneration === exportCaptureGeneration) &&
+        (captureState.dashboardDataRevision === null || captureState.dashboardDataRevision === undefined ||
+          captureState.dashboardDataRevision === getExportDashboardDataRevision());
+    }
 
     function showExportToast(message) {
       const toast = document.getElementById('exportToast');
@@ -250,8 +262,6 @@
         mediaGallery: [
           getSelectControlGroup('Year', 'mediaGalleryYearFilter'),
           getSelectControlGroup('Sport', 'mediaGallerySportFilter'),
-          getSelectControlGroup('Activity', 'mediaGalleryActivityFilter'),
-          getCheckboxControlGroup('Include routes', 'mediaGalleryIncludeRoutes')
         ]
       };
       return window.exportUtils.summarizeAvailableControls(groups.concat(tabGroups[tabName] || []));
@@ -631,6 +641,8 @@
     }
 
     function getTabExportTarget(tabName) {
+      if (typeof availableVisualizationTabs !== 'undefined' && Array.isArray(availableVisualizationTabs) &&
+          !availableVisualizationTabs.includes(tabName)) return null;
       const targetId = EXPORT_CAPTURE_TARGET_IDS[tabName];
       const targetEl = targetId && document.getElementById(targetId);
       const flags = getExportableFlags();
@@ -1586,7 +1598,7 @@
       const format = selectedExportFormat;
       const humorEnabled = selectedExportHumorEnabled;
       const current = () => lastExportCaptureState === state && !state.released
-        && state.sessionId === exportSessionSequence && state.revision === revision;
+        && state.sessionId === exportSessionSequence && state.revision === revision && isCurrentExportCapture(state);
       state.active++;
       if (current()) {
         lastExportedImage = null; lastExportImages = []; currentExportSeriesIndex = 0;
@@ -1681,6 +1693,7 @@
         return;
       }
       const state = { structured: true, sessionId, target, snapshot: target.selectionSnapshot, resources,
+        captureGeneration: ++exportCaptureGeneration, dashboardDataRevision: getExportDashboardDataRevision(),
         pbOpening: target.selectionSnapshot.pbOpening, revision: 0, active: 1, released: false, assets: null, error: null };
       lastExportCaptureState = state;
       exportRequestState = 'capturing';
@@ -1690,6 +1703,7 @@
     }
 
     async function composeCurrentExportImages(captureState) {
+      if (!isCurrentExportCapture(captureState)) return;
       if (captureState.structured) return composeStructuredExportImages(captureState);
       const { captured, target, assets, pbOpening } = captureState;
       const revision = (captureState.compositionRevision || 0) + 1;
@@ -1697,7 +1711,8 @@
       const format = selectedExportFormat;
       const humorEnabled = selectedExportHumorEnabled;
       const current = () => lastExportCaptureState === captureState
-        && captureState.sessionId === exportSessionSequence && captureState.compositionRevision === revision;
+        && captureState.sessionId === exportSessionSequence && captureState.compositionRevision === revision
+        && isCurrentExportCapture(captureState);
       const pageTargets = getExportTargetPages({ ...target, format });
       const formatCaptures = captureState.calendarCapturesByFormat?.[format];
       const preparedImages = [];
@@ -1783,6 +1798,7 @@
         lastExportCaptureState.released = true;
         releaseStructuredExportState(lastExportCaptureState);
       }
+      exportCaptureGeneration += 1;
       const modal = document.getElementById('exportPreviewModal');
       const img = document.getElementById('exportPreviewImage');
       if (modal) {
@@ -1964,7 +1980,12 @@
       }
 
       const sessionId = ++exportSessionSequence;
-      const currentSession = () => exportSessionSequence === sessionId;
+      const captureState = {
+        sessionId,
+        captureGeneration: ++exportCaptureGeneration,
+        dashboardDataRevision: getExportDashboardDataRevision()
+      };
+      const currentSession = () => exportSessionSequence === sessionId && isCurrentExportCapture(captureState);
       beginExportSession();
 
       if (exportToastTimeoutId) clearTimeout(exportToastTimeoutId);
@@ -2214,7 +2235,10 @@
           for (const format of ['square', 'portrait']) {
             const pages = getExportTargetPages({ ...target, format });
             calendarCapturesByFormat[format] = [];
-            for (const page of pages) calendarCapturesByFormat[format].push(await capture(page));
+            for (const page of pages) {
+              calendarCapturesByFormat[format].push(await capture(page));
+              if (!isCurrentExportCapture(captureState)) return;
+            }
           }
           captured = calendarCapturesByFormat[selectedExportFormat]?.[0];
         } else {
@@ -2225,11 +2249,11 @@
             ? await window.heatmapDashboard.captureAtExportSize(captureCurrentTarget)
             : await captureCurrentTarget();
         }
-          if (!currentSession()) return;
+  if (!currentSession()) return;
         if (target.pinnedSelection && !resolvedAnchor) resolvedAnchor = snapshot.resolveExportAnchor(snapshot.element);
         const compositionTarget = resolvedAnchor ? { ...target, captureProtectedRects, pinnedSelection: { ...target.pinnedSelection, anchor: resolvedAnchor } } : target;
         if (window.tooltipSelectionUtils) window.tooltipSelectionUtils.freezePlain(compositionTarget);
-        lastExportCaptureState = { sessionId, captured, target: compositionTarget, assets, pbOpening, calendarCapturesByFormat };
+        lastExportCaptureState = { ...captureState, captured, target: compositionTarget, assets, pbOpening, calendarCapturesByFormat };
         await composeCurrentExportImages(lastExportCaptureState);
       } catch (error) {
         if (currentSession()) {
@@ -2241,6 +2265,9 @@
         }
       } finally {
         snapshot?.release();
+        if (captureState.captureGeneration === exportCaptureGeneration && exportRequestState === 'capturing') {
+          exportRequestState = 'idle';
+        }
       }
     }
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-TriAnalytica supports Strava and TrainingPeaks exports through separate import options on the landing page. Both import paths normalize supported activities into the same dashboard model.
+TriAnalytica supports Strava, TrainingPeaks and Apple Health exports through separate import options on the landing page. Each import path normalizes its supported activities into the same dashboard model while retaining provider-specific format and failure behavior.
 
 ## Public Sample History
 
@@ -21,9 +21,19 @@ dataset, and older operations cannot overwrite newer selections or their status.
 Superseded media reads cannot restore old gallery content; separately acquired
 export sources retain their own lifetime until the export completes.
 
+## Apple Health
+
+Select one original Apple Health ZIP from the landing page; do not extract or repackage it. The importer reads the primary Health export and does not import the duplicate clinical representation. Only explicitly recorded running, cycling and swimming workouts become activities. Walking, hiking, strength, sleep, body measurements, energy totals, ECG and other health records do not become workouts or medical-dashboard views.
+
+Workout summaries supply distance, active duration and ascent when their units are supported. Heart rate, running steps, cadence and cycling power remain unavailable unless their source, timing, units and coverage support an unambiguous workout measurement. A short power series may support a shorter best-effort window without being treated as a full-workout average; average power alone does not create power personal bests. An export's hardware name is not equipment, and fallback workout labels are not treated as source titles.
+
+Only explicitly referenced, valid routes are attached. Separate GPX route segments remain disconnected. Equipment, equipment timeline, title word cloud, heatmap, media gallery, optional metrics and other views appear only when their required imported data can produce meaningful output. Missing fields are not replaced with invented values.
+
+Apple Health export steps are in [apple-health-export-how-to.html](apple-health-export-how-to.html). Large exports may take several minutes and require a modern browser served over HTTP or HTTPS. Resource or format failures preserve the previous dashboard and can be retried. Raw health files are processed in the active browser session; the app still requests external libraries, public resources and its metadata-only analysis counter.
+
 ## Visualization availability
 
-After each import, the dashboard shows only visualization tabs that can produce meaningful output from the imported activities and associated route or power data. Strava and TrainingPeaks imports use the same data-based rules; when a field is missing, only views that require that field are hidden. This changes dashboard visibility and selection only: imported files, activity records, and values are not modified or removed.
+After each import, the dashboard shows only visualization tabs that can produce meaningful output from the imported activities and associated route or power data. Each provider uses current data-based rules; when a field is missing, only views and controls that require that field are hidden or unavailable. This changes dashboard visibility and selection only: imported files, activity records, and values are not modified or removed.
 
 ## Strava
 

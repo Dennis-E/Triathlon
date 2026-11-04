@@ -120,6 +120,21 @@ describe('Pace vs years controls', () => {
     expect(model.points.map(point => point.x)).toEqual([5, 5.00001]);
   });
 
+  it('selects the first metric that has data when controls reset for a new import', () => {
+    const h = harness([2024]);
+    h.sandbox.processedActivities = h.sandbox.processedActivities.map(activity => ({
+      ...activity,
+      metric: 'distance'
+    }));
+
+    h.sandbox.initPaceMetricsControls({ reset: true });
+
+    expect(vm.runInContext('selectedPaceMetricsSport', h.sandbox)).toBe('Run');
+    expect(vm.runInContext('selectedPaceMetric', h.sandbox)).toBe('distance');
+    expect(h.elements.paceMetricsMetricFilters.children.find(button => button.id === 'paceMetricsMetricBtndistance').className)
+      .toContain('bg-indigo-600');
+  });
+
   it('exposes visible, non-empty year bubble series with their matching colors for export', () => {
     const h = harness([2023, 2024]);
 

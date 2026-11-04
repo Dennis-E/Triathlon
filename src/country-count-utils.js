@@ -63,6 +63,24 @@ function unavailableSummary(totalActivityCount, trackedActivityCount) {
   };
 }
 
+function getConnectedTrackPaths(track) {
+  const sourcePaths = Array.isArray(track && track.segments) ? track.segments : [track && track.points];
+  const paths = [];
+  sourcePaths.forEach(sourcePath => {
+    if (!Array.isArray(sourcePath)) return;
+    let connected = [];
+    sourcePath.forEach(point => {
+      if (isValidTrackPoint(point)) connected.push(point);
+      else {
+        if (connected.length) paths.push(connected);
+        connected = [];
+      }
+    });
+    if (connected.length) paths.push(connected);
+  });
+  return paths;
+}
+
 function normalizeCountryFeatures(countryFeatures) {
   const features = Array.isArray(countryFeatures)
     ? countryFeatures
@@ -99,10 +117,9 @@ function aggregateCountryCount(options = {}) {
   activities.forEach(activity => {
     if (!activity || activity.id === null || activity.id === undefined) return;
     const track = gpsTracksByActivityId[String(activity.id)];
-    if (!track || !Array.isArray(track.points)) return;
-    const points = track.points.filter(isValidTrackPoint);
-    if (points.length === 0) return;
-    routes.push({ points, bounds: getBounds(points.map(([latitude, longitude]) => [longitude, latitude])) });
+    const paths = getConnectedTrackPaths(track);
+    if (paths.length === 0) return;
+    routes.push({ paths });
   });
 
   const trackedActivityCount = routes.length;
@@ -122,22 +139,25 @@ function aggregateCountryCount(options = {}) {
 
   try {
     routes.forEach(route => {
-      const lineCoordinates = route.points.map(([latitude, longitude]) => [longitude, latitude]);
-      const lineFeature = lineCoordinates.length > 1
-        ? { type: 'LineString', coordinates: lineCoordinates }
-        : null;
+      route.paths.forEach(points => {
+        const lineCoordinates = points.map(([latitude, longitude]) => [longitude, latitude]);
+        const lineFeature = lineCoordinates.length > 1
+          ? { type: 'LineString', coordinates: lineCoordinates }
+          : null;
+        const bounds = getBounds(lineCoordinates);
 
-      countryFeatures.forEach(country => {
-        if (countryIds.has(country.countryId)) return;
-        if (!boundsIntersect(route.bounds, country.bounds)) return;
+        countryFeatures.forEach(country => {
+          if (countryIds.has(country.countryId)) return;
+          if (!boundsIntersect(bounds, country.bounds)) return;
 
-        const intersects = lineFeature
-          ? geometryOperations.booleanIntersects(lineFeature, country.feature)
-          : geometryOperations.booleanPointInPolygon(lineCoordinates[0], country.feature);
-        if (intersects) {
-          countryIds.add(country.countryId);
-          countryNamesById.set(country.countryId, country.countryName);
-        }
+          const intersects = lineFeature
+            ? geometryOperations.booleanIntersects(lineFeature, country.feature)
+            : geometryOperations.booleanPointInPolygon(lineCoordinates[0], country.feature);
+          if (intersects) {
+            countryIds.add(country.countryId);
+            countryNamesById.set(country.countryId, country.countryName);
+          }
+        });
       });
     });
   } catch (error) {

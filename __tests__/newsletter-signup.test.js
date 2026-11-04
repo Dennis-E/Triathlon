@@ -70,7 +70,8 @@ describe('newsletter signup', () => {
     const footer = html.match(/<footer[\s\S]*?<\/footer>/i)?.[0] || '';
     expect(footer).toContain('newsletterSignupButton');
     expect(footer).toContain('newsletterPrivacyLink');
-    expect(footer).toMatch(/signup details are handled by Brevo/i);
+    expect(footer).toContain('Stay updated on new features, visualizations and analytics');
+    expect(footer).not.toMatch(/Opening the form connects your browser to Brevo/i);
     expect(footer).toContain('aria-controls="newsletterSignupModal"');
     expect(html).toContain('id="newsletterFallbackLink"');
     expect(html).toContain(`href="${FORM_URL}"`);

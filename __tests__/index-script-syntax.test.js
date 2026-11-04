@@ -152,6 +152,13 @@ describe('finite dashboard owner adapters', () => {
     }
   });
 
+  it('provides the existing local image export action for the Personal Bests overview', () => {
+    const markup = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+    const panel = markup.slice(markup.indexOf('id="vizPanelPersonalBests"'), markup.indexOf('id="vizPanelHeatmap"'));
+    expect(panel).toMatch(/onclick="exportVisualizationTab\('personalBests'\)"/);
+    expect(panel).toContain('aria-label="Export for Insta / Strava: Personal Bests"');
+  });
+
   it('uses only available calendar sports and the existing palette filter', () => {
     const owner = loadOwner('dashboard-training-calendar.js', { trainingCalendarUtils: require('../src/training-calendar-utils') });
     owner.processedActivities = [{ sport: 'Run', date: new Date(2026, 0, 1) }];
@@ -764,7 +771,7 @@ describe('index.html inline script syntax', () => {
   it('keeps visualization export buttons content-sized across stacked headers', () => {
     const exportButtons = [...html.matchAll(/<button\b(?=[^>]*onclick="exportVisualizationTab\('[^']+'\)")([^>]*)>/g)];
 
-    expect(exportButtons).toHaveLength(12);
+    expect(exportButtons).toHaveLength(13);
     expect(exportButtons.every(([, attributes]) => /\bclass="[^"]*\bviz-export-button\b[^"]*"/.test(attributes))).toBe(true);
     expect(html).toMatch(/\.viz-export-button\s*\{[^}]*width:\s*fit-content;[^}]*max-width:\s*100%;[^}]*flex-shrink:\s*0;/s);
   });
@@ -1001,6 +1008,7 @@ describe('index.html inline script syntax', () => {
     const exportButtons = [
       'totalDistance',
       'paceMetrics',
+      'personalBests',
       'equipment',
       'equipmentTimeline',
       'heatmap'
@@ -1014,7 +1022,7 @@ describe('index.html inline script syntax', () => {
     expect(html).toMatch(/assets\/Strava_Logo\.svg[\s\S]*Export for Insta \/ Strava[\s\S]*assets\/Instagram_logo_2016\.svg/);
     expect(html).toContain('id="pbDetailCaptureTarget"');
     expect(inlineCode).toContain("targetElementId: 'pbDetailCaptureTarget'");
-    expect(html).not.toContain("exportVisualizationTab('personalBests')");
+    expect(html).toContain("exportVisualizationTab('personalBests')");
     expect(inlineCode).toContain('getExportAssetPaths');
     expect(html).toContain('Export for Insta / Strava');
     expect(html).toContain('class="h-5 w-8 object-contain"');

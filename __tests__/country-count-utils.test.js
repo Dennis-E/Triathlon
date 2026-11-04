@@ -131,6 +131,23 @@ describe('aggregateCountryCount', () => {
     expect(summary.countryIds).toEqual(new Set(['MID']));
   });
 
+  it('does not count countries crossed only by a connection between GPX subpaths', () => {
+    const gapCountry = createCountryFeature('MID', -0.5, -1, 0.5, 1);
+    const first = [[0, -2], [0, -1.5]];
+    const second = [[0, 1.5], [0, 2]];
+    const summary = aggregateCountryCount({
+      activities: [{ id: 'segmented-run', sport: 'Run' }],
+      gpsTracksByActivityId: {
+        'segmented-run': { sport: 'Run', points: [...first, ...second], segments: [first, second] }
+      },
+      countryFeatures: [gapCountry],
+      geometryOperations
+    });
+
+    expect(summary).toMatchObject({ status: 'complete', trackedActivityCount: 1, totalActivityCount: 1, countryCount: 0 });
+    expect(summary.countryIds).toEqual(new Set());
+  });
+
   it('accepts one valid point and ignores non-finite or out-of-range coordinate pairs', () => {
     const summary = aggregateCountryCount({
       activities: [

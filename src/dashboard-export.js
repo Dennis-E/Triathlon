@@ -10,6 +10,7 @@
     let lastExportCaptureState = null;
     let exportAssetsPromise = null;
     let exportDownloadAttempt = null;
+    let exportCaptureGeneration = 0;
 
     const EXPORT_CAPTURE_TARGET_IDS = {
       totalDistance: 'totalDistanceChartWrapper',
@@ -28,6 +29,17 @@
     };
 
     const EXPORT_DOMAIN = window.exportUtils.getExportBrandConfig().domain;
+
+    function getExportDashboardDataRevision() {
+      return typeof dashboardDataRevision === 'number' ? dashboardDataRevision : null;
+    }
+
+    function isCurrentExportCapture(captureState) {
+      if (!captureState) return false;
+      return (captureState.captureGeneration === undefined || captureState.captureGeneration === exportCaptureGeneration) &&
+        (captureState.dashboardDataRevision === null || captureState.dashboardDataRevision === undefined ||
+          captureState.dashboardDataRevision === getExportDashboardDataRevision());
+    }
 
     function showExportToast(message) {
       const toast = document.getElementById('exportToast');
@@ -470,6 +482,8 @@
     }
 
     function getTabExportTarget(tabName) {
+      if (typeof availableVisualizationTabs !== 'undefined' && Array.isArray(availableVisualizationTabs) &&
+          !availableVisualizationTabs.includes(tabName)) return null;
       const targetId = EXPORT_CAPTURE_TARGET_IDS[tabName];
       const targetEl = targetId && document.getElementById(targetId);
       const flags = getExportableFlags();
@@ -1102,6 +1116,7 @@
     }
 
     async function composeCurrentExportImages(captureState) {
+      if (!isCurrentExportCapture(captureState)) return;
       const { captured, target, assets, pbOpening } = captureState;
       const pageTargets = getExportTargetPages({ ...target, format: selectedExportFormat });
       const formatCaptures = captureState.calendarCapturesByFormat?.[selectedExportFormat];
@@ -1115,8 +1130,11 @@
           metricLabel: pageTarget.exportData?.metricLabel || pageTarget.metricLabel
         }, { humorEnabled: selectedExportHumorEnabled });
         const dataUrl = drawExportComposition(formatCaptures?.[pageIndex] || captured, pageTarget, assets);
-        preparedImages.push(await prepareExportImage(dataUrl, pageTarget, pbOpening));
+        const preparedImage = await prepareExportImage(dataUrl, pageTarget, pbOpening);
+        if (!isCurrentExportCapture(captureState)) return;
+        preparedImages.push(preparedImage);
       }
+      if (!isCurrentExportCapture(captureState)) return;
       lastExportImages = preparedImages;
       currentExportSeriesIndex = 0;
       lastExportedImage = preparedImages[0] || null;
@@ -1151,6 +1169,7 @@
     }
 
     function closeExportPreviewModal() {
+      exportCaptureGeneration += 1;
       const modal = document.getElementById('exportPreviewModal');
       const img = document.getElementById('exportPreviewImage');
       if (modal) {
@@ -1330,6 +1349,10 @@
       }
 
       exportRequestState = 'capturing';
+      const captureState = {
+        captureGeneration: ++exportCaptureGeneration,
+        dashboardDataRevision: getExportDashboardDataRevision()
+      };
       const pbOpening = target.kind === 'pb-tile' && typeof pbDetailOpening !== 'undefined' ? pbDetailOpening : null;
       let snapshot = null;
       try {
@@ -1348,8 +1371,11 @@
         snapshot = createExportCaptureSnapshot(targetEl, tabId, { chartCapture, selection: target.pinnedSelection, target });
         if (window.tooltipSelectionUtils) target = window.tooltipSelectionUtils.freezePlain(window.tooltipSelectionUtils.copyPlain(target));
         await snapshot.prepare();
+        if (!isCurrentExportCapture(captureState)) return;
         await waitForExportFonts();
+        if (!isCurrentExportCapture(captureState)) return;
         const assets = await loadExportAssets();
+        if (!isCurrentExportCapture(captureState)) return;
 
         let resolvedAnchor = null;
         let captureProtectedRects = [];
@@ -1567,7 +1593,10 @@
           for (const format of ['square', 'portrait']) {
             const pages = getExportTargetPages({ ...target, format });
             calendarCapturesByFormat[format] = [];
-            for (const page of pages) calendarCapturesByFormat[format].push(await capture(page));
+            for (const page of pages) {
+              calendarCapturesByFormat[format].push(await capture(page));
+              if (!isCurrentExportCapture(captureState)) return;
+            }
           }
           captured = calendarCapturesByFormat[selectedExportFormat]?.[0];
         } else {
@@ -1578,19 +1607,24 @@
             ? await window.heatmapDashboard.captureAtExportSize(captureCurrentTarget)
             : await captureCurrentTarget();
         }
+          if (!isCurrentExportCapture(captureState)) return;
         if (target.pinnedSelection && !resolvedAnchor) resolvedAnchor = snapshot.resolveExportAnchor(snapshot.element);
         const compositionTarget = resolvedAnchor ? { ...target, captureProtectedRects, pinnedSelection: { ...target.pinnedSelection, anchor: resolvedAnchor } } : target;
         if (window.tooltipSelectionUtils) window.tooltipSelectionUtils.freezePlain(compositionTarget);
-        lastExportCaptureState = { captured, target: compositionTarget, assets, pbOpening, calendarCapturesByFormat };
+        lastExportCaptureState = { ...captureState, captured, target: compositionTarget, assets, pbOpening, calendarCapturesByFormat };
         await composeCurrentExportImages(lastExportCaptureState);
-
+        if (!isCurrentExportCapture(captureState)) return;
         exportRequestState = 'previewing';
       } catch (error) {
+        if (!isCurrentExportCapture(captureState)) return;
         console.error('Export failed', error);
         exportRequestState = 'idle';
         showExportToast(error.message || 'Could not export this visualization. Please try again.');
       } finally {
         snapshot?.release();
+        if (captureState.captureGeneration === exportCaptureGeneration && exportRequestState === 'capturing') {
+          exportRequestState = 'idle';
+        }
       }
     }
 

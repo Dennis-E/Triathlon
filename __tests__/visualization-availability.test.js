@@ -2,6 +2,13 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const visualizationAvailability = require('../src/visualization-availability');
+const appleHealthImporter = require('../src/apple-health-importer');
+const appleHealthFixtures = require('./fixtures/apple-health');
+const appleHealthDependencies = {
+  zip: require('@zip.js/zip.js/index-native.js'),
+  sax: require('sax'),
+  hash: async value => require('crypto').createHash('sha256').update(value).digest('hex')
+};
 
 function createActivity(overrides = {}) {
   return {
@@ -48,6 +55,96 @@ describe('visualization availability', () => {
       wordcloud: false,
       pieCharts: false,
       lifetimeStatistics: false,
+      mediaGallery: false
+    });
+  });
+
+  it('derives all view visibility from a normalized Apple Health import with missing optional data', async () => {
+    const xml = appleHealthFixtures.healthXml(
+      appleHealthFixtures.workout({}, appleHealthFixtures.statistic())
+    );
+    const file = await appleHealthFixtures.archive({ 'nested/apple_health_export/Export.xml': xml });
+    const imported = await appleHealthImporter.importAppleHealthZip(file, undefined, appleHealthDependencies);
+    const availability = visualizationAvailability.getVisualizationAvailability(imported.activities, {
+      gpsTracksByActivityId: imported.gpsTracksByActivityId,
+      fitBestEffortsByActivityId: imported.fitBestEffortsByActivityId
+    });
+
+    expect(availability).toEqual({
+      totalDistance: true,
+      paceMetrics: true,
+      equipment: false,
+      equipmentTimeline: false,
+      personalBests: true,
+      heatmap: false,
+      distributions: true,
+      workoutTime: true,
+      trainingCalendar: true,
+      wordcloud: false,
+      pieCharts: true,
+      lifetimeStatistics: true,
+      mediaGallery: false
+    });
+  });
+
+  it.each([
+    ['missing', appleHealthFixtures.workout(), false],
+    ['measured zero', appleHealthFixtures.workout({}, appleHealthFixtures.statistic('DistanceWalkingRunning', '0', 'km')), true],
+    ['invalid', appleHealthFixtures.workout({}, appleHealthFixtures.statistic('DistanceWalkingRunning', '-5', 'km')), false]
+  ])('does not expose distance-dependent views for %s Apple Health distance', async (label, workout, distanceAvailable) => {
+    const file = await appleHealthFixtures.archive({
+      'nested/apple_health_export/Export.xml': appleHealthFixtures.healthXml(workout)
+    });
+    const imported = await appleHealthImporter.importAppleHealthZip(file, undefined, appleHealthDependencies);
+    const availability = visualizationAvailability.getVisualizationAvailability(imported.activities, {
+      gpsTracksByActivityId: imported.gpsTracksByActivityId,
+      fitBestEffortsByActivityId: imported.fitBestEffortsByActivityId
+    });
+
+    expect(imported.activities[0]).toMatchObject({ distance: 0, distanceAvailable });
+    expect(availability).toEqual({
+      totalDistance: false,
+      paceMetrics: false,
+      equipment: false,
+      equipmentTimeline: false,
+      personalBests: false,
+      heatmap: false,
+      distributions: true,
+      workoutTime: true,
+      trainingCalendar: true,
+      wordcloud: false,
+      pieCharts: true,
+      lifetimeStatistics: true,
+      mediaGallery: false
+    });
+  });
+
+  it('hides every metric-dependent view when a valid imported workout has no distance or duration', async () => {
+    const file = await appleHealthFixtures.archive({
+      'nested/apple_health_export/Export.xml': appleHealthFixtures.healthXml(
+        appleHealthFixtures.workout({ duration: undefined })
+      )
+    });
+    const imported = await appleHealthImporter.importAppleHealthZip(file, undefined, appleHealthDependencies);
+    const availability = visualizationAvailability.getVisualizationAvailability(imported.activities, {
+      gpsTracksByActivityId: imported.gpsTracksByActivityId,
+      fitBestEffortsByActivityId: imported.fitBestEffortsByActivityId
+    });
+
+    expect(imported.activities[0]).toMatchObject({ distance: 0, distanceAvailable: false, duration: 0, durationAvailable: false });
+    expect(availability).toEqual({
+      totalDistance: false,
+      paceMetrics: false,
+      equipment: false,
+      equipmentTimeline: false,
+      personalBests: false,
+      heatmap: false,
+      distributions: false,
+      workoutTime: true,
+      trainingCalendar: true,
+      wordcloud: false,
+      pieCharts: true,
+      lifetimeStatistics: true,
       mediaGallery: false
     });
   });

@@ -10,7 +10,9 @@
  */
 function hasGpsData(gpsTracksByActivityId) {
   if (!gpsTracksByActivityId || typeof gpsTracksByActivityId !== 'object') return false;
-  return Object.values(gpsTracksByActivityId).some(track => Array.isArray(track && track.points) && track.points.length > 0);
+  return Object.values(gpsTracksByActivityId).some(track =>
+    (Array.isArray(track && track.segments) && track.segments.some(segment => Array.isArray(segment) && segment.length > 0)) ||
+    (Array.isArray(track && track.points) && track.points.length > 0));
 }
 
 /* ------------------------------------------------------------------------
@@ -147,15 +149,44 @@ function buildRouteSegments(gpsTracksByActivityId, options = {}) {
     return candidates;
   };
 
+  const getConnectedPaths = track => {
+    const sourcePaths = Array.isArray(track.segments) ? track.segments : [track.points];
+    const paths = [];
+    sourcePaths.forEach(sourcePath => {
+      if (!Array.isArray(sourcePath)) return;
+      let connected = [];
+      sourcePath.forEach(point => {
+        if (isCoordinate(point)) connected.push(point);
+        else {
+          if (connected.length >= 2) paths.push(connected);
+          connected = [];
+        }
+      });
+      if (connected.length >= 2) paths.push(connected);
+    });
+    return paths;
+  };
+
+  const connectedPathsByGeometry = new WeakMap();
   const activities = Object.entries(gpsTracksByActivityId)
-    .map(([activityId, track]) => [String(activityId), track])
-    .filter(([, track]) => track && Array.isArray(track.points) && track.points.length >= 2)
+    .map(([activityId, track]) => {
+      const identity = track && (Array.isArray(track.segments) ? track.segments : track.points);
+      if (!identity || typeof identity !== 'object') return [String(activityId), track, []];
+      let paths = connectedPathsByGeometry.get(identity);
+      if (!paths) {
+        paths = track ? getConnectedPaths(track) : [];
+        connectedPathsByGeometry.set(identity, paths);
+      }
+      return [String(activityId), track, paths];
+    })
+    .filter(([, track, paths]) => track && paths.length > 0)
     .filter(([, track]) => sportFilter === 'All' || track.sport === sportFilter)
     .sort(([activityA], [activityB]) => activityA.localeCompare(activityB));
 
   const sharedGeometrySegments = new WeakMap();
-  for (const [activityId, track] of activities) {
-    const repeatedKeys = sharedGeometrySegments.get(track.points);
+  for (const [activityId, track, paths] of activities) {
+    const geometryIdentity = Array.isArray(track.segments) ? track.segments : track.points;
+    const repeatedKeys = sharedGeometrySegments.get(geometryIdentity);
     if (repeatedKeys) {
       for (const key of repeatedKeys) {
         segments[key].activityIds.push(activityId);
@@ -163,13 +194,13 @@ function buildRouteSegments(gpsTracksByActivityId, options = {}) {
       }
       continue;
     }
-    const { probes, trueIndices } = interpolateTrackProbes(track.points, probeSpacingMeters, { includeTrueIndices: true });
-    if (probes.length < 2) continue;
-    const activityContinuitySteps = Math.min(continuitySteps, probes.length - 1);
-    const canMatchExistingCorridor = activityContinuitySteps === continuitySteps;
     const matchedKeys = new Set();
-
-    for (let index = 0; index + activityContinuitySteps < probes.length; index++) {
+    for (const path of paths) {
+      const { probes, trueIndices } = interpolateTrackProbes(path, probeSpacingMeters, { includeTrueIndices: true });
+      if (probes.length < 2) continue;
+      const activityContinuitySteps = Math.min(continuitySteps, probes.length - 1);
+      const canMatchExistingCorridor = activityContinuitySteps === continuitySteps;
+      for (let index = 0; index + activityContinuitySteps < probes.length; index++) {
       const start = probes[index];
       const end = probes[index + activityContinuitySteps];
       const heading = computeUndirectedHeading(start, end);
@@ -210,7 +241,7 @@ function buildRouteSegments(gpsTracksByActivityId, options = {}) {
         // (spec 006 FR-001/FR-002); coords/heading remain the existing matching geometry.
         const trueStartIdx = trueIndices[index];
         const trueEndIdx = trueIndices[index + activityContinuitySteps];
-        const truePathSlice = track.points.slice(trueStartIdx, trueEndIdx + 1).map(point => [point[0], point[1]]);
+        const truePathSlice = path.slice(trueStartIdx, trueEndIdx + 1).map(point => [point[0], point[1]]);
         segment = {
           key,
           coords: [[start[0], start[1]], [end[0], end[1]]],
@@ -231,8 +262,9 @@ function buildRouteSegments(gpsTracksByActivityId, options = {}) {
         segment.activityIds.push(activityId);
         segment.count = segment.activityIds.length;
       }
+      }
     }
-    sharedGeometrySegments.set(track.points, matchedKeys);
+    if (geometryIdentity && typeof geometryIdentity === 'object') sharedGeometrySegments.set(geometryIdentity, matchedKeys);
   }
 
   for (const segment of Object.values(segments)) delete segment._cellKey;

@@ -209,28 +209,17 @@ function markPowerProfileLabelVisibility(points) {
   }));
 }
 
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = {
-    POWER_DURATIONS,
-    normalizePowerValue,
-    normalizeFitPowerRecords,
-    calculateRollingPowerEfforts,
-    calculatePowerEffortsForDurations,
-    buildAllTimePowerProfile,
-    getPowerProfileWattRange,
-    markPowerProfileLabelVisibility
-  };
-}
+const powerPbUtilsApi = {
+  POWER_DURATIONS,
+  normalizePowerValue,
+  normalizeFitPowerRecords,
+  calculateRollingPowerEfforts,
+  calculatePowerEffortsForDurations,
+  buildAllTimePowerProfile,
+  getPowerProfileWattRange,
+  markPowerProfileLabelVisibility
+};
 
-if (typeof window !== 'undefined') {
-  window.powerPbUtils = {
-    POWER_DURATIONS,
-    normalizePowerValue,
-    normalizeFitPowerRecords,
-    calculateRollingPowerEfforts,
-    calculatePowerEffortsForDurations,
-    buildAllTimePowerProfile,
-    getPowerProfileWattRange,
-    markPowerProfileLabelVisibility
-  };
-}
+if (typeof module !== 'undefined' && module.exports) module.exports = powerPbUtilsApi;
+if (typeof globalThis !== 'undefined') globalThis.powerPbUtils = powerPbUtilsApi;
+if (typeof window !== 'undefined') window.powerPbUtils = powerPbUtilsApi;

@@ -59,7 +59,7 @@ function loadDashboardRuntime() {
   };
   const lifetimeStatisticsRender = jest.fn();
   const context = {
-    document: { getElementById: id => nodes[id] || null },
+    document: { getElementById: id => nodes[id] || null, querySelectorAll: () => [] },
     window: {
       countryCountUtils,
       countryCountCountryFeatures: countryFeatures,

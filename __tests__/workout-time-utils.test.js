@@ -124,6 +124,81 @@ describe('buildWorkoutTimeDataset - calendar granularities', () => {
   });
 });
 
+describe('Workout Time source-local Apple timestamps', () => {
+  it('groups the recorded Apple wall-clock time without changing the true instant', () => {
+    const previousTimezone = process.env.TZ;
+    try {
+      for (const timezone of ['UTC', 'Europe/Berlin']) {
+        process.env.TZ = timezone;
+        const startTime = new Date('2025-03-01T22:30:00.000Z');
+        const sourceLocalStart = { year: 2025, month: 3, day: 2, hour: 0, minute: 30, second: 0, offsetMinutes: 120 };
+        const record = {
+          date: new Date(2025, 2, 2),
+          startTime,
+          sourceLocalStart,
+          sport: 'Run',
+          duration: 1800,
+          distance: 5
+        };
+
+        expect(buildWorkoutTimeDataset([record], { granularity: GRANULARITIES.DAY }).groups[0].count).toBe(1);
+        expect(buildWorkoutTimeDataset([record], { granularity: GRANULARITIES.WEEK }).groups[6].count).toBe(1);
+        expect(buildWorkoutTimeDataset([record], { granularity: GRANULARITIES.MONTH }).groups[1].count).toBe(1);
+        expect(buildWorkoutTimeDataset([record], { granularity: GRANULARITIES.YEAR }).groups[2].count).toBe(1);
+        expect(record.startTime.toISOString()).toBe('2025-03-01T22:30:00.000Z');
+      }
+    } finally {
+      if (previousTimezone === undefined) delete process.env.TZ;
+      else process.env.TZ = previousTimezone;
+    }
+  });
+
+  it('retains the legacy Date grouping when source-local fields are absent or invalid', () => {
+    const startTime = new Date('2025-03-01T22:30:00.000Z');
+    const record = { date: new Date('2025-03-01T00:00:00Z'), startTime, sport: 'Run' };
+    const legacy = buildWorkoutTimeDataset([record], { granularity: GRANULARITIES.DAY });
+    const invalidLocal = buildWorkoutTimeDataset([{ ...record, sourceLocalStart: { year: 2025, month: 13 } }], {
+      granularity: GRANULARITIES.DAY
+    });
+    const inconsistentLocal = buildWorkoutTimeDataset([{ ...record, sourceLocalStart: {
+      year: 2025, month: 3, day: 2, hour: 0, minute: 30, second: 0, offsetMinutes: 0
+    } }], { granularity: GRANULARITIES.DAY });
+
+    expect(legacy.groups[11].count).toBe(1);
+    expect(invalidLocal.groups[11].count).toBe(1);
+    expect(inconsistentLocal.groups[11].count).toBe(1);
+  });
+
+  it('groups both sides of daylight-saving transitions by the recorded Apple wall clock', () => {
+    const previousTimezone = process.env.TZ;
+    try {
+      for (const timezone of ['UTC', 'Europe/Berlin']) {
+        process.env.TZ = timezone;
+        const spring = [
+          { instant: '2025-03-30T00:30:00Z', local: { year: 2025, month: 3, day: 30, hour: 1, minute: 30, second: 0, offsetMinutes: 60 } },
+          { instant: '2025-03-30T01:30:00Z', local: { year: 2025, month: 3, day: 30, hour: 3, minute: 30, second: 0, offsetMinutes: 120 } }
+        ].map(value => ({ date: new Date(2025, 2, 30), startTime: new Date(value.instant), sourceLocalStart: value.local, sport: 'Run' }));
+        const fall = [
+          { instant: '2025-10-26T00:30:00Z', local: { year: 2025, month: 10, day: 26, hour: 2, minute: 30, second: 0, offsetMinutes: 120 } },
+          { instant: '2025-10-26T01:30:00Z', local: { year: 2025, month: 10, day: 26, hour: 2, minute: 30, second: 0, offsetMinutes: 60 } }
+        ].map(value => ({ date: new Date(2025, 9, 26), startTime: new Date(value.instant), sourceLocalStart: value.local, sport: 'Run' }));
+        const springDay = buildWorkoutTimeDataset(spring, { granularity: GRANULARITIES.DAY });
+        const fallDay = buildWorkoutTimeDataset(fall, { granularity: GRANULARITIES.DAY });
+
+        expect(springDay.groups[0].count).toBe(1);
+        expect(springDay.groups[1].count).toBe(1);
+        expect(springDay.groups.reduce((sum, group) => sum + group.count, 0)).toBe(2);
+        expect(fallDay.groups[1].count).toBe(2);
+        expect(buildWorkoutTimeDataset(fall, { granularity: GRANULARITIES.WEEK }).groups[6].count).toBe(2);
+        expect(fall[0].startTime.getTime()).not.toBe(fall[1].startTime.getTime());
+      }
+    } finally {
+      if (previousTimezone === undefined) delete process.env.TZ;
+      else process.env.TZ = previousTimezone;
+    }
+  });
+});
+
 describe('Workout Time measures', () => {
   const reference = [
     activity({ date: '2026-07-01', startTime: '2026-07-01T06:15:00', sport: 'Run', duration: 1800, distance: 5 }),

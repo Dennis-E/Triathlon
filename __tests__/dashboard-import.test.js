@@ -8,6 +8,7 @@ const dashboardImportSource = fs.readFileSync(
 );
 const importExperienceCatalog = require('../src/import-experience-catalog');
 const countryCountUtils = require('../src/country-count-utils');
+const appleHealthUtils = require('../src/apple-health-utils');
 
 function deferredImport() {
   let resolve;
@@ -21,20 +22,34 @@ function deferredImport() {
 
 function loadImportOperationRuntime() {
   const context = {
-    window: { importExperienceCatalog },
+    window: { importExperienceCatalog, appleHealthUtils },
     Papa: { parse: jest.fn() },
+    WritableStream,
+    location: { protocol: 'http:' },
+    setInterval: jest.fn(() => 1),
+    clearInterval: jest.fn(),
     updateStatusBadge: jest.fn(),
+    setSportFilter: jest.fn(),
     recordCompletedAnalysis: jest.fn(),
     console: { error: jest.fn() }
   };
   vm.createContext(context);
   vm.runInContext(`${dashboardImportSource}
+    let importedDataset = null;
+    let rawCsvData = [];
+    let processedActivities = [];
+    let fitBestEffortsByActivityId = {};
+    let gpsTracksByActivityId = {};
+    let heatmapActivitySummaryIndex = new Map();
     processData = () => [{ id: 'csv-test', sport: 'Run', distance: 5, duration: 1800 }];
+    this.commitDataset = applyImportedDataset;
     applyImportedDataset = dataset => { this.applied.push(dataset); };
     this.applied = [];
     this.begin = beginImportOperation;
     this.isCurrent = isCurrentImportOperation;
     this.runTrainingPeaks = executeTrainingPeaksZipImport;
+    this.runAppleHealth = executeAppleHealthZipImport;
+    this.runAppleWorker = importAppleHealthInWorker;
     this.runCsv = importCsvText;
     this.runSample = handleSampleDataIngest;
   `, context);
@@ -57,6 +72,148 @@ function prepareStravaOperationRuntime(runtime, archive) {
 }
 
 describe('shared dashboard import operations', () => {
+  it('hydrates validated worker activity times and forwards progress through the worker message contract', async () => {
+    const runtime = loadImportOperationRuntime();
+    class SyntheticWorker {
+      static latest = null;
+      constructor(url) { this.url = url; this.terminate = jest.fn(); SyntheticWorker.latest = this; }
+      postMessage(message) { this.message = message; }
+    }
+    runtime.Worker = SyntheticWorker;
+    const operation = runtime.begin('personal');
+    const progress = jest.fn();
+    const workerResult = runtime.runAppleWorker({ name: 'synthetic.zip' }, progress, operation);
+    const worker = SyntheticWorker.latest;
+    expect(worker.url).toBe('./src/apple-health-worker.js');
+    expect(worker.message).toMatchObject({ type: 'start', generation: operation.generation, file: { name: 'synthetic.zip' } });
+    worker.onmessage({ data: { type: 'progress', generation: operation.generation, phase: 'readingWorkouts', percent: 45 } });
+    worker.onmessage({ data: { type: 'complete', generation: operation.generation, result: {
+      activities: [{ id: 'ah-worker', sport: 'Run', startTime: Date.parse('2025-03-01T07:00:00Z'),
+        sourceLocalStart: { year: 2025, month: 3, day: 1, hour: 8, minute: 0, second: 0, offsetMinutes: 60 } }],
+      gpsTracksByActivityId: {}, fitBestEffortsByActivityId: {}, diagnostics: {}
+    } } });
+    const result = await workerResult;
+
+    expect(progress).toHaveBeenCalledWith(expect.objectContaining({ percent: 45, stage: 'Reading Apple Health workouts...' }));
+    for (const field of ['startTime', 'date', 'monday']) {
+      expect(Object.prototype.toString.call(result.activities[0][field])).toBe('[object Date]');
+      expect(Number.isFinite(result.activities[0][field].getTime())).toBe(true);
+    }
+  });
+
+  it('terminates a running Apple worker when a newer import starts', async () => {
+    const runtime = loadImportOperationRuntime();
+    class SyntheticWorker {
+      static latest = null;
+      constructor() { this.terminate = jest.fn(); SyntheticWorker.latest = this; }
+      postMessage(message) { this.message = message; }
+    }
+    runtime.Worker = SyntheticWorker;
+    const operation = runtime.begin('personal');
+    const pending = runtime.runAppleWorker({ name: 'synthetic.zip' }, jest.fn(), operation);
+    const worker = SyntheticWorker.latest;
+
+    runtime.begin('sample');
+
+    await expect(pending).rejects.toMatchObject({ code: 'CANCELLED' });
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+    expect(runtime.isCurrent(operation)).toBe(false);
+  });
+
+  it('resets the actual sport filter and invalidates the old export preview only on dataset replacement', () => {
+    const runtime = loadImportOperationRuntime();
+    const nodes = new Map();
+    runtime.document = { getElementById: id => {
+      if (!nodes.has(id)) nodes.set(id, { textContent: '', classList: {
+        add: jest.fn(), remove: jest.fn(), toggle: jest.fn(), contains: () => false
+      } });
+      return nodes.get(id);
+    } };
+    runtime.window.heatmapUtils = { buildActivitySummaryIndex: jest.fn(() => new Map()) };
+    runtime.setSportFilter = jest.fn();
+    runtime.setBtnActive = jest.fn();
+    runtime.closeExportPreviewModal = jest.fn();
+    runtime.closePbDetail = jest.fn();
+    runtime.refreshCountryCountSummary = jest.fn();
+    runtime.hideHeatmapActivityTooltip = jest.fn();
+    runtime.closePreviewGateModal = jest.fn();
+    runtime.initPaceMetricsControls = jest.fn();
+    runtime.renderTimeframeButtons = jest.fn();
+    runtime.initScatterDateSlider = jest.fn();
+    runtime.initDistributionsDateSlider = jest.fn();
+    runtime.initTrainingCalendarControls = jest.fn();
+    runtime.refreshHeatmapYearControls = jest.fn();
+    runtime.refreshVisualizationTabs = jest.fn();
+    runtime.renderDashboard = jest.fn();
+    runtime.renderPaceMetricsChart = jest.fn();
+    runtime.renderEquipmentChart = jest.fn();
+    runtime.renderPbChart = jest.fn();
+    runtime.renderTrainingCalendar = jest.fn();
+
+    runtime.commitDataset({ kind: 'tri-activities-v1', rawCsvData: [], activities: [], sourceLabel: 'First import' });
+    expect(runtime.closeExportPreviewModal).not.toHaveBeenCalled();
+    runtime.commitDataset({ kind: 'tri-activities-v1', rawCsvData: [], activities: [], sourceLabel: 'Replacement import' });
+
+    expect(runtime.setSportFilter).toHaveBeenLastCalledWith('All', false);
+    expect(runtime.setBtnActive).not.toHaveBeenCalled();
+    expect(runtime.initScatterDateSlider).toHaveBeenCalledTimes(2);
+    expect(runtime.initDistributionsDateSlider).toHaveBeenCalledTimes(2);
+    expect(runtime.initTrainingCalendarControls).toHaveBeenCalledTimes(2);
+    expect(runtime.refreshVisualizationTabs).toHaveBeenCalledTimes(2);
+    expect(runtime.closeExportPreviewModal).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves the current export preview when replacement preparation fails before commit', async () => {
+    const runtime = loadImportOperationRuntime();
+    runtime.closeExportPreviewModal = jest.fn();
+    const previousDataset = { sourceLabel: 'Previous source', activities: [{ id: 'previous' }] };
+    runtime.applied.push(previousDataset);
+
+    await expect(runtime.runAppleHealth({ name: 'invalid.zip' }, {
+      importFile: async () => { throw new Error('Invalid synthetic archive'); }
+    })).rejects.toThrow('Invalid synthetic archive');
+
+    expect(runtime.applied).toEqual([previousDataset]);
+    expect(runtime.closeExportPreviewModal).not.toHaveBeenCalled();
+  });
+
+  it('commits Apple normalized data and counts once without inventing media', async () => {
+    const runtime = loadImportOperationRuntime();
+    const activities = [{ id: 'ah-synthetic', sport: 'Run', date: new Date('2025-03-01'), distance: 5, duration: 1800 }];
+    const result = await runtime.runAppleHealth({ name: 'synthetic.zip' }, {
+      importFile: async () => ({ activities, diagnostics: { importedCount: 1 }, gpsTracksByActivityId: {} })
+    });
+    expect(result).toMatchObject({ kind: 'tri-activities-v1', sourceLabel: 'Apple Health ZIP import', importedFileCount: 1 });
+    expect(result.activities).toBe(activities);
+    expect(result.mediaLibrary).toBeUndefined();
+    expect(runtime.applied).toEqual([result]);
+    expect(runtime.recordCompletedAnalysis).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects empty Apple histories before applying or counting', async () => {
+    const runtime = loadImportOperationRuntime();
+    await expect(runtime.runAppleHealth({ name: 'empty.zip' }, { importFile: async () => ({ activities: [] }) }))
+      .rejects.toThrow('No valid running');
+    expect(runtime.applied).toEqual([]);
+    expect(runtime.recordCompletedAnalysis).not.toHaveBeenCalled();
+  });
+
+  it('ignores a superseded Apple result and its progress', async () => {
+    const runtime = loadImportOperationRuntime();
+    const pending = deferredImport();
+    const progress = jest.fn();
+    let report;
+    const old = runtime.runAppleHealth({ name: 'old.zip' }, {
+      importFile: (file, callback) => { report = callback; return pending.promise; }, reportProgress: progress
+    });
+    runtime.begin('sample');
+    report({ percent: 40 });
+    pending.resolve({ activities: [{ id: 'old' }] });
+    expect(await old).toBeNull();
+    expect(progress).not.toHaveBeenCalled();
+    expect(runtime.applied).toEqual([]);
+  });
+
   it('discards an old Strava archive and its media after a newer CSV commits', async () => {
     const runtime = loadImportOperationRuntime();
     const archive = deferredImport();
@@ -412,6 +569,7 @@ function loadRuntimeDatasetApplicator() {
     updateStatusBadge: jest.fn(),
     hideHeatmapActivityTooltip: jest.fn(),
     closePreviewGateModal: jest.fn(),
+    setSportFilter: jest.fn(),
     setBtnActive: jest.fn(),
     initPaceMetricsControls: jest.fn(),
     renderTimeframeButtons: jest.fn(),

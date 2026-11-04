@@ -90,6 +90,21 @@ function harness(years = [2020, 2021, 2022, 2023, 2024, 2025]) {
 }
 
 describe('Pace vs years controls', () => {
+  it('selects the first metric that has data when controls reset for a new import', () => {
+    const h = harness([2024]);
+    h.sandbox.processedActivities = h.sandbox.processedActivities.map(activity => ({
+      ...activity,
+      metric: 'distance'
+    }));
+
+    h.sandbox.initPaceMetricsControls({ reset: true });
+
+    expect(vm.runInContext('selectedPaceMetricsSport', h.sandbox)).toBe('Run');
+    expect(vm.runInContext('selectedPaceMetric', h.sandbox)).toBe('distance');
+    expect(h.elements.paceMetricsMetricFilters.children.find(button => button.id === 'paceMetricsMetricBtndistance').className)
+      .toContain('bg-indigo-600');
+  });
+
   it('exposes visible, non-empty year bubble series with their matching colors for export', () => {
     const h = harness([2023, 2024]);
 

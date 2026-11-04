@@ -517,11 +517,16 @@ function segmentFitRecordsByActivity(records, sessions) {
 function extractGpxTrackpoints(xmlText) {
   if (!xmlText) return [];
   const points = [];
-  const pointTagPattern = /<(?:\w+:)?(?:trkpt|rtept)\b[^>]*\blat="(-?\d+(?:\.\d+)?)"[^>]*\blon="(-?\d+(?:\.\d+)?)"[^>]*\/?>/gi;
+  const pointTagPattern = /<(?:\w+:)?(?:trkpt|rtept)\b[^>]*\/?>/gi;
+  const latitudePattern = /\blat="(-?\d+(?:\.\d+)?)"/i;
+  const longitudePattern = /\blon="(-?\d+(?:\.\d+)?)"/i;
   let match;
   while ((match = pointTagPattern.exec(xmlText)) !== null) {
-    const lat = parseFloat(match[1]);
-    const lon = parseFloat(match[2]);
+    const latitude = match[0].match(latitudePattern);
+    const longitude = match[0].match(longitudePattern);
+    if (!latitude || !longitude) continue;
+    const lat = parseFloat(latitude[1]);
+    const lon = parseFloat(longitude[1]);
     if (Number.isFinite(lat) && Number.isFinite(lon)) {
       points.push({ lat, lon });
     }

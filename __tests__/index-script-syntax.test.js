@@ -164,17 +164,17 @@ describe('finite dashboard owner adapters', () => {
     expect(owner.renderTrainingCalendar).toHaveBeenCalledTimes(1);
   });
 
-  it('exposes an immutable copy of the selected calendar years and shared palette scale', () => {
+  it('exposes an immutable copy of selected calendar years and their original yearly intensity scale', () => {
     const owner = loadOwner('dashboard-training-calendar.js', { trainingCalendarUtils: require('../src/training-calendar-utils') });
     owner.__calendarModel = {
       years: [
         { year: 2026, activityCount: 2, days: [
-          { dateKey: '2026-01-01', activityCount: 1, metricValue: 10 },
-          { dateKey: '2026-01-02', activityCount: 1, metricValue: 100 }
+          { dateKey: '2026-01-01', activityCount: 1, metricValue: 10, intensityLevel: 1 },
+          { dateKey: '2026-01-02', activityCount: 1, metricValue: 100, intensityLevel: 5 }
         ] },
         { year: 2025, activityCount: 1, days: [
-          { dateKey: '2025-01-01', activityCount: 1, metricValue: 50 },
-          { dateKey: '2025-01-02', activityCount: 0, metricValue: 0 }
+          { dateKey: '2025-01-01', activityCount: 1, metricValue: 50, intensityLevel: 5 },
+          { dateKey: '2025-01-02', activityCount: 0, metricValue: 0, intensityLevel: 0 }
         ] }
       ]
     };
@@ -183,8 +183,8 @@ describe('finite dashboard owner adapters', () => {
     const data = owner.window.trainingCalendarDashboard.getExportData();
 
     expect(data.years.map(year => year.year)).toEqual([2026, 2025]);
-    expect(data.scale).toMatchObject({ palette: 'green', minValue: 10, maxValue: 100, minLevel: 0, maxLevel: 5 });
-    expect(data.years.flatMap(year => year.days.map(day => day.intensityLevel))).toEqual([1, 5, 3, 0]);
+    expect(data.scale).toMatchObject({ scope: 'year', palette: 'green', minValue: 10, maxValue: 100, minLevel: 0, maxLevel: 5 });
+    expect(data.years.flatMap(year => year.days.map(day => day.intensityLevel))).toEqual([1, 5, 5, 0]);
     expect(data.yearSectionHeight).toBeGreaterThan(0);
     data.years[0].year = 2000;
     data.years[0].days[0].intensityLevel = 0;
@@ -714,7 +714,7 @@ describe('index.html inline script syntax', () => {
     expect(trainingCalendarCode).toContain('id="trainingCalendarSportBtn${sport}"');
     expect(inlineCode).toContain("getActiveButtonText(Array.from(document.querySelectorAll('#trainingCalendarSportFilters button')).map(button => button.id))");
     expect(inlineCode).toContain("trainingCalendar: typeof processedActivities !== 'undefined' && processedActivities.length > 0");
-  expect(inlineCode).toContain('createExportCaptureSnapshot(targetEl, tabId, { chartCapture, selection: target.pinnedSelection, target })');
+    expect(inlineCode).toContain('createExportCaptureSnapshot(targetEl, tabId, { chartCapture, selection: null, target })');
     expect(inlineCode).toContain('snapshot.resolveExportAnchor(clonedTarget)');
     expect(inlineCode).toContain('html2canvas(snapshot.element');
     expect(inlineCode).not.toContain('if (tooltipWasVisible)');
@@ -762,10 +762,11 @@ describe('index.html inline script syntax', () => {
   });
 
   it('keeps visualization export buttons content-sized across stacked headers', () => {
-    const exportButtons = [...html.matchAll(/<button\b(?=[^>]*onclick="exportVisualizationTab\('[^']+'\)")([^>]*)>/g)];
+    const exportButtons = [...html.matchAll(/<button\b(?=[^>]*class="[^"]*\bviz-export-button\b[^"]*")([^>]*)>/g)];
 
     expect(exportButtons).toHaveLength(12);
     expect(exportButtons.every(([, attributes]) => /\bclass="[^"]*\bviz-export-button\b[^"]*"/.test(attributes))).toBe(true);
+    expect(html).toContain('id="mediaGalleryExportButton" type="button" onclick="window.mediaGalleryDashboard?.createCollage?.()"');
     expect(html).toMatch(/\.viz-export-button\s*\{[^}]*width:\s*fit-content;[^}]*max-width:\s*100%;[^}]*flex-shrink:\s*0;/s);
   });
 
@@ -1017,6 +1018,13 @@ describe('index.html inline script syntax', () => {
     expect(html).toContain('class="h-5 w-8 object-contain"');
   });
 
+  it('prepares the selected Media export before opening the shared preview', () => {
+    expect(html).toContain('id="mediaGalleryExportButton"');
+    expect(html).toMatch(/id="mediaGalleryExportButton"[^>]*onclick="window\.mediaGalleryDashboard\?\.createCollage\?\.\(\)"/);
+    expect(html).toContain('aria-label="Export selected media"');
+    expect(html).not.toContain('id="mediaGalleryExportButton" type="button" onclick="exportVisualizationTab(\'mediaGallery\')"');
+  });
+
   it('composes export content without filter metadata and supports PB tile targets', () => {
     expect(inlineCode).toContain('function drawExportComposition(captured, target, assets)');
     expect(inlineCode).toContain('getExportFormatConfig(format)');
@@ -1026,7 +1034,9 @@ describe('index.html inline script syntax', () => {
     expect(inlineCode).toContain('EXPORT_DOMAIN');
     expect(inlineCode).not.toContain('Shareable visualization');
     expect(inlineCode).not.toContain('assets.qrCode');
-    expect(inlineCode).not.toContain('target.filters || []');
+    const compositionCode = inlineCode.split('function drawExportComposition(captured, target, assets)')[1]
+      .split('function drawExportTooltipBody')[0];
+    expect(compositionCode).not.toContain('target.filters || []');
     expect(inlineCode).toContain("kind: 'pb-tile'");
     expect(inlineCode).toContain("targetElementId: 'pbDetailCaptureTarget'");
     expect(inlineCode).toContain('availableControls: getAvailableControlContext(tabName)');
@@ -1070,7 +1080,8 @@ describe('index.html inline script syntax', () => {
 
   it('includes activity titles in collision-protected detail labels', () => {
     expect(inlineCode).toContain('function wrapPbActivityTitle(title, maxCharacters = 24)');
-    expect((inlineCode.match(/title: .*\.name \|\| 'Activity'/g) || [])).toHaveLength(5);
+    expect((inlineCode.match(/title: .*\.name \|\| 'Activity'/g) || [])).toHaveLength(4);
+    expect(inlineCode).not.toContain("title: String(record.title || record.name || 'Activity')");
     expect(inlineCode).toContain("svg.appendChild(createSvgElement('g'");
     expect(inlineCode).toContain("callout.appendChild(createSvgElement('rect'");
     expect(inlineCode).toContain('const labelLayouts = records.map');

@@ -187,12 +187,14 @@
             readContext: () => controller.readContext('heatmap'),
             resolveItem: event => this._hitForEvent(event),
             projectAnchor: selection => this._projectInspectionAnchor(selection.anchor),
-            snapshotCapture: (selection = controller.getPinned('heatmap')) => {
+            snapshotCapture: (captureOptions = {}) => {
+              const selection = captureOptions.includeInspection === false ? null
+                : captureOptions.selection || controller.getPinned('heatmap');
               const canvas = document.createElement('canvas');
               canvas.width = this._canvas.width;
               canvas.height = this._canvas.height;
               canvas.getContext('2d').drawImage(this._canvas, 0, 0);
-              const projected = selection ? this._projectInspectionAnchor(selection.anchor) : null;
+              const projected = selection?.anchor?.geoPoint ? this._projectInspectionAnchor(selection.anchor) : null;
               const anchor = projected && { ...projected,
                 capturePoint: projected.visibility === 'visible' ? { ...projected.capturePoint } : null,
                 associationLabel: projected.visibility === 'visible' ? projected.associationLabel : `${selection.content.itemLabel || selection.content.title}: outside the current view` };
@@ -641,6 +643,7 @@
       }
 
       const frequencyScale = window.heatmapUtils.computeRouteFrequencyScale(segmentList);
+      heatmapExportFrequencyScale = JSON.parse(JSON.stringify(frequencyScale));
 
       container.classList.remove('hidden');
       if (emptyState) emptyState.classList.add('hidden');
@@ -807,21 +810,67 @@
       return capture();
     }
 
+    let heatmapExportFrequencyScale = null;
+
     function getHeatmapExportData() {
       if (!heatmapMapInstance) return { sport: selectedHeatmapSportFilter, year: selectedHeatmapYear, colorScheme: selectedHeatmapColorScheme, viewport: null };
       const center = heatmapMapInstance.getCenter();
       const bounds = heatmapMapInstance.getBounds();
+      const size = heatmapMapInstance.getSize();
+      const activities = typeof importedDataset !== 'undefined' ? importedDataset?.activities || [] : [];
+      const years = activities.filter(activity => selectedHeatmapSportFilter === 'All' || activity.sport === selectedHeatmapSportFilter)
+        .map(activity => new Date(activity.date).getFullYear()).filter(Number.isFinite);
       const normalizedCenter = Array.isArray(center) ? center.slice() : [center.lat, center.lng];
       return {
         sport: selectedHeatmapSportFilter,
         year: selectedHeatmapYear,
+        period: selectedHeatmapYear !== 'all' ? String(selectedHeatmapYear)
+          : years.length ? `${Math.min(...years)}-${Math.max(...years)}` : null,
+        metricLabel: 'Route frequency', unit: 'activities per segment',
         colorScheme: selectedHeatmapColorScheme,
+        scale: heatmapExportFrequencyScale ? JSON.parse(JSON.stringify(heatmapExportFrequencyScale)) : null,
         viewport: {
           center: normalizedCenter,
           zoom: heatmapMapInstance.getZoom(),
+          width: size.x, height: size.y, aspectRatio: size.x / size.y,
           bounds: [bounds.getSouth(), bounds.getWest(), bounds.getNorth(), bounds.getEast()]
         }
       };
     }
 
-    window.heatmapDashboard = { captureAtExportSize, getExportData: getHeatmapExportData };
+    function captureHeatmapExportSurface() {
+      const source = document.getElementById('heatmapMapContainer');
+      if (!source || !heatmapMapInstance) throw new Error('Map is not ready to export');
+      const model = getHeatmapExportData();
+      const element = source.cloneNode(true);
+      const sourceCanvases = Array.from(source.querySelectorAll('canvas'));
+      Array.from(element.querySelectorAll('canvas')).forEach((canvas, index) => {
+        const original = sourceCanvases[index];
+        canvas.width = original.width; canvas.height = original.height;
+        canvas.getContext('2d').drawImage(original, 0, 0);
+      });
+      const sourceImages = Array.from(source.querySelectorAll('img'));
+      const images = Array.from(element.querySelectorAll('img'));
+      images.forEach((image, index) => {
+        image.src = sourceImages[index]?.currentSrc || sourceImages[index]?.src || image.src;
+        image.removeAttribute('srcset');
+      });
+      element.querySelectorAll('.leaflet-control-zoom, #heatmapActivityTooltip, .visualization-detail-tooltip, [data-tooltip-inspector]').forEach(control => control.remove());
+      Object.assign(element.style, { position: 'fixed', left: '-100000px', top: '0',
+        width: `${model.viewport.width}px`, height: `${model.viewport.height}px`, maxWidth: 'none', overflow: 'hidden' });
+      element.id = 'heatmap-isolated-export';
+      let released = false;
+      return {
+        element, model,
+        async prepare() {
+          if (released) throw new Error('Map export snapshot has been released');
+          document.body.appendChild(element);
+          await Promise.all(images.map(image => typeof image.decode === 'function' ? image.decode() : Promise.resolve()));
+          if (released) throw new Error('Map export snapshot has been released');
+        },
+        release() { if (released) return; released = true; element.remove(); }
+      };
+    }
+
+    window.heatmapDashboard = { captureAtExportSize, getExportData: getHeatmapExportData,
+      captureExportSurface: captureHeatmapExportSurface };

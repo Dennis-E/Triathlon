@@ -188,6 +188,7 @@
     }
 
     let activePbDetailModel = null;
+    let pbExportOverviewModels = [];
     let pbDetailReturnFocus = null;
     let pbDetailOpening = null;
     let pbTooltipAdapter = null;
@@ -635,20 +636,29 @@
       window.dashboardTooltips?.refreshAnchor?.();
     }
 
-    function getActivePbExportData() {
-      const model = activePbDetailModel;
+    function buildPbExportData(model) {
       if (!model || !Array.isArray(model.records) || model.records.length === 0) return null;
       const direction = model.direction === 'up' ? 'up' : 'down';
+      const profile = ['duration', 'duration-category'].includes(model.xAxisMode);
+      const sportMatch = String(model.exportKey || model.title || '').match(/^(run|bike|swim)/i);
+      const sport = model.sport || (sportMatch ? { run: 'Run', bike: 'Bike', swim: 'Swim' }[sportMatch[1].toLowerCase()] : null);
+      const unit = /power|watt|\(W\)/i.test(model.axisLabel) ? 'W'
+        : /elevation/i.test(model.axisLabel) ? 'm'
+          : /distance/i.test(model.axisLabel) ? 'km'
+            : /100m/i.test(model.axisLabel) ? 'min/100m'
+              : /pace|\/km/i.test(model.axisLabel) ? 'min/km' : 's';
       const records = model.records.map((record, index) => ({
         index,
         value: Number.isFinite(record.value) ? record.value
           : Number.isFinite(record.watts) ? record.watts
             : Number.isFinite(record.duration) ? record.duration : null,
-        date: record.date || null,
-        title: String(record.title || record.name || 'Activity'),
+        date: record.date ? new Date(record.date) : null,
+        durationSeconds: record.durationSeconds ?? record.targetSeconds ?? record.record?.targetSeconds ?? null,
+        durationLabel: record.durationLabel ?? null,
         displayValue: typeof model.formatValue === 'function' && Number.isFinite(record.value)
           ? model.formatValue(record.value) : String(record.value ?? record.watts ?? record.duration ?? ''),
-        sourceType: record.sourceType || record.record?.sourceType || record.record?.source || null
+        sourceType: record.sourceType || record.effortSource || record.record?.sourceType
+          || record.record?.effortSource || record.record?.source || null
       })).filter(record => Number.isFinite(record.value));
       if (records.length === 0) return null;
 
@@ -673,7 +683,7 @@
         { kind: 'current', record: records[records.length - 1] }
       ];
       const seen = new Set();
-      const milestones = candidates.filter(candidate => {
+      const milestones = (profile ? [] : candidates).filter(candidate => {
         if (seen.has(candidate.record.index)) return false;
         seen.add(candidate.record.index);
         return true;
@@ -682,14 +692,14 @@
         value: record.value,
           displayValue: record.displayValue,
         date: record.date,
-        title: record.title,
         sourceType: record.sourceType
       }));
       const exportRecords = records.map(record => ({
         value: record.value,
         displayValue: record.displayValue,
         date: record.date,
-        sourceType: record.sourceType
+        sourceType: record.sourceType,
+        ...(profile ? { durationSeconds: record.durationSeconds, durationLabel: record.durationLabel } : {})
       }));
       const summarizeRecord = record => ({
         value: record.value,
@@ -697,29 +707,49 @@
         date: record.date,
         sourceType: record.sourceType
       });
+      const sourceDates = (typeof processedActivities !== 'undefined' ? processedActivities : records)
+        .map(item => item.date ? new Date(item.date).getTime() : null).filter(Number.isFinite);
 
       return {
         title: model.title,
+        definitionKey: model.exportKey || model.title,
+        sport, unit, xAxisMode: profile ? 'duration' : 'time',
+        period: sourceDates.length ? `${new Date(Math.min(...sourceDates)).getFullYear()}-${new Date(Math.max(...sourceDates)).getFullYear()}` : null,
+        periodStart: sourceDates.length ? Math.min(...sourceDates) : null,
+        periodEnd: sourceDates.length ? Math.max(...sourceDates) : null,
+        sourceAttribution: Array.from(new Set(records.map(record => record.sourceType).filter(Boolean))).join(', ') || null,
         metricLabel: model.axisLabel,
         direction,
         recordCount: records.length,
         records: exportRecords,
-        firstRecord: summarizeRecord(records[0]),
-        currentRecord: summarizeRecord(records[records.length - 1]),
-        best: {
+        firstRecord: profile ? null : summarizeRecord(records[0]),
+        currentRecord: profile ? null : summarizeRecord(records[records.length - 1]),
+        best: profile ? null : {
           value: best.value,
           displayValue: best.displayValue,
           date: best.date,
-          title: best.title,
           sourceType: best.sourceType
         },
         milestones
       };
     }
 
-    window.personalBestsDashboard = { getActiveExportData: getActivePbExportData };
+    function getActivePbExportData() {
+      return buildPbExportData(activePbDetailModel);
+    }
+
+    function getOverviewPbExportData() {
+      const groups = pbExportOverviewModels.map(buildPbExportData).filter(Boolean);
+      const dates = groups.flatMap(group => group.records.map(record => record.date ? record.date.getTime() : null)).filter(Number.isFinite);
+      return groups.length ? { sport: 'All', metricLabel: 'Personal bests', groups,
+        period: dates.length ? `${new Date(Math.min(...dates)).getFullYear()}-${new Date(Math.max(...dates)).getFullYear()}` : null,
+        periodStart: dates.length ? Math.min(...dates) : null, periodEnd: dates.length ? Math.max(...dates) : null } : null;
+    }
+
+    window.personalBestsDashboard = { getActiveExportData: getActivePbExportData, getOverviewExportData: getOverviewPbExportData };
 
     function renderPbChart() {
+      pbExportOverviewModels = [];
       const activities = processedActivities;
       const efforts = typeof fitBestEffortsByActivityId !== 'undefined' ? fitBestEffortsByActivityId : null;
       if (pbTooltipSource !== activities || pbTooltipEffortSource !== efforts) {
@@ -861,6 +891,7 @@
       }
 
       function appendPbDetailButton(header, model, tileElement) {
+        pbExportOverviewModels.push(model);
         header.classList.add('justify-between', 'gap-2');
         const actions = document.createElement('div');
         actions.className = 'flex items-center gap-1';

@@ -90,6 +90,36 @@ function harness(years = [2020, 2021, 2022, 2023, 2024, 2025]) {
 }
 
 describe('Pace vs years controls', () => {
+  it('exports selected numeric observations, year visibility and fixed axes without live activity metadata', () => {
+    const h = harness([2023, 2024]);
+    h.click(2023);
+    const model = h.sandbox.window.paceMetricsDashboard.getExportData();
+    expect(model).toMatchObject({ sport: 'Run', metric: 'heartRate', pointSizeMeaning: 'Duration',
+      xAxisTitle: 'Pace', yAxisTitle: 'Average heart rate (bpm)' });
+    expect(model.series.map(series => series.label)).toEqual(['2024']);
+    expect(model.points).toHaveLength(2);
+    expect(model.points[0]).toMatchObject({ x: 5, y: 150, r: 5 });
+    expect(model.chartInput.visibility).toEqual([false, true, false, true]);
+    expect(model.chartInput.options.plugins.tooltip.enabled).toBe(false);
+    expect(model.chartInput.data.datasets.every(dataset => dataset.clip === false)).toBe(true);
+    expect(model.chartInput.options.scales.x.offset).toBe(true);
+    expect(model.chartInput.options.scales.y.offset).toBe(true);
+    const before = JSON.stringify(model);
+    h.charts.at(-1).data.datasets[1].data[0].x = 99;
+    expect(JSON.stringify(model)).toBe(before);
+    expect(model.points[0].meta).toBeUndefined();
+  });
+
+  it('distinguishes narrow pace ticks without rounding every numeric position to the same label', () => {
+    const h = harness([2025]);
+    h.charts.at(-1).data.datasets[0].data[1].x = 5.00001;
+    const model = h.sandbox.window.paceMetricsDashboard.getExportData();
+    const ticks = model.chartInput.options.scales.x.ticks;
+    expect(model.xAxisTitle).toBe('Pace (min/km)');
+    expect(ticks.callback(5)).not.toBe(ticks.callback(5.00001));
+    expect(model.points.map(point => point.x)).toEqual([5, 5.00001]);
+  });
+
   it('exposes visible, non-empty year bubble series with their matching colors for export', () => {
     const h = harness([2023, 2024]);
 

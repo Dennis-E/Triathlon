@@ -9,6 +9,57 @@ const wordcloudDashboard = fs.readFileSync(path.join(ROOT, 'src', 'dashboard-wor
 const dashboardExport = fs.readFileSync(path.join(ROOT, 'src', 'dashboard-export.js'), 'utf8');
 
 describe('Wordcloud dashboard contract', () => {
+  it('does not drop the minimum-frequency word at the library exclusive size threshold', async () => {
+    const nodes = new Map();
+    const makeNode = () => ({ value: '50', style: {}, parentElement: { clientWidth: 640 }, listeners: {},
+      classList: { contains: () => false, toggle() {}, add() {}, remove() {} },
+      replaceChildren() {}, appendChild() {}, append() {}, setAttribute() {},
+      addEventListener(type, handler) { this.listeners[type] = handler; }, removeEventListener() {} });
+    const WordCloud = jest.fn((canvas, options) => {
+      for (const item of options.list) canvas.listeners.wordclouddrawn?.({ detail: { item,
+        drawn: options.weightFactor(item[1]) > options.minSize } });
+      canvas.listeners.wordcloudstop?.();
+    });
+    WordCloud.isSupported = true;
+    const owner = vm.createContext({ window: { wordcloudUtils: require('../src/wordcloud-utils'), WordCloud,
+      addEventListener() {}, setTimeout: () => 1, clearTimeout() {} },
+      document: { createElement: makeNode, getElementById(id) { if (!nodes.has(id)) nodes.set(id, makeNode()); return nodes.get(id); } },
+      processedActivities: [{ name: 'Alpha Alpha Bravo' }], Map, Set });
+    vm.runInContext(wordcloudDashboard, owner);
+    owner.window.renderWordcloud();
+    const data = owner.window.wordcloudDashboard.getExportData();
+    const surface = owner.window.wordcloudDashboard.createExportCanvas(data,
+      { itemIndexes: [1], visualization: { width: 888, height: 700 } });
+    await expect(surface.prepare()).resolves.toBe(surface.canvas);
+    const settings = WordCloud.mock.calls.at(-1)[1];
+    expect(settings.weightFactor(1)).toBeGreaterThanOrEqual(36);
+    expect(settings.minSize).toBeLessThan(36);
+    surface.release();
+  });
+
+  it('exports the included terms and actual counts without depending on later title changes', () => {
+    const nodes = new Map();
+    const makeNode = () => ({ value: '50', style: {}, parentElement: { clientWidth: 640 }, listeners: {},
+      classList: { contains: () => false, toggle() {}, add() {}, remove() {} },
+      replaceChildren() {}, appendChild() {}, append() {}, setAttribute() {},
+      addEventListener(type, handler) { this.listeners[type] = handler; }, removeEventListener() {} });
+    const WordCloud = jest.fn();
+    WordCloud.isSupported = true;
+    const context = vm.createContext({ window: { wordcloudUtils: require('../src/wordcloud-utils'), WordCloud, addEventListener() {} },
+      document: { createElement: makeNode, getElementById(id) { if (!nodes.has(id)) nodes.set(id, makeNode()); return nodes.get(id); } },
+      processedActivities: [{ name: 'Alpha Alpha Bravo' }], Map, Set });
+    vm.runInContext(wordcloudDashboard, context);
+    context.window.renderWordcloud();
+    const canvas = nodes.get('wordcloudCanvas');
+    canvas.listeners.wordclouddrawn({ detail: { item: ['alpha', 2], drawn: true } });
+    canvas.listeners.wordclouddrawn({ detail: { item: ['bravo', 1], drawn: true } });
+    const model = context.window.wordcloudDashboard.getExportData();
+    expect(model.words.map(word => ({ text: word.text, count: word.count }))).toEqual([{ text: 'alpha', count: 2 }, { text: 'bravo', count: 1 }]);
+    const before = JSON.stringify(model);
+    context.processedActivities[0].name = 'Different private title';
+    expect(JSON.stringify(model)).toBe(before);
+  });
+
   it.each([[true, false, true], [true, true, false], [false, false, false]])('handles partial layout (drawn=%s, stale=%s, exportable=%s)', async (drawn, stale, exportable) => {
     const nodes = new Map();
     const makeNode = () => ({ value: '50', style: {}, parentElement: { clientWidth: 292 }, listeners: {},
@@ -253,7 +304,7 @@ describe('Wordcloud dashboard contract', () => {
     expect(dashboardExport.includes('wordcloud: !!(window.wordcloudDashboard && window.wordcloudDashboard.canRequestExport())')).toBe(true);
     expect(dashboardExport.includes('await window.wordcloudDashboard.waitForCurrentRender()')).toBe(false);
     expect(dashboardExport.includes('if (!window.wordcloudDashboard.hasExportableCloud())')).toBe(true);
-  expect(dashboardExport.includes('snapshot = createExportCaptureSnapshot(targetEl, tabId, { chartCapture, selection: target.pinnedSelection, target })')).toBe(true);
+    expect(dashboardExport.includes('snapshot = createExportCaptureSnapshot(targetEl, tabId, { chartCapture, selection: null, target })')).toBe(true);
     expect(wordcloudDashboard.includes('hasExportableCloud')).toBe(true);
     expect(wordcloudDashboard.includes('waitForCurrentRender')).toBe(true);
   });

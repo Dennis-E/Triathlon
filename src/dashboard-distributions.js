@@ -5,6 +5,7 @@
      let distributionsChartInstance = null;
      let distributionsDateRange = { start: 0, end: 0 };
      let distributionsDateCandidates = [];
+    let distributionsExportData = null;
 
     const DISTRIBUTIONS_METRIC_CONFIG = {
       length: { label: 'Length' },
@@ -198,6 +199,7 @@
     }
 
     function renderDistributionsChart() {
+      distributionsExportData = null;
       const canvas = document.getElementById('distributionsChart');
       const emptyState = document.getElementById('distributionsEmptyState');
       if (!canvas) return;
@@ -397,4 +399,47 @@
         }
       });
       window.dashboardTooltips?.attachChart('distributions', distributionsChartInstance);
+      const tickLabels = buckets.map((bucket, index) => ({ value: getBucketLineX(bucket), label: bucketLabels[index] }));
+      const chartData = JSON.parse(JSON.stringify(distributionsChartInstance.data || distributionsChartInstance.config.data));
+      distributionsExportData = {
+        metric: selectedDistributionsMetric, metricLabel: metricConfig.label,
+        sport: selectedDistributionsSportFilter, mode: selectedDistributionsDisplayMode,
+        colorScheme: selectedDistributionsColorScheme,
+        unit: selectedDistributionsMetric === 'pace' ? PACE_UNIT_BY_SPORT[selectedDistributionsSportFilter] || 'km/h'
+          : { length: 'km', duration: 'h:m', elevation: 'm', power: 'W' }[selectedDistributionsMetric],
+        period: minDate && maxDate ? `${formatDateIso(minDate)} - ${formatDateIso(maxDate)}` : null,
+        periodStart: minDate?.getTime() ?? null, periodEnd: maxDate?.getTime() ?? null,
+        bins: buckets.map(bucket => ({ ...bucket,
+          rangeStart: Number.isFinite(bucket.rangeStart) ? bucket.rangeStart : null,
+          rangeEnd: Number.isFinite(bucket.rangeEnd) ? bucket.rangeEnd : null })),
+        activityCount, xAxisTitle: axisTitleText, yAxisTitle: 'Activities',
+        chartInput: { type: selectedDistributionsDisplayMode === 'line' ? 'line' : 'bar', data: chartData,
+          visibility: datasets.map(() => true), plugins: [],
+          options: { responsive: false, animation: false, maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: { enabled: false } },
+            scales: {
+              x: { type: selectedDistributionsDisplayMode === 'line' ? 'linear' : 'category', reverse: shouldReverseAxis,
+                title: { display: true, text: axisTitleText, color: '#f8fafc' },
+                ticks: { color: '#f8fafc', callback: selectedDistributionsDisplayMode === 'line'
+                  ? value => tickLabels.reduce((closest, entry) => Math.abs(entry.value - value) < Math.abs(closest.value - value) ? entry : closest, tickLabels[0])?.label || value
+                  : value => bucketLabels[Number(value)] || value } },
+              y: { beginAtZero: true, title: { display: true, text: 'Activities', color: '#f8fafc' }, ticks: { color: '#f8fafc', precision: 0 } }
+            }
+          }
+        }
+      };
     }
+
+    function getDistributionsExportData() {
+      if (!distributionsExportData || !distributionsChartInstance) return null;
+      const copy = value => Array.isArray(value) ? value.map(copy)
+        : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, copy(entry)])) : value;
+      const data = copy(distributionsExportData);
+      data.chartInput.visibility = data.chartInput.data.datasets.map((_dataset, index) => typeof distributionsChartInstance.isDatasetVisible === 'function'
+        ? distributionsChartInstance.isDatasetVisible(index) : true);
+      data.series = data.chartInput.data.datasets.filter((_dataset, index) => data.chartInput.visibility[index])
+        .map(dataset => ({ label: dataset.label, color: dataset.borderColor || dataset.backgroundColor }));
+      return data;
+    }
+
+    window.distributionsDashboard = { getExportData: getDistributionsExportData };

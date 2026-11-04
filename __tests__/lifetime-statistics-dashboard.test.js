@@ -56,6 +56,20 @@ const coreSummary = {
 };
 
 describe('lifetime statistics dashboard', () => {
+  it('exports copied summary values with availability and no private titles or dashboard-only table', () => {
+    const summary = JSON.parse(JSON.stringify(coreSummary));
+    summary.activityTitle = 'PRIVATE ACTIVITY TITLE';
+    const { window } = createDashboardContext(createLifetimeBaselineActivities(), summary);
+    window.lifetimeStatisticsDashboard.render();
+    const model = window.lifetimeStatisticsDashboard.getExportData();
+    expect(model.summary.distance).toEqual({ value: 55, availableCount: 3, activityCount: 4, status: 'partial' });
+    expect(model.summary.elevationGain.value).toBeNull();
+    expect(model.summary.sportSummaries).toBeUndefined();
+    expect(JSON.stringify(model)).not.toContain('PRIVATE ACTIVITY TITLE');
+    summary.distance.value = 999;
+    expect(model.summary.distance.value).toBe(55);
+  });
+
   it('pins totals, sports and milestones through their content without separate pin symbols', () => {
     const { context, elements, window } = createDashboardContext(createLifetimeBaselineActivities(), coreSummary);
     const api = { registerAdapter: jest.fn(), readContext: jest.fn(), show: jest.fn(), refreshAnchor: jest.fn(),

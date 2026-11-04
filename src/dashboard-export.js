@@ -7,9 +7,11 @@
     let currentExportSeriesIndex = 0;
     let selectedExportFormat = 'square';
     let selectedExportHumorEnabled = false;
+    let exportCompositionPending = false;
     let lastExportCaptureState = null;
     let exportAssetsPromise = null;
     let exportDownloadAttempt = null;
+    let exportSessionSequence = 0;
 
     const EXPORT_CAPTURE_TARGET_IDS = {
       totalDistance: 'totalDistanceChartWrapper',
@@ -26,6 +28,100 @@
       lifetimeStatistics: 'lifetimeStatisticsExportArea',
       mediaGallery: 'mediaGalleryExportArea'
     };
+
+    let exportSelectionSequence = 0;
+    let exportDatasetSequence = 0;
+    const exportDatasetIdentities = new WeakMap();
+    const EXPORT_FAMILY_RENDERERS = Object.create(null);
+    const EXPORT_ADAPTERS = Object.freeze(Object.fromEntries(Object.keys(EXPORT_CAPTURE_TARGET_IDS).map(key => [key, {
+      captureSelection: (target, data, context) => captureExportSelection(target, data, context),
+      renderPage: (...args) => {
+        if (!args[0]?.snapshot || !args[0]?.context || !args[0]?.page) throw new Error('Export renderer input is not ready');
+        const renderer = EXPORT_FAMILY_RENDERERS[key];
+        if (typeof renderer !== 'function') throw new Error(`Export renderer is not ready for ${key}`);
+        return renderer(...args);
+      }
+    }])));
+
+    function captureExportSelection(target, data = {}, context = {}) {
+      const targetKey = target?.kind === 'pb-tile' ? 'personalBests' : target?.key;
+      if (!EXPORT_CAPTURE_TARGET_IDS[targetKey]) throw new RangeError('Unknown export target');
+      if (target.hasData !== true) throw new Error('No data available for export');
+      const dataset = context.dataset;
+      let datasetIdentity = 'dataset-none';
+      if (dataset && typeof dataset === 'object') {
+        if (!exportDatasetIdentities.has(dataset)) exportDatasetIdentities.set(dataset, `dataset-${++exportDatasetSequence}`);
+        datasetIdentity = exportDatasetIdentities.get(dataset);
+      }
+      const equipmentNames = ['equipment', 'equipmentTimeline'].includes(targetKey);
+      const locationAllowed = targetKey === 'heatmap' || (targetKey === 'mediaGallery' && data.includeRoutes === true);
+      const fields = new Set([
+        'sport', 'metric', 'metricLabel', 'unit', 'period', 'periodLabels', 'aggregation', 'series',
+        'trendLines', 'items', 'years', 'palette', 'scale', 'best', 'milestones', 'records',
+        'firstRecord', 'currentRecord', 'recordCount', 'firstRecordYear', 'title', 'sourceAttribution',
+        'xAxisTitle', 'yAxisTitle', 'pointSizeMeaning', 'centralValue', 'centralDisplayValue',
+        'incompleteYear', 'rankingBy', 'equipmentFilter', 'mode', 'periodMeaning', 'groupBy',
+        'resolution', 'definitions', 'points', 'bins', 'slices', 'summary', 'coverage', 'metricKind',
+        'axisMode', 'xAxisMode', 'durationSeconds', 'durationLabel', 'viewBounds', 'viewport',
+        'dates', 'days', 'totals', 'domain', 'visibility', 'frequencies', 'filters', 'colorScheme',
+        'year', 'selectedYears', 'sourceType', 'scope', 'selectedAssetKeys', 'mediaKind',
+        'includeRoutes', 'eligibleCount', 'displayedCount', 'legend', 'groups', 'words', 'weightDomain',
+        'periodStart', 'periodEnd', 'totalCount', 'scaleStart', 'scaleEnd', 'granularity',
+        'rawUnit', 'valueDivisor', 'status', 'activityCount', 'excludedCount', 'denominator',
+        'countrySummary', 'preparationVersion', 'definitionKey'
+      ]);
+      const forbidden = new Set(['rawActivities', 'rawActivity', 'activity', 'activityName', 'activityTitle',
+        'sourceElement', 'element', 'canvas', 'chart', 'document', 'filename', '__proto__', 'constructor', 'prototype']);
+      const locationFields = new Set(['lat', 'lon', 'latitude', 'longitude', 'coordinates']);
+      const ancestors = new Set();
+      const copy = (value, depth = 0) => {
+        if (value === null || value === undefined || typeof value === 'string' || typeof value === 'boolean') return value;
+        if (typeof value === 'number') {
+          if (!Number.isFinite(value)) throw new TypeError('Invalid numeric export content');
+          return value;
+        }
+        if (Object.prototype.toString.call(value) === '[object Date]') {
+          const epoch = value.getTime();
+          if (!Number.isFinite(epoch)) throw new TypeError('Invalid export date');
+          return epoch;
+        }
+        if (typeof value !== 'object' || value.nodeType || value.tagName
+            || (!Array.isArray(value) && Object.prototype.toString.call(value) !== '[object Object]')
+            || ancestors.has(value)) throw new TypeError('Export content must contain plain acyclic values');
+        ancestors.add(value);
+        let result;
+        if (Array.isArray(value)) {
+          result = value.map(item => copy(item, depth + 1));
+        } else {
+          result = {};
+          for (const [key, entry] of Object.entries(value)) {
+            if (forbidden.has(key) || (locationFields.has(key) && !locationAllowed)
+                || (key === 'name' && !equipmentNames)
+                || (key === 'title' && depth > 0 && !(targetKey === 'personalBests' && typeof value.definitionKey === 'string'))
+                || (key === 'activities' && targetKey !== 'equipmentTimeline')) continue;
+            if (key === 'activities' && Array.isArray(entry) && entry.some(item => item && typeof item === 'object'
+                && Object.prototype.toString.call(item) !== '[object Date]')) throw new TypeError('Timeline export content requires activity dates, not activity objects');
+            result[key] = copy(entry, depth + 1);
+          }
+        }
+        ancestors.delete(value);
+        return Object.freeze(result);
+      };
+      const familyData = copy(Object.fromEntries(Object.entries(data).filter(([key]) => fields.has(key))));
+      return Object.freeze({
+        selectionId: `selection-${++exportSelectionSequence}`,
+        datasetIdentity, targetKey, targetKind: target.kind || 'tab',
+        variantKey: target.detailKey || context.variantKey || target.key,
+        capturedAt: Date.now(), filters: copy(target.filters || []),
+        period: familyData.period ?? null, metric: familyData.metric ?? familyData.metricLabel ?? null,
+        units: familyData.unit ?? null, familyData,
+        legend: copy(target.legend || familyData.legend || null),
+        provenance: copy(target.sampleProvenance || null),
+        attribution: copy(context.attribution || null),
+        disclosure: copy(context.disclosure || {}),
+        pbOpening: context.pbOpening ?? null
+      });
+    }
 
     const EXPORT_DOMAIN = window.exportUtils.getExportBrandConfig().domain;
 
@@ -235,37 +331,48 @@
       let centralValue = Number.isFinite(data.centralValue) ? data.centralValue : null;
 
       if (tabName === 'totalDistance') {
-        headline = ({ Run: 'My running years', Bike: 'My cycling years', Swim: 'My swimming years' })[data.sport] || 'My training years';
+        const selectedSport = ({ Run: 'Run', Bike: 'Bike', Swim: 'Swim' })[data.sport] || 'Training';
+        const aggregation = { daily: 'day', weekly: 'week', monthly: 'month', yearly: 'year' }[data.aggregation];
+        const selectedMetric = String(data.metricLabel || metric || 'Distance').toLowerCase();
+        headline = `${selectedSport} ${selectedMetric}${aggregation ? ` by ${aggregation}` : ''}`;
       } else if (tabName === 'equipment') {
-        headline = data.equipmentFilter === 'Shoes' ? 'My most-used running shoes'
-          : data.equipmentFilter === 'Bikes' ? 'My most-used bikes' : 'My most-used equipment';
+        const category = data.equipmentFilter === 'Shoes' ? 'Shoe'
+          : data.equipmentFilter === 'Bikes' ? 'Bike' : 'Equipment';
+        headline = `${category} ${String(metric || 'activity').toLowerCase()} ranking`;
       } else if (tabName === 'equipmentTimeline') {
-        headline = data.equipmentFilter === 'Shoes' ? 'My running shoe eras'
-          : data.equipmentFilter === 'Bikes' ? 'My cycling equipment eras' : 'My equipment eras';
+        const category = data.equipmentFilter === 'Shoes' ? 'Shoe'
+          : data.equipmentFilter === 'Bikes' ? 'Bike' : 'Equipment';
+        const mode = data.mode === 'activities' ? 'activity' : 'usage';
+        headline = `${category} ${mode} timeline`;
       } else if (tabName === 'personalBests' || tabName === 'pb-tile') {
         const recordTitle = String(data.title || '').trim();
         headline = /^PB:/i.test(recordTitle) ? recordTitle : recordTitle ? `PB: ${recordTitle}` : 'My personal bests';
         if (data.best && Number.isFinite(data.best.value)) centralValue = data.best.value;
       } else if (tabName === 'heatmap') {
-        headline = 'My training playground';
+        headline = `${sport && sport !== 'All sports' ? sport + ' ' : ''}route heatmap`;
       } else if (tabName === 'paceMetrics') {
         const measure = metric || 'Heart rate';
         const performance = data.sport === 'Bike' ? 'speed' : 'pace';
         headline = `My ${measure.toLowerCase()} vs ${performance}`;
       } else {
         headline = {
-          distributions: 'My training distribution',
-          workoutTime: 'My workout rhythm',
-          trainingCalendar: 'My training year',
-          wordcloud: 'My workout words',
-          pieCharts: 'How I train',
-          lifetimeStatistics: 'My training totals',
-          mediaGallery: 'My training moments'
-        }[tabName] || 'My training story';
+          distributions: `${sport && sport !== 'All sports' ? sport + ' ' : ''}${String(metric || 'training').toLowerCase()} distribution`,
+          workoutTime: `${sport && sport !== 'All sports' ? sport + ' ' : ''}${String(metric || 'workouts').toLowerCase()} by $granularity`,
+          trainingCalendar: `${sport && sport !== 'All sports' ? sport + ' ' : ''}${String(data.metricLabel || 'training frequency').replace(/^daily\s+/i, '').toLowerCase()} calendar`,
+          wordcloud: `Workout title frequency: ${Number(data.wordCount) || data.words?.length || 'selected'} words`,
+          pieCharts: `Activities by ${String(data.groupBy || 'category').toLowerCase()}`,
+          lifetimeStatistics: 'Lifetime training summary',
+          mediaGallery: data.mediaKind === 'annual' ? `${data.period || 'Annual'} training media recap` : 'Training media collage'
+        }[tabName] || 'Training visualization';
+      }
+
+      if (tabName === 'workoutTime') {
+        const pattern = { day: 'start time', week: 'weekday', month: 'day of month', year: 'month' }[data.granularity];
+        headline = pattern ? headline.replace('$granularity', pattern) : `${sport} workout measure`;
       }
 
       let secondaryLine = null;
-      if (options.humorEnabled && tabName !== 'paceMetrics') {
+      if (options.humorEnabled) {
         if (tabName === 'totalDistance') {
           secondaryLine = data.sport === 'Bike' ? 'Just one more kilometre.'
             : data.sport === 'Swim' ? 'A lot of counting lengths.'
@@ -294,6 +401,10 @@
         } else if (tabName === 'mediaGallery') {
           secondaryLine = 'Proof I did leave the house.';
         }
+        secondaryLine ||= ({
+          totalDistance: 'One session at a time.', paceMetrics: 'Dots, not destiny.',
+          equipment: 'Good gear earns its keep.', equipmentTimeline: 'Every era starts somewhere.'
+        })[tabName] || 'The data got a little personality.';
       }
 
       const context = [];
@@ -315,6 +426,13 @@
       addContext('X axis', data.xAxisTitle);
       addContext('Y axis', data.yAxisTitle);
       addContext('Point size', data.pointSizeMeaning);
+      if (tabName === 'heatmap' && data.scale?.hasRange) {
+        addContext('Route frequency', `${data.scale.minCount}-${data.scale.maxCount} traversals per segment; logarithmic colour`);
+      }
+      if (tabName === 'mediaGallery') {
+        addContext('Media selection', `${data.displayedCount || 0} of ${data.eligibleCount || 0} readable items`);
+        if (data.includeRoutes) addContext('Routes', 'Included by selection');
+      }
       if (tabName === 'paceMetrics') {
         const summaryParts = [
           ...(data.sport ? [`${sport}.`] : []),
@@ -336,6 +454,12 @@
           summary = `From ${firstRecord.displayValue} to ${currentRecord.displayValue}${firstYear ? ` since ${firstYear}` : ''}`;
         }
         sourceAttribution = data.sourceAttribution || data.best?.sourceType || currentRecord?.sourceType || null;
+      }
+      if (tabName === 'heatmap' && data.scale?.hasRange) {
+        summary = `${data.scale.minCount}-${data.scale.maxCount} traversals per segment; logarithmic colour scale`;
+      }
+      if (tabName === 'mediaGallery') {
+        summary = `${data.displayedCount || 0} of ${data.eligibleCount || 0} readable media items`;
       }
 
       return {
@@ -471,6 +595,41 @@
       }));
     }
 
+    function getStructuredExportData(tabName, kind = 'tab') {
+      const providers = {
+        totalDistance: () => window.totalDistanceDashboard?.getExportData?.(),
+        paceMetrics: () => window.paceMetricsDashboard?.getExportData?.(),
+        equipment: () => window.equipmentDashboard?.getExportModel?.('ranking'),
+        equipmentTimeline: () => window.equipmentDashboard?.getExportModel?.('timeline'),
+        personalBests: () => kind === 'pb-tile' ? window.personalBestsDashboard?.getActiveExportData?.()
+          : window.personalBestsDashboard?.getOverviewExportData?.(),
+        heatmap: () => window.heatmapDashboard?.getExportData?.(),
+        distributions: () => window.distributionsDashboard?.getExportData?.(),
+        workoutTime: () => window.workoutTimeDashboard?.getExportData?.(),
+        trainingCalendar: () => window.trainingCalendarDashboard?.getExportData?.(),
+        wordcloud: () => window.wordcloudDashboard?.getExportData?.(),
+        pieCharts: () => window.pieChartsDashboard?.getExportData?.(),
+        lifetimeStatistics: () => window.lifetimeStatisticsDashboard?.getExportData?.(),
+        mediaGallery: () => window.mediaGalleryDashboard?.getExportData?.()
+      };
+      return providers[tabName]?.();
+    }
+
+    function initializeStructuredExportTarget(target, data) {
+      if (data === undefined) return target;
+      if (!data) return null;
+      const key = target.kind === 'pb-tile' ? 'personalBests' : target.key;
+      target.exportData = data;
+      target.presentation = getSocialExportPresentation(target.kind === 'pb-tile' ? 'pb-tile' : key, data);
+      target.selectionSnapshot = captureExportSelection(target, data, {
+        dataset: typeof importedDataset !== 'undefined' ? importedDataset : null,
+        pbOpening: target.kind === 'pb-tile' && typeof pbDetailOpening !== 'undefined' ? pbDetailOpening : null,
+        attribution: key === 'heatmap' ? ['OpenStreetMap contributors', 'openstreetmap.org/copyright'] : null
+      });
+      target.structuredChartInput = data.chartInput || null;
+      return target;
+    }
+
     function getTabExportTarget(tabName) {
       const targetId = EXPORT_CAPTURE_TARGET_IDS[tabName];
       const targetEl = targetId && document.getElementById(targetId);
@@ -499,7 +658,7 @@
       });
       target.presentation = presentation;
       target.exportData = exportData;
-      return target;
+      return initializeStructuredExportTarget(target, getStructuredExportData(tabName));
     }
 
     function loadExportAssets() {
@@ -587,16 +746,21 @@
       const labels = Array.isArray(data.periodLabels) ? data.periodLabels : [];
       const series = Array.isArray(data.series) ? data.series : [];
       if (!labels.length || !series.length) return false;
-      const start = data.aggregation === 'yearly' ? Math.max(0, labels.length - 10) : 0;
+      const start = 0;
       const visibleLabels = labels.slice(start);
-      const plot = { x: bounds.x + 82, y: bounds.y + 28, width: bounds.width - 96, height: bounds.height - 98 };
-      if (plot.width <= 0 || plot.height <= 0) return false;
       const totals = visibleLabels.map((_label, index) => series.reduce((sum, item) => sum + (Number(item.values[start + index]) || 0), 0));
-      const maxValue = Math.max(1, ...totals);
+      const maxValue = Math.max(1, Number(data.scaleMax) || 0, ...totals);
+      ctx.font = `500 ${style.typography.axis}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+      const axisWidth = Math.max(...Array.from({ length: 5 }, (_unused, tick) => ctx.measureText(`${Math.round(maxValue * tick / 4)} km`).width)) + 16;
+      const plot = { x: bounds.x + axisWidth, y: bounds.y + 28, width: bounds.width - axisWidth - 14, height: bounds.height - 124 };
+      if (plot.width <= 0 || plot.height <= 0) return false;
       const baseline = plot.y + plot.height;
       const step = plot.width / visibleLabels.length;
       const barWidth = Math.min(48, step * 0.62);
-      const labelCount = data.aggregation === 'yearly' ? visibleLabels.length : Math.min(6, visibleLabels.length);
+      ctx.font = `600 ${style.typography.axis}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+      const widestLabel = Math.max(...visibleLabels.map(label => ctx.measureText(String(label)).width));
+      const readableTickCount = Math.max(1, Math.floor(plot.width / (widestLabel + 16)));
+      const labelCount = data.aggregation === 'yearly' ? visibleLabels.length : Math.min(6, readableTickCount, visibleLabels.length);
       const labelIndexes = new Set(Array.from({ length: labelCount }, (_, index) => labelCount === 1
         ? 0
         : Math.round(index * (visibleLabels.length - 1) / (labelCount - 1))));
@@ -635,7 +799,9 @@
         if (!labelIndexes.has(index)) return;
         const periodLabel = String(label) === String(data.incompleteYear) ? `${label} YTD` : String(label);
         const periodLines = wrapSocialExportText(ctx, periodLabel, Math.max(48, labelWidth - 8), 2);
-        periodLines.forEach((line, lineIndex) => ctx.fillText(line, centerX, baseline + 12 + lineIndex * 32));
+        const labelX = Math.max(bounds.x + labelWidth / 2,
+          Math.min(bounds.x + bounds.width - labelWidth / 2, centerX));
+        periodLines.forEach((line, lineIndex) => ctx.fillText(line, labelX, baseline + 12 + lineIndex * 44));
       });
       ctx.textAlign = 'left';
       return true;
@@ -885,35 +1051,6 @@
       const drawY = specialized ? visualization.y : visualization.y + (visualization.height - fit.drawHeight) / 2;
       if (!specialized) ctx.drawImage(captured, drawX, drawY, fit.drawWidth, fit.drawHeight);
 
-      if (target.pinnedSelection) {
-        const visualizationRect = {
-          x: drawX,
-          y: drawY,
-          width: specialized ? visualization.width : fit.drawWidth,
-          height: specialized ? visualization.height : fit.drawHeight
-        };
-        const protectedRects = [{ x: 0, y: 0, width: canvasWidth, height: contentTop }];
-        (target.captureProtectedRects || []).forEach(rect => protectedRects.push({
-          x: visualizationRect.x + rect.x * visualizationRect.width,
-          y: visualizationRect.y + rect.y * visualizationRect.height,
-          width: rect.width * visualizationRect.width, height: rect.height * visualizationRect.height
-        }));
-        if (legendItems.length) {
-          const legendTop = layout.visualization.y + layout.visualization.height + 4;
-          protectedRects.push({ x: margin, y: legendTop, width: contentWidth, height: canvasHeight - legendTop });
-        }
-        const annotation = getExportTooltipLayout(ctx, target, visualizationRect, protectedRects, {
-          x: margin, y: visualization.y, width: contentWidth, height: visualization.height
-        });
-        drawExportTooltipBody(ctx, annotation);
-        const box = annotation.body;
-        ctx.fillStyle = '#111827';
-        ctx.font = `500 ${annotation.fontSize}px system-ui, sans-serif`;
-        ctx.textBaseline = 'alphabetic';
-        annotation.lines.forEach((line, index) => ctx.fillText(line, box.x + annotation.padding, box.y + annotation.padding + annotation.fontSize + index * annotation.lineHeight));
-        ctx.textBaseline = 'top';
-      }
-
       let legendY = visualization.y + visualization.height + annotationHeight + 20;
       if (legendTitleHeight) {
         ctx.fillStyle = style.colors.secondary;
@@ -954,54 +1091,332 @@
       return finalCanvas.toDataURL('image/png');
     }
 
-    function drawExportTooltipBody(ctx, annotation) {
-      const { x, y, width, height } = annotation.body;
-      const radius = 8;
-      const tail = annotation.tail;
-      const insertTail = (side, reverse = false) => {
-        if (!tail || annotation.side !== side) return;
-        const first = reverse ? tail.end : tail.start;
-        const last = reverse ? tail.start : tail.end;
-        ctx.lineTo(first.x, first.y);
-        ctx.lineTo(tail.tip.x, tail.tip.y);
-        ctx.lineTo(last.x, last.y);
-      };
-      ctx.beginPath();
-      ctx.moveTo(x + radius, y);
-      insertTail('below');
-      ctx.lineTo(x + width - radius, y);
-      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-      insertTail('left');
-      ctx.lineTo(x + width, y + height - radius);
-      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-      insertTail('above', true);
-      ctx.lineTo(x + radius, y + height);
-      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-      insertTail('right', true);
-      ctx.lineTo(x, y + radius);
-      ctx.quadraticCurveTo(x, y, x + radius, y);
-      ctx.closePath();
-      ctx.fillStyle = '#f8fafc';
-      ctx.strokeStyle = '#111827';
-      ctx.lineWidth = 3;
-      ctx.fill();
-      ctx.stroke();
+    function renderDistanceExportPage({ context, snapshot, page }) {
+      const data = snapshot.familyData;
+      const selected = page.itemIndexes;
+      const bounds = { ...page.visualization };
+      if (selected.length === 1 && bounds.height > 420) {
+        bounds.y += (bounds.height - 420) / 2; bounds.height = 420;
+      }
+      const rendered = drawDistanceExportChart(context, { ...data, scaleMax: page.scale.max,
+        periodLabels: selected.map(index => data.periodLabels[index]),
+        series: data.series.map(series => ({ ...series, values: selected.map(index => series.values[index]) })) }, bounds);
+      if (!rendered) throw new Error('Distance export renderer has no readable plotting space');
     }
 
-    function getExportTooltipLayout(ctx, target, visualizationRect, protectedRects, bounds) {
-      const selected = target.pinnedSelection;
-      ctx.font = '500 18px system-ui, sans-serif';
-      return window.exportUtils.computeTooltipCalloutLayout({
-        content: selected.content, anchor: selected.anchor, visualizationRect,
-        bounds, protectedRects,
-        measureText: text => ctx.measureText(text)
+    function renderEquipmentExportPage({ context, snapshot, page }) {
+      const style = window.exportUtils.getSocialExportStyleConfig();
+      const data = snapshot.familyData;
+      const timeline = snapshot.targetKey === 'equipmentTimeline';
+      const bounds = page.visualization;
+      const heights = page.rowHeights;
+      if (timeline) {
+        const startX = bounds.x + 12;
+        const axisWidth = bounds.width - 24;
+        const axisY = bounds.y + 48;
+        const minimum = page.scale.min;
+        const maximum = page.scale.max;
+        const position = value => minimum === maximum ? startX + axisWidth / 2
+          : startX + axisWidth * (value - minimum) / (maximum - minimum);
+        context.strokeStyle = style.colors.secondary; context.lineWidth = 2;
+        context.beginPath(); context.moveTo(startX, axisY); context.lineTo(startX + axisWidth, axisY); context.stroke();
+        context.textAlign = 'center'; context.textBaseline = 'top'; context.fillStyle = style.colors.secondary;
+        context.font = '600 36px system-ui, sans-serif';
+        context.fillText('Year', bounds.x + bounds.width / 2, bounds.y);
+        context.font = '500 36px system-ui, sans-serif';
+        for (const tick of page.axisTicks || []) {
+          const x = position(tick.value);
+          context.beginPath(); context.moveTo(x, axisY - 5); context.lineTo(x, axisY + 6); context.stroke();
+          const date = new Date(tick.date);
+          const span = maximum - minimum;
+          const label = span >= 2 * 365 * 86400000 ? String(date.getFullYear())
+            : date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+          context.fillText(label, x, bounds.y + 50);
+        }
+      }
+      let y = bounds.y + (timeline ? page.axisHeight : 0)
+        + Math.max(0, (bounds.height - heights.reduce((sum, height) => sum + height, 0) - (timeline ? page.axisHeight : 0)) / 2);
+      context.textAlign = 'left'; context.textBaseline = 'top';
+      page.itemIndexes.forEach((itemIndex, rowIndex) => {
+        const item = data.items[itemIndex];
+        context.fillStyle = style.colors.headline;
+        context.font = '600 36px system-ui, sans-serif';
+        const rankWidth = timeline ? 0 : 84;
+        if (!timeline) {
+          context.fillStyle = itemIndex === 0 ? style.colors.rank : style.colors.secondary;
+          context.fillText(`#${item.rank || itemIndex + 1}`, bounds.x, y);
+          context.fillStyle = style.colors.headline;
+        }
+        const nameLines = window.exportUtils.wrapExportText(item.name, bounds.width - rankWidth,
+          text => context.measureText(text).width, Infinity);
+        nameLines.forEach((line, index) => context.fillText(line, bounds.x + rankWidth, y + index * 44));
+        const contentY = y + nameLines.length * 44 + 12;
+        if (timeline) {
+          const xStart = bounds.x + 8;
+          const width = bounds.width - 16;
+          const min = page.scale.min;
+          const max = page.scale.max;
+          const position = value => min === max ? xStart + width / 2 : xStart + width * (value - min) / (max - min);
+          context.strokeStyle = style.colors.grid; context.lineWidth = 3;
+          context.beginPath(); context.moveTo(xStart, contentY + 12); context.lineTo(xStart + width, contentY + 12); context.stroke();
+          context.fillStyle = item.type === 'Shoes' ? style.colors.rank : style.colors.accent;
+          if (data.mode === 'activities') {
+            for (const date of item.activities || []) {
+              const x = position(date);
+              context.fillRect(x - 3, contentY + 2, 6, 20);
+            }
+          } else {
+            const start = position(item.firstDate);
+            const end = position(item.lastDate);
+            if (start === end) context.fillRect(start - 3, contentY + 2, 6, 20);
+            else context.fillRect(start, contentY + 2, end - start, 20);
+          }
+          context.font = '500 36px system-ui, sans-serif'; context.fillStyle = style.colors.secondary;
+          const startLabel = new Date(item.firstDate).toLocaleDateString('en-GB');
+          const endLabel = new Date(item.lastDate).toLocaleDateString('en-GB');
+          context.fillText(startLabel, bounds.x, contentY + 42);
+          if (startLabel !== endLabel) context.fillText(endLabel, bounds.x + bounds.width - context.measureText(endLabel).width, contentY + 42);
+        } else {
+          const barX = bounds.x + rankWidth;
+          const barWidth = bounds.width - rankWidth;
+          context.fillStyle = style.colors.surface;
+          context.fillRect(barX, contentY, barWidth, 24);
+          context.fillStyle = itemIndex === 0 ? style.colors.rank : style.colors.accent;
+          context.fillRect(barX, contentY, page.scale.max > 0 ? barWidth * item.value / page.scale.max : 0, 24);
+          context.fillStyle = style.colors.headline; context.font = '600 36px system-ui, sans-serif';
+          const label = item.displayValue || `${item.value}${data.unit ? ` ${data.unit}` : ''}`;
+          context.fillText(label, barX, contentY + 40);
+        }
+        y += heights[rowIndex];
       });
+    }
+
+    function renderChartExportPage({ context, snapshot, page, resources }) {
+      if (!resources?.chartAdapter || !resources.chartInput) throw new Error('Chart export renderer input is not ready');
+      const bounds = page.visualization;
+      const captured = resources.chartAdapter.snapshotCapture({
+        chartInput: resources.chartInput, width: Math.floor(bounds.width), height: Math.floor(bounds.height),
+        minFontSize: 36, axisTextColor: '#f8fafc', includeInspection: false
+      });
+      if (!captured?.canvas || !(captured.canvas.width > 0) || !(captured.canvas.height > 0)) throw new Error('Chart export renderer produced no content');
+      context.drawImage(captured.canvas, bounds.x, bounds.y, bounds.width, bounds.height);
+    }
+
+    function createPbExportChart(data, bounds) {
+      const ChartType = window.Chart || (typeof Chart !== 'undefined' ? Chart : null);
+      if (!ChartType || !data.records?.length) throw new Error('PB export chart renderer is not ready');
+      const profile = data.xAxisMode === 'duration';
+      const values = data.records.map(record => ({ x: Number(record.date), y: record.value }));
+      const dates = values.map(point => point.x).filter(Number.isFinite);
+      const minDate = Number.isFinite(data.periodStart) ? data.periodStart : dates.length ? Math.min(...dates) : 0;
+      const maxDate = Number.isFinite(data.periodEnd) ? data.periodEnd : dates.length ? Math.max(...dates) : 0;
+      const labels = data.records.map(record => record.durationLabel || String(record.durationSeconds));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.floor(bounds.width); canvas.height = Math.floor(bounds.height);
+      const axisFont = { size: 36, family: 'system-ui, sans-serif' };
+      const xScale = profile
+        ? { type: 'category', title: { display: true, text: 'Effort duration', color: '#f8fafc', font: axisFont },
+          ticks: { color: '#f8fafc', font: axisFont, maxRotation: 0, autoSkip: true } }
+        : { type: 'linear', min: minDate === maxDate ? minDate - 43200000 : minDate,
+          max: minDate === maxDate ? maxDate + 43200000 : maxDate,
+          ticks: { color: '#f8fafc', font: axisFont, maxTicksLimit: 4, maxRotation: 0,
+            callback: value => maxDate - minDate > 366 * 86400000 ? String(new Date(value).getFullYear())
+              : new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' }) } };
+      const copy = document.createElement('canvas');
+      copy.width = canvas.width; copy.height = canvas.height;
+      let chart;
+      try {
+        chart = new ChartType(canvas, {
+          type: 'line', data: { ...(profile ? { labels } : {}), datasets: [{
+            data: profile ? data.records.map(record => record.value) : values,
+            borderColor: '#20c9b2', backgroundColor: '#20c9b2', borderWidth: 4,
+            pointRadius: data.records.length > 30 ? 3 : 6, pointHoverRadius: 0,
+            tension: 0, fill: false, showLine: data.records.length > 1
+          }] },
+          options: { responsive: false, animation: false, devicePixelRatio: 1, maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: { enabled: false } },
+            scales: { x: xScale,
+              y: { beginAtZero: true, title: { display: true, text: data.unit === 's' ? 'Time (h:m:s)' : data.metricLabel || data.unit, color: '#f8fafc', font: axisFont },
+                ticks: { color: '#f8fafc', font: axisFont, maxTicksLimit: 4,
+                  callback: value => data.unit === 's' && typeof formatDurationHms === 'function'
+                    ? formatDurationHms(value) : Number(value).toLocaleString('en-US', { maximumFractionDigits: 1 }) } }
+            }
+          }
+        });
+        chart.update?.('none');
+        copy.getContext('2d').drawImage(canvas, 0, 0);
+        return copy;
+      } finally { chart?.destroy(); }
+    }
+
+    function renderPbExportPage({ context, snapshot, page }) {
+      const data = snapshot.familyData;
+      const bounds = page.visualization;
+      if (page.overview) {
+        let y = bounds.y;
+        for (const [rowIndex, index] of page.itemIndexes.entries()) {
+          const group = data.groups[index];
+          const rowHeight = page.rowHeights[rowIndex];
+          context.fillStyle = '#f8fafc'; context.font = '600 36px system-ui, sans-serif'; context.textBaseline = 'top'; context.textAlign = 'left';
+          context.fillText(group.title || group.definitionKey, bounds.x, y);
+          if (group.best?.displayValue) {
+            context.fillStyle = '#20c9b2'; context.font = '700 48px system-ui, sans-serif';
+            const value = group.best.displayValue;
+            const unit = group.unit && !(group.unit === 's' && value.includes(':')) && !value.includes(group.unit) ? ` ${group.unit}` : '';
+            context.fillText(value + unit, bounds.x, y + 44);
+          }
+          const chartBounds = { x: bounds.x, y: y + 104, width: bounds.width, height: rowHeight - 116 };
+          const image = createPbExportChart(group, chartBounds);
+          context.drawImage(image, chartBounds.x, chartBounds.y, chartBounds.width, chartBounds.height);
+          y += rowHeight;
+        }
+        return;
+      }
+      const chartBounds = { ...bounds, height: page.chartHeight };
+      const image = createPbExportChart(data, chartBounds);
+      context.drawImage(image, chartBounds.x, chartBounds.y, chartBounds.width, chartBounds.height);
+      context.font = '500 36px system-ui, sans-serif'; context.fillStyle = '#f8fafc';
+      context.textAlign = 'left'; context.textBaseline = 'top';
+      page.itemIndexes.forEach((index, rowIndex) => {
+        const record = data.records[index];
+        const prefix = data.xAxisMode === 'duration' ? record.durationLabel || `${record.durationSeconds}s`
+          : record.date !== null ? new Date(record.date).toLocaleDateString('en-GB') : 'Date unavailable';
+        const value = record.displayValue || String(record.value);
+        const unit = data.unit && !(data.unit === 's' && value.includes(':')) && !value.includes(data.unit) ? data.unit : '';
+        const line = [prefix, [value, unit].filter(Boolean).join(' '), record.sourceType].filter(Boolean).join(' · ');
+        if (context.measureText(line).width > bounds.width) throw new RangeError('PB record row needs additional readable space');
+        context.fillText(line, bounds.x, bounds.y + page.chartHeight + 24 + rowIndex * page.recordHeight);
+      });
+    }
+
+    async function renderDomExportPage({ context, snapshot, page, resources }) {
+      const owner = { trainingCalendar: window.trainingCalendarDashboard,
+        lifetimeStatistics: window.lifetimeStatisticsDashboard, mediaGallery: window.mediaGalleryDashboard }[snapshot.targetKey];
+      if (!owner?.createExportPage || typeof html2canvas !== 'function') throw new Error('Export page renderer is not ready');
+      const surface = owner.createExportPage(snapshot.familyData, page);
+      try {
+        await surface.prepare(snapshot.targetKey === 'mediaGallery' ? resources?.mediaSources : null);
+        const bounds = page.visualization;
+        const height = surface.element.getBoundingClientRect().height;
+        if (height > bounds.height + 1) {
+          const error = new RangeError('Export page needs a readable continuation');
+          error.code = 'EXPORT_PAGE_OVERFLOW'; throw error;
+        }
+        const image = await html2canvas(surface.element, { backgroundColor: '#071719', useCORS: true,
+          scale: 1, logging: false, width: Math.ceil(bounds.width) });
+        if (image.width > bounds.width + 1 || image.height > bounds.height + 1) {
+          const error = new RangeError('Captured export page exceeds its measured bounds');
+          error.code = 'EXPORT_PAGE_OVERFLOW'; throw error;
+        }
+        context.drawImage(image, bounds.x, bounds.y + Math.max(0, (bounds.height - image.height) / 2), image.width, image.height);
+      } finally { surface.release(); }
+    }
+
+    async function renderWordcloudExportPage({ context, snapshot, page }) {
+      if (!window.wordcloudDashboard?.createExportCanvas) throw new Error('Wordcloud export renderer is not ready');
+      const surface = window.wordcloudDashboard.createExportCanvas(snapshot.familyData, page);
+      try {
+        await surface.prepare();
+        const bounds = page.visualization;
+        context.drawImage(surface.canvas, bounds.x, bounds.y, bounds.width, bounds.height);
+      } finally { surface.release(); }
+    }
+
+    function renderPieExportPage({ context, snapshot, page }) {
+      if (!window.pieChartsDashboard?.createExportCanvas) throw new Error('Pie export renderer is not ready');
+      const data = snapshot.familyData;
+      const image = window.pieChartsDashboard.createExportCanvas(data, Math.floor(page.circleSize));
+      const bounds = page.chartBounds;
+      context.drawImage(image, bounds.x, bounds.y, bounds.width, bounds.height);
+      context.font = '500 36px system-ui, sans-serif'; context.textAlign = 'left'; context.textBaseline = 'top';
+      let y = page.legendBounds.y;
+      for (const index of page.itemIndexes) {
+        const slice = data.slices[index];
+        const percentage = Number.isFinite(slice.percentage) ? slice.percentage : slice.value / page.denominator * 100;
+        const text = `${slice.label}  ${slice.displayValue || slice.value}  ${percentage.toFixed(1)}%`;
+        const lines = window.exportUtils.wrapExportText(text, page.legendBounds.width - 48,
+          value => context.measureText(value).width, Infinity);
+        context.fillStyle = slice.color; context.fillRect(page.legendBounds.x, y + 8, 24, 24);
+        context.fillStyle = '#f8fafc';
+        lines.forEach((line, lineIndex) => context.fillText(line, page.legendBounds.x + 36, y + lineIndex * 44));
+        y += lines.length * 44 + 12;
+      }
+      if (y > page.legendBounds.y + page.legendBounds.height + 1) throw new RangeError('Pie legend exceeds measured bounds');
+    }
+
+    async function renderMapExportPage({ context, page, resources }) {
+      if (!resources?.mapSurface || typeof html2canvas !== 'function') throw new Error('Map export renderer is not ready');
+      const image = await html2canvas(resources.mapSurface.element, {
+        backgroundColor: '#071719', useCORS: true, logging: false, scale: 2
+      });
+      const bounds = page.mapBounds;
+      context.drawImage(image, bounds.x, bounds.y, bounds.width, bounds.height);
+    }
+
+    Object.assign(EXPORT_FAMILY_RENDERERS, {
+      totalDistance: renderDistanceExportPage,
+      equipment: renderEquipmentExportPage,
+      equipmentTimeline: renderEquipmentExportPage,
+      paceMetrics: renderChartExportPage,
+      distributions: renderChartExportPage,
+      workoutTime: renderChartExportPage,
+      personalBests: renderPbExportPage,
+      heatmap: renderMapExportPage,
+      trainingCalendar: renderDomExportPage,
+      wordcloud: renderWordcloudExportPage,
+      pieCharts: renderPieExportPage,
+      lifetimeStatistics: renderDomExportPage,
+      mediaGallery: renderDomExportPage
+    });
+
+    function drawStructuredExportFrame(plan, assets = {}) {
+      const style = window.exportUtils.getSocialExportStyleConfig();
+      const canvas = document.createElement('canvas');
+      canvas.width = plan.width; canvas.height = plan.height;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Could not create export canvas');
+      context.fillStyle = style.colors.background;
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = style.colors.accent;
+      context.fillRect(plan.contentBounds.x, plan.contentBounds.y, 72, 5);
+      context.textAlign = 'left'; context.textBaseline = 'top';
+      for (const block of plan.textBlocks) {
+        context.fillStyle = block.role === 'headline' ? style.colors.headline
+          : ['provenance', 'centralValue'].includes(block.role) ? style.colors.accent : style.colors.secondary;
+        context.font = `${block.weight} ${block.fontSize}px system-ui, sans-serif`;
+        block.lines.forEach((line, index) => context.fillText(line, block.x, block.y + index * block.lineHeight));
+      }
+      for (const row of plan.legendRows) {
+        for (const entry of row.entries) {
+          const x = plan.contentBounds.x + entry.offsetX;
+          context.fillStyle = Array.isArray(entry.color) ? entry.color[0] : entry.color;
+          context.fillRect(x, row.y + 8, 24, 24);
+          context.fillStyle = style.colors.secondary;
+          context.font = '500 36px system-ui, sans-serif';
+          entry.lines.forEach((line, index) => context.fillText(line, x + 36, row.y + index * 44));
+        }
+      }
+      let brandX = plan.footer.x;
+      if (assets.logo?.naturalWidth > 0) {
+        const fit = window.exportUtils.computeContainFit(assets.logo.naturalWidth, assets.logo.naturalHeight, 88, 40);
+        context.drawImage(assets.logo, brandX + fit.offsetX, plan.footer.y + fit.offsetY + 4, fit.drawWidth, fit.drawHeight);
+        brandX += 104;
+      }
+      context.fillStyle = style.colors.secondary;
+      context.font = '700 36px system-ui, sans-serif';
+      context.fillText('TriAnalytica', brandX, plan.footer.y + 4);
+      context.font = '500 36px system-ui, sans-serif';
+      if (context.measureText(EXPORT_DOMAIN).width > plan.footer.width) {
+        throw new RangeError('Export branding cannot fit at readable size');
+      }
+      context.fillText(EXPORT_DOMAIN, plan.footer.x, plan.footer.y + 52);
+      return { canvas, context };
     }
 
     function createExportCaptureSnapshot(targetEl, tabId, options = {}) {
       const { selection = null, target = null } = options;
       const adapter = window.dashboardTooltips?.adapters.get(tabId);
-      const renderer = adapter?.snapshotCapture?.({ ...options.chartCapture, ...(selection ? { selection } : {}) });
+      const renderer = adapter?.snapshotCapture?.({ ...options.chartCapture, includeInspection: false, selection: null });
       const clonedTarget = targetEl.cloneNode ? targetEl.cloneNode(true) : { ...targetEl };
       const sourceCanvases = targetEl.tagName === 'CANVAS' ? [targetEl] : Array.from(targetEl.querySelectorAll?.('canvas') || []);
       const clonedCanvases = clonedTarget.tagName === 'CANVAS' ? [clonedTarget] : Array.from(clonedTarget.querySelectorAll?.('canvas') || []);
@@ -1024,6 +1439,14 @@
       });
       Array.from(clonedTarget.querySelectorAll?.('#heatmapActivityTooltip, #trainingCalendarDayTooltip, #pbTooltip, .visualization-detail-tooltip, [data-export-exclude]') || []).forEach(element => element.remove());
       const mediaLease = tabId === 'mediaGallery' ? window.mediaGalleryDashboard?.acquireExportCapture?.(targetEl) : null;
+      let snapshotReleased = false;
+      const release = () => {
+        if (snapshotReleased) return;
+        snapshotReleased = true;
+        try { mediaLease?.release(); }
+        finally { if (clonedTarget.nodeType === 1) clonedTarget.remove(); }
+      };
+      try {
       if (clonedTarget.nodeType === 1) {
         const rect = targetEl.getBoundingClientRect();
         clonedTarget.id = `${targetEl.id || tabId}-export-snapshot`;
@@ -1046,8 +1469,12 @@
           return resolved;
         },
         prepare: () => mediaLease?.prepare(clonedTarget),
-        release() { mediaLease?.release(); if (clonedTarget.nodeType === 1) clonedTarget.remove(); }
+        release
       };
+      } catch (error) {
+        release();
+        throw error;
+      }
     }
 
     // Chart.js exposes no consistent cross-version "isAnimating" API, so a short settle
@@ -1066,11 +1493,29 @@
       if (!modal || !img) return;
       img.src = dataUrl;
       if (errorEl) errorEl.classList.add('hidden');
-      const button = document.getElementById('exportPreviewDownloadBtn');
-      if (button) button.disabled = !!exportDownloadAttempt;
+      updateExportDownloadButton();
       updateExportSeriesControls();
       modal.classList.remove('hidden');
       modal.classList.add('flex');
+    }
+
+    function updateExportDownloadButton() {
+      const button = document.getElementById('exportPreviewDownloadBtn');
+      if (button) button.disabled = !!exportDownloadAttempt || exportCompositionPending || !lastExportedImage?.blob?.size;
+    }
+
+    function beginExportSession() {
+      exportRequestState = 'capturing';
+      exportCompositionPending = true;
+      lastExportedImage = null;
+      lastExportImages = [];
+      currentExportSeriesIndex = 0;
+      const image = document.getElementById('exportPreviewImage');
+      if (image) image.src = '';
+      const error = document.getElementById('exportPreviewError');
+      if (error) error.classList.add('hidden');
+      updateExportSeriesControls();
+      updateExportDownloadButton();
     }
 
     function updateExportSeriesControls() {
@@ -1089,7 +1534,8 @@
     function updateExportFormatButtons() {
       const buttons = {
         square: document.getElementById('exportFormatSquare'),
-        portrait: document.getElementById('exportFormatPortrait')
+        portrait: document.getElementById('exportFormatPortrait'),
+        story: document.getElementById('exportFormatStory')
       };
       Object.entries(buttons).forEach(([format, button]) => {
         if (!button) return;
@@ -1103,26 +1549,203 @@
       });
     }
 
-    async function composeCurrentExportImages(captureState) {
-      const { captured, target, assets, pbOpening } = captureState;
-      const pageTargets = getExportTargetPages({ ...target, format: selectedExportFormat });
-      const formatCaptures = captureState.calendarCapturesByFormat?.[selectedExportFormat];
-      const preparedImages = [];
-      for (const [pageIndex, pageTarget] of pageTargets.entries()) {
-        pageTarget.format = selectedExportFormat;
-        const presentationKey = pageTarget.kind === 'pb-tile' ? 'pb-tile' : pageTarget.key;
-        pageTarget.presentation = getSocialExportPresentation(presentationKey, {
-          ...(pageTarget.exportData || {}),
-          title: pageTarget.exportData?.title || pageTarget.title,
-          metricLabel: pageTarget.exportData?.metricLabel || pageTarget.metricLabel
-        }, { humorEnabled: selectedExportHumorEnabled });
-        const dataUrl = drawExportComposition(formatCaptures?.[pageIndex] || captured, pageTarget, assets);
-        preparedImages.push(await prepareExportImage(dataUrl, pageTarget, pbOpening));
+    function createStructuredExportResources(target) {
+      const key = target.selectionSnapshot.targetKey;
+      const resources = {};
+      try {
+        if (['paceMetrics', 'distributions', 'workoutTime'].includes(key)) {
+          resources.chartAdapter = window.dashboardTooltips?.adapters.get(key);
+          if (!resources.chartAdapter?.captureExportInput || !target.structuredChartInput) throw new Error('Selected chart export is not ready');
+          resources.chartInput = resources.chartAdapter.captureExportInput(target.structuredChartInput);
+        }
+        if (key === 'heatmap') {
+          resources.mapSurface = window.heatmapDashboard.captureExportSurface();
+          resources.mapSurface.element.querySelectorAll('.leaflet-control-attribution').forEach(element => element.remove());
+        }
+        if (key === 'mediaGallery') resources.mediaSources = window.mediaGalleryDashboard.acquirePreparedExportSources(target.selectionSnapshot.familyData);
+      } catch (error) {
+        resources.mapSurface?.release(); resources.mediaSources?.release(); throw error;
       }
-      lastExportImages = preparedImages;
+      resources.prepare = () => resources.mapSurface?.prepare();
+      let released = false;
+      resources.release = () => {
+        if (released) return;
+        released = true;
+        try { resources.mapSurface?.release(); }
+        finally { resources.mediaSources?.release(); }
+      };
+      return resources;
+    }
+
+    function releaseStructuredExportState(state) {
+      if (state.released && state.active === 0) state.resources.release();
+    }
+
+    async function composeStructuredExportImages(state) {
+      const revision = ++state.revision;
+      const format = selectedExportFormat;
+      const humorEnabled = selectedExportHumorEnabled;
+      const current = () => lastExportCaptureState === state && !state.released
+        && state.sessionId === exportSessionSequence && state.revision === revision;
+      state.active++;
+      if (current()) {
+        lastExportedImage = null; lastExportImages = []; currentExportSeriesIndex = 0;
+        exportCompositionPending = true;
+        updateExportDownloadButton();
+        const previewImage = document.getElementById('exportPreviewImage');
+        if (previewImage) previewImage.src = '';
+        updateExportSeriesControls();
+      }
+      try {
+        await state.ready;
+        if (!current()) return false;
+        const data = state.snapshot.familyData;
+        const presentation = getSocialExportPresentation(state.snapshot.targetKind === 'pb-tile' ? 'pb-tile' : state.snapshot.targetKey,
+          data, { humorEnabled });
+        if (state.snapshot.targetKey === 'mediaGallery') presentation.context.push({ label: 'Selection', value: `${data.displayedCount} of ${data.eligibleCount} media items` });
+        if (state.snapshot.targetKey === 'trainingCalendar') presentation.context.push({ label: 'Intensity', value: 'Scaled within each year; empty means no recorded activity' });
+        const measureCanvas = document.createElement('canvas');
+        const measureContext = measureCanvas.getContext('2d');
+        const plan = window.exportUtils.planExportPages(state.snapshot, { format, humorEnabled, presentation }, {
+          measureText: (text, size = 36) => { measureContext.font = `700 ${size}px system-ui, sans-serif`; return measureContext.measureText(text).width; }
+        });
+        const prepared = [];
+        let pageIndex = 0;
+        while (pageIndex < plan.pages.length) {
+          if (!current()) return false;
+          const page = plan.pages[pageIndex];
+          const framePlan = { ...plan, textBlocks: plan.textBlocks.map(block => block.role === 'page'
+            ? { ...block, lines: [`Page ${pageIndex + 1} of ${plan.pages.length}`] } : block) };
+          const frame = drawStructuredExportFrame(framePlan, state.assets);
+          try {
+            await EXPORT_ADAPTERS[state.snapshot.targetKey].renderPage({
+              context: frame.context, snapshot: state.snapshot, page, resources: state.resources
+            });
+          } catch (error) {
+            const indexes = page.monthKeys || page.itemIndexes;
+            if (!['EXPORT_PAGE_OVERFLOW', 'WORD_PLACEMENT_FAILED'].includes(error.code) || indexes.length <= 1) throw error;
+            if (!plan.textBlocks.some(block => block.role === 'page')) {
+              plan.textBlocks.push({ role: 'page', lines: [], x: page.visualization.x, y: page.visualization.y,
+                fontSize: 36, lineHeight: 44, weight: 500 });
+              for (const candidate of plan.pages) {
+                candidate.visualization.y += 56; candidate.visualization.height -= 56;
+              }
+            }
+            const half = Math.ceil(indexes.length / 2);
+            const split = values => ({ ...page, visualization: { ...page.visualization },
+              ...(page.monthKeys ? { monthKeys: values } : { itemIndexes: values }) });
+            plan.pages.splice(pageIndex, 1, split(indexes.slice(0, half)), split(indexes.slice(half)));
+            prepared.length = 0; pageIndex = 0;
+            continue;
+          }
+          if (!current()) return false;
+          const pageTarget = { ...state.target, format, seriesPage: pageIndex + 1, seriesCount: plan.pages.length,
+            presentation, selectionSnapshot: state.snapshot, sessionId: state.sessionId, compositionRevision: revision };
+          const image = await prepareExportImage(frame.canvas.toDataURL('image/png'), pageTarget, state.pbOpening);
+          if (!current()) return false;
+          prepared.push(image); pageIndex++;
+        }
+        if (!current()) return false;
+        lastExportImages = prepared; currentExportSeriesIndex = 0; lastExportedImage = prepared[0];
+        exportRequestState = 'previewing';
+        exportCompositionPending = false;
+        state.error = null;
+        showExportPreviewModal(lastExportedImage.dataUrl);
+        return true;
+      } catch (error) {
+        if (current()) {
+          state.error = error; exportRequestState = 'capture-failed';
+          exportCompositionPending = false;
+          const message = document.getElementById('exportPreviewError');
+          if (message) { message.textContent = error.message; message.classList.remove('hidden'); }
+          showExportToast(error.message || 'Could not export this visualization.');
+        }
+        return false;
+      } finally {
+        state.active--; releaseStructuredExportState(state);
+      }
+    }
+
+    async function exportStructuredVisualizationTarget(target) {
+      const sessionId = ++exportSessionSequence;
+      const previous = lastExportCaptureState;
+      if (previous?.structured) { previous.released = true; releaseStructuredExportState(previous); }
+      beginExportSession();
+      let resources;
+      try { resources = createStructuredExportResources(target); }
+      catch (error) {
+        exportCompositionPending = false;
+        exportRequestState = 'idle';
+        updateExportDownloadButton();
+        showExportToast(error.message);
+        return;
+      }
+      const state = { structured: true, sessionId, target, snapshot: target.selectionSnapshot, resources,
+        pbOpening: target.selectionSnapshot.pbOpening, revision: 0, active: 1, released: false, assets: null, error: null };
+      lastExportCaptureState = state;
+      exportRequestState = 'capturing';
+      state.ready = (async () => { await waitForExportFonts(); await resources.prepare(); state.assets = await loadExportAssets(); })();
+      try { await composeStructuredExportImages(state); }
+      finally { state.active--; releaseStructuredExportState(state); }
+    }
+
+    async function composeCurrentExportImages(captureState) {
+      if (captureState.structured) return composeStructuredExportImages(captureState);
+      const { captured, target, assets, pbOpening } = captureState;
+      const revision = (captureState.compositionRevision || 0) + 1;
+      captureState.compositionRevision = revision;
+      const format = selectedExportFormat;
+      const humorEnabled = selectedExportHumorEnabled;
+      const current = () => lastExportCaptureState === captureState
+        && captureState.sessionId === exportSessionSequence && captureState.compositionRevision === revision;
+      const pageTargets = getExportTargetPages({ ...target, format });
+      const formatCaptures = captureState.calendarCapturesByFormat?.[format];
+      const preparedImages = [];
+      captureState.state = 'composing';
+      exportCompositionPending = true;
+      lastExportedImage = null;
+      lastExportImages = [];
       currentExportSeriesIndex = 0;
-      lastExportedImage = preparedImages[0] || null;
-      if (lastExportedImage) showExportPreviewModal(lastExportedImage.dataUrl);
+      updateExportDownloadButton();
+      const previewImage = document.getElementById('exportPreviewImage');
+      if (previewImage) previewImage.src = '';
+      updateExportSeriesControls();
+      try {
+        for (const [pageIndex, sourceTarget] of pageTargets.entries()) {
+          if (!current()) return false;
+          const pageTarget = { ...sourceTarget, format, sessionId: captureState.sessionId, compositionRevision: revision };
+          const presentationKey = pageTarget.kind === 'pb-tile' ? 'pb-tile' : pageTarget.key;
+          pageTarget.presentation = getSocialExportPresentation(presentationKey, {
+            ...(pageTarget.exportData || {}),
+            title: pageTarget.exportData?.title || pageTarget.title,
+            metricLabel: pageTarget.exportData?.metricLabel || pageTarget.metricLabel
+          }, { humorEnabled });
+          const dataUrl = drawExportComposition(formatCaptures?.[pageIndex] || captured, pageTarget, assets);
+          const image = await prepareExportImage(dataUrl, pageTarget, pbOpening);
+          if (!current()) return false;
+          preparedImages.push(image);
+        }
+        if (!current()) return false;
+        lastExportImages = preparedImages;
+        currentExportSeriesIndex = 0;
+        lastExportedImage = preparedImages[0] || null;
+        captureState.state = 'ready';
+        exportCompositionPending = false;
+        if (lastExportedImage) {
+          exportRequestState = 'previewing';
+          showExportPreviewModal(lastExportedImage.dataUrl);
+        }
+        return true;
+      } catch (error) {
+        if (!current()) return false;
+        captureState.state = 'failed';
+        exportRequestState = 'idle';
+        exportCompositionPending = false;
+        const errorElement = document.getElementById('exportPreviewError');
+        if (errorElement) { errorElement.textContent = error.message; errorElement.classList.remove('hidden'); }
+        showExportToast(error.message || 'Could not export this visualization.');
+        return false;
+      }
     }
 
     async function setExportFormat(format) {
@@ -1150,9 +1773,16 @@
       const image = document.getElementById('exportPreviewImage');
       if (image) image.src = lastExportedImage.dataUrl;
       updateExportSeriesControls();
+      updateExportDownloadButton();
     }
 
     function closeExportPreviewModal() {
+      exportSessionSequence += 1;
+      exportCompositionPending = false;
+      if (lastExportCaptureState?.structured) {
+        lastExportCaptureState.released = true;
+        releaseStructuredExportState(lastExportCaptureState);
+      }
       const modal = document.getElementById('exportPreviewModal');
       const img = document.getElementById('exportPreviewImage');
       if (modal) {
@@ -1165,6 +1795,7 @@
       currentExportSeriesIndex = 0;
       lastExportCaptureState = null;
       updateExportSeriesControls();
+      updateExportDownloadButton();
       exportRequestState = 'idle';
     }
 
@@ -1195,6 +1826,11 @@
 
     async function prepareExportImage(dataUrl, target, pbOpening = null) {
       const blob = exportDataUrlToBlob(dataUrl);
+      if (target?.selectionSnapshot) {
+        const dimensions = window.exportUtils.getExportPngDimensions(new Uint8Array(await blob.arrayBuffer()));
+        const expected = window.exportUtils.getExportFormatConfig(target.format);
+        if (!expected || dimensions.width !== expected.width || dimensions.height !== expected.height) throw new Error('Export PNG dimensions do not match the selected format');
+      }
       const image = new Image();
       await new Promise((resolve, reject) => {
         image.onload = resolve;
@@ -1207,6 +1843,10 @@
       if (!(image.naturalWidth > 0 && image.naturalHeight > 0)) {
         throw new Error('Could not prepare the export image. Please export again.');
       }
+      if (target?.selectionSnapshot) {
+        const expected = window.exportUtils.getExportFormatConfig(target.format);
+        if (image.naturalWidth !== expected.width || image.naturalHeight !== expected.height) throw new Error('Decoded export dimensions do not match the selected format');
+      }
       return Object.freeze({ dataUrl, blob, target, pbOpening, width: image.naturalWidth, height: image.naturalHeight });
     }
 
@@ -1215,8 +1855,7 @@
       if (exportDownloadAttempt || !image || !image.blob || !image.blob.size) return;
       const attempt = { image, outcome: null };
       exportDownloadAttempt = attempt;
-      const button = document.getElementById('exportPreviewDownloadBtn');
-      if (button) button.disabled = true;
+      updateExportDownloadButton();
       if (exportToastTimeoutId) clearTimeout(exportToastTimeoutId);
       exportToastTimeoutId = null;
       const toast = document.getElementById('exportToast');
@@ -1288,7 +1927,7 @@
         return attempt.outcome;
       } finally {
         exportDownloadAttempt = null;
-        if (button) button.disabled = false;
+        updateExportDownloadButton();
         if (attempt.outcome === 'handed-off' || attempt.outcome === 'saved') {
           const ownsPreview = lastExportedImage === image;
           const canCloseOrigin = ownsPreview || !lastExportedImage;
@@ -1307,6 +1946,7 @@
     }
 
     async function exportVisualizationTarget(target) {
+      if (target?.selectionSnapshot) return exportStructuredVisualizationTarget(target);
       if (exportRequestState !== 'idle') return;
 
       exportRequestState = 'checking';
@@ -1323,6 +1963,10 @@
         return;
       }
 
+      const sessionId = ++exportSessionSequence;
+      const currentSession = () => exportSessionSequence === sessionId;
+      beginExportSession();
+
       if (exportToastTimeoutId) clearTimeout(exportToastTimeoutId);
       exportToastTimeoutId = null;
       const previousToast = document.getElementById('exportToast');
@@ -1331,15 +1975,13 @@
         previousToast.classList.add('hidden');
       }
 
-      exportRequestState = 'capturing';
       const pbOpening = target.kind === 'pb-tile' && typeof pbDetailOpening !== 'undefined' ? pbDetailOpening : null;
       let snapshot = null;
       try {
         const tabId = target.kind === 'pb-tile' ? 'personalBests' : target.key;
         target = JSON.parse(JSON.stringify(target));
   target.format = selectedExportFormat;
-        const selected = window.dashboardTooltips?.getPinned(tabId);
-        target.pinnedSelection = selected ? JSON.parse(JSON.stringify(selected)) : null;
+        target.pinnedSelection = null;
         const heatmapPalette = document.getElementById('heatmapColorScheme')?.value;
         if (target.key === 'wordcloud') {
           if (!window.wordcloudDashboard.hasExportableCloud()) throw new Error('The Wordcloud is not ready to export. Wait for the cloud to finish rendering and try again.');
@@ -1347,11 +1989,14 @@
         const chartCapture = ['totalDistance', 'paceMetrics', 'distributions', 'workoutTime'].includes(tabId)
           ? { width: 960, height: 500, minFontSize: 30, ...(tabId === 'workoutTime' ? { axisTextColor: '#f8fafc' } : {}) }
           : undefined;
-        snapshot = createExportCaptureSnapshot(targetEl, tabId, { chartCapture, selection: target.pinnedSelection, target });
+        snapshot = createExportCaptureSnapshot(targetEl, tabId, { chartCapture, selection: null, target });
         if (window.tooltipSelectionUtils) target = window.tooltipSelectionUtils.freezePlain(window.tooltipSelectionUtils.copyPlain(target));
         await snapshot.prepare();
+        if (!currentSession()) return;
         await waitForExportFonts();
+        if (!currentSession()) return;
         const assets = await loadExportAssets();
+        if (!currentSession()) return;
 
         let resolvedAnchor = null;
         let captureProtectedRects = [];
@@ -1580,17 +2225,20 @@
             ? await window.heatmapDashboard.captureAtExportSize(captureCurrentTarget)
             : await captureCurrentTarget();
         }
+          if (!currentSession()) return;
         if (target.pinnedSelection && !resolvedAnchor) resolvedAnchor = snapshot.resolveExportAnchor(snapshot.element);
         const compositionTarget = resolvedAnchor ? { ...target, captureProtectedRects, pinnedSelection: { ...target.pinnedSelection, anchor: resolvedAnchor } } : target;
         if (window.tooltipSelectionUtils) window.tooltipSelectionUtils.freezePlain(compositionTarget);
-        lastExportCaptureState = { captured, target: compositionTarget, assets, pbOpening, calendarCapturesByFormat };
+        lastExportCaptureState = { sessionId, captured, target: compositionTarget, assets, pbOpening, calendarCapturesByFormat };
         await composeCurrentExportImages(lastExportCaptureState);
-
-        exportRequestState = 'previewing';
       } catch (error) {
-        console.error('Export failed', error);
-        exportRequestState = 'idle';
-        showExportToast(error.message || 'Could not export this visualization. Please try again.');
+        if (currentSession()) {
+          console.error('Export failed', error);
+          exportRequestState = 'idle';
+          exportCompositionPending = false;
+          updateExportDownloadButton();
+          showExportToast(error.message || 'Could not export this visualization. Please try again.');
+        }
       } finally {
         snapshot?.release();
       }
@@ -1623,5 +2271,5 @@
         target.presentation = presentation;
         target.exportData = exportData;
       }
-      return exportVisualizationTarget(target);
+      return exportVisualizationTarget(target ? initializeStructuredExportTarget(target, getStructuredExportData('personalBests', 'pb-tile')) : null);
     }

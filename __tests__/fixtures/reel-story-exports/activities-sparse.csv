@@ -1,0 +1,16 @@
+Activity ID,Activity Date,Activity Name,Activity Type,Distance,Distance,Moving Time,Average Heart Rate,Average Cadence,Average Watts,Elevation Gain,Activity Gear,Filename,Media
+770000,2025-01-04T07:00:00.000Z,SYNTHETIC PRIVATE TITLE Swim endurance recovery,Swim,0.4,400,720,120,,,0,,activities/770000.gpx,
+770001,2025-03-05T07:00:00.000Z,SYNTHETIC PRIVATE TITLE Swim endurance steady,Swim,0.75,750,1350,126,,,0,,,
+770002,2025-05-06T07:00:00.000Z,SYNTHETIC PRIVATE TITLE Swim endurance steady,Swim,1.5,1500,2700,132,,,0,,,
+770003,2025-07-07T07:00:00.000Z,SYNTHETIC PRIVATE TITLE Swim endurance recovery,Swim,1.9,1900,3420,138,,,0,,,
+770004,2025-09-08T07:00:00.000Z,SYNTHETIC PRIVATE TITLE Swim endurance steady,Swim,3.8,3800,6840,144,,,0,,,
+770005,2025-01-04T07:00:00.000Z,SYNTHETIC PRIVATE TITLE Run endurance steady,Run,5,5000,1800,120,170,,100,Nike synthetic review pair 1 with a deliberately long equipment name,activities/770005.gpx,
+770006,2025-03-05T07:00:00.000Z,SYNTHETIC PRIVATE TITLE Run endurance recovery,Run,10,10000,3600,126,171,,200,Nike synthetic review pair 1 with a deliberately long equipment name,,
+770007,2025-05-06T07:00:00.000Z,SYNTHETIC PRIVATE TITLE Run endurance steady,Run,21.0975,21097.5,7595,132,172,,300,Nike synthetic review pair 1 with a deliberately long equipment name,,
+770008,2025-07-07T07:00:00.000Z,SYNTHETIC PRIVATE TITLE Run endurance steady,Run,42.195,42195,15190,138,173,,400,Nike synthetic review pair 1 with a deliberately long equipment name,,
+770009,2025-09-08T07:00:00.000Z,SYNTHETIC PRIVATE TITLE Run endurance recovery,Run,50,50000,18000,144,174,,500,Nike synthetic review pair 1 with a deliberately long equipment name,,
+770010,2025-01-04T07:00:00.000Z,SYNTHETIC PRIVATE TITLE Bike endurance steady,Bike,20,20000,2400,120,80,200,100,Synthetic bike 1,activities/770010.gpx,
+770011,2025-03-05T07:00:00.000Z,SYNTHETIC PRIVATE TITLE Bike endurance steady,Bike,40,40000,4800,126,81,200,200,Synthetic bike 1,,
+770012,2025-05-06T07:00:00.000Z,SYNTHETIC PRIVATE TITLE Bike endurance recovery,Bike,90,90000,10800,132,82,200,300,Synthetic bike 1,,
+770013,2025-07-07T07:00:00.000Z,SYNTHETIC PRIVATE TITLE Bike endurance steady,Bike,100,100000,12000,138,83,200,400,Synthetic bike 1,,
+770014,2025-09-08T07:00:00.000Z,SYNTHETIC PRIVATE TITLE Bike endurance steady,Bike,180,180000,21600,144,84,200,500,Synthetic bike 1,activities/770014.fit,00000000-0000-4000-8000-000000000001.mp4

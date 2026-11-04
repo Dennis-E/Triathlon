@@ -191,6 +191,22 @@ function harness({ realGeometry = false, inspection = false } = {}) {
 }
 
 describe('heatmap year selection', () => {
+  it('exports selected map extent, aspect and frequency meaning without following later viewport changes', async () => {
+    const runtime = harness();
+    runtime.setDataset({ activities: [{ id: 'run', date: new Date(2025, 0, 4) }] }, { run: 'Run' });
+    await runtime.render();
+    runtime.map.center = [12, 34];
+    runtime.map.zoom = 14;
+    const model = runtime.sandbox.window.heatmapDashboard.getExportData();
+    expect(model.viewport).toMatchObject({ center: [12, 34], zoom: 14,
+      bounds: [-90, -180, 90, 180], aspectRatio: 4 / 3 });
+    expect(model.scale).toBeDefined();
+    const before = JSON.stringify(model);
+    runtime.map.center[0] = 77;
+    runtime.map.zoom = 2;
+    expect(JSON.stringify(model)).toBe(before);
+  });
+
   it('combines year and sport without losing the map viewport', async () => {
     const runtime = harness();
     runtime.setDataset({ activities: [

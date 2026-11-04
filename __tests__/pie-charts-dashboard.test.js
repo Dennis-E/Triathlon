@@ -44,6 +44,19 @@ function pieHarness() {
 }
 
 describe('Pie Charts dashboard contract', () => {
+  it('exports selected slices with their unchanged denominator and independent numeric values', () => {
+    const h = pieHarness();
+    h.owner.setPieMeasure('distance');
+    const model = h.owner.window.pieChartsDashboard.getExportData();
+    expect(model).toMatchObject({ metric: 'distance', unit: 'km', groupBy: 'sport', denominator: 50 });
+    expect(model.slices.map(slice => slice.value)).toEqual([10, 40]);
+    expect(model.slices.reduce((sum, slice) => sum + slice.percentage, 0)).toBeCloseTo(100);
+    const before = JSON.stringify(model);
+    h.owner.processedActivities[0].distance = 999;
+    h.charts.at(-1).data.datasets[0].data[0] = 999;
+    expect(JSON.stringify(model)).toBe(before);
+  });
+
   it.each(['count', 'time', 'distance'])('attaches pie slices with full %s, percentage and count detail', measure => {
     const h = pieHarness();
     h.owner.setPieMeasure(measure);

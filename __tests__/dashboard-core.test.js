@@ -69,6 +69,19 @@ function loadDashboardForRendering(activities) {
   };
 }
 
+test('distance social export uses numeric selected chart data rather than formatted dashboard text', () => {
+  const activities = Array.from({ length: 13 }, (_, index) => ({ date: new Date(2013 + index, 0, 4), sport: 'Run', distance: 1.25 }));
+  const runtime = loadDashboardForRendering(activities);
+  runtime.render('yearly');
+  runtime.elements.get('cardTotalKm').textContent = 'not a numeric source';
+  const model = runtime.dashboard.window.totalDistanceDashboard.getExportData();
+  expect(model).toMatchObject({ sport: 'All', metric: 'Distance', unit: 'km', centralValue: 16.25,
+    periodStart: expect.any(Number), periodEnd: expect.any(Number) });
+  expect(model.periodLabels).toHaveLength(13);
+  expect(model.periodLabels[0]).toBe('2013');
+  expect(model.periodLabels.at(-1)).toBe('2025');
+});
+
 const aggregationFixtures = [
   { date: new Date('2024-01-01T12:00:00'), sport: 'Run', distance: 10 },
   { date: new Date('2024-01-02T12:00:00'), sport: 'Bike', distance: 10 },
@@ -96,6 +109,44 @@ function loadAdditionalChart(moduleName, canvasId) {
 }
 
 describe('distribution and workout time chart adapters', () => {
+  it('exports selected distribution bins and chart values independently of later live chart edits', () => {
+    const { dashboard, elements } = loadAdditionalChart('dashboard-distributions', 'distributionsChart');
+    elements.set('distributionsDateStart', {});
+    elements.set('distributionsDateEnd', {});
+    dashboard.initDistributionsDateSlider();
+    dashboard.renderDistributionsChart();
+    const chart = dashboard.window.dashboardTooltips.attachChart.mock.calls.at(-1)[1];
+    const model = dashboard.window.distributionsDashboard.getExportData();
+    expect(model).toMatchObject({ metric: 'length', sport: 'All', unit: 'km' });
+    expect(model.bins.length).toBeGreaterThan(0);
+    const bounds = dashboard.getDistributionsDateBounds();
+    expect(model.period).toBe(`${dashboard.formatDateIso(bounds.minDate)} - ${dashboard.formatDateIso(bounds.maxDate)}`);
+    expect(model.chartInput.data).toEqual(chart.config.data);
+    const before = JSON.stringify(model);
+    chart.config.data.datasets[0].data.length = 0;
+    expect(JSON.stringify(model)).toBe(before);
+  });
+
+  it('exports the selected workout measure in its rendered unit without changing pattern grouping', () => {
+    const { dashboard, elements } = loadAdditionalChart('dashboard-workout-time', 'workoutTimeChart');
+    elements.set('workoutTimeDateStart', {});
+    elements.set('workoutTimeDateEnd', {});
+    dashboard.setWorkoutTimeMeasure('duration');
+    const chart = dashboard.window.dashboardTooltips.attachChart.mock.calls.at(-1)[1];
+    const model = dashboard.window.workoutTimeDashboard.getExportData();
+    expect(model).toMatchObject({ metric: 'duration', unit: 'h', sport: 'All', granularity: 'day' });
+    expect(model.chartInput.data).toEqual(chart.config.data);
+    expect(model.groups.length).toBeGreaterThan(0);
+    expect(model.chartInput.options.scales.x.ticks.callback(0)).toBe('00');
+    expect(model.chartInput.options.scales.x.ticks.maxRotation).toBe(0);
+    expect(model.xAxisTitle).toBe('Start hour (2-hour blocks)');
+    const bounds = dashboard.getWorkoutTimeDateBounds();
+    expect(model.period).toBe(`${dashboard.formatDateIso(bounds.minDate)} - ${dashboard.formatDateIso(bounds.maxDate)}`);
+    const before = JSON.stringify(model);
+    chart.config.data.datasets[0].data[0] = 999;
+    expect(JSON.stringify(model)).toBe(before);
+  });
+
   it.each([['count', 1], ['duration', 2], ['distance', 12]])('refreshes stale import date bounds without resetting the %s measure', (measure, expectedTotal) => {
     const { dashboard, elements } = loadAdditionalChart('dashboard-workout-time', 'workoutTimeChart');
     elements.set('workoutTimeDateStart', {});

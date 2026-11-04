@@ -25,10 +25,93 @@ const {
   createSocialExportMetadata,
   getSocialExportStyleConfig,
   getContrastRatio,
-  wrapExportText
+  wrapExportText,
+  planExportPages
 } = require('../src/export-utils');
 
 describe('export-utils', () => {
+  describe('family export page planning', () => {
+    const options = { format: 'story', humorEnabled: false };
+    const measurements = { measureText: text => String(text).length * 18 };
+    const snapshot = (targetKey, familyData) => ({ targetKey, selectionId: 'selection-test',
+      filters: [], familyData, period: '2013-2025', metric: 'Distance', units: 'km' });
+
+    it('paginates long equipment names without losing rows, changing rank scales or shrinking text', () => {
+      const items = Array.from({ length: 20 }, (_, index) => ({ id: `item-${index}`, name: `Long equipment model ${index + 1} with meaningful distinguishing details`, value: 1000 - index * 10 }));
+      const plan = planExportPages(snapshot('equipment', { items }), options, measurements);
+      expect(plan).toMatchObject({ format: 'story', width: 1080, height: 1920,
+        contentBounds: { x: 72, y: 240, width: 888, height: 1320 }, minFontSize: 36 });
+      expect(plan.pages.length).toBeGreaterThan(1);
+      expect(plan.pages.flatMap(page => page.itemIndexes)).toEqual(items.map((_item, index) => index));
+      for (const page of plan.pages) {
+        expect(page.scale).toEqual({ min: 0, max: 1000 });
+        expect(page.visualization.x).toBeGreaterThanOrEqual(72);
+        expect(page.visualization.y).toBeGreaterThanOrEqual(240);
+        expect(page.visualization.x + page.visualization.width).toBeLessThanOrEqual(960);
+        expect(page.visualization.y + page.visualization.height).toBeLessThanOrEqual(1560);
+      }
+    });
+
+    it('keeps every selected chronological period rather than taking the last ten years', () => {
+      const periodLabels = Array.from({ length: 25 }, (_, index) => String(2001 + index));
+      const plan = planExportPages(snapshot('totalDistance', { aggregation: 'yearly', periodLabels,
+        series: [{ label: 'Run', values: periodLabels.map((_label, index) => index + 1) }] }), options, measurements);
+      expect(plan.pages.flatMap(page => page.itemIndexes)).toEqual(periodLabels.map((_label, index) => index));
+      expect(plan.pages.every(page => page.scale.max === 25)).toBe(true);
+    });
+
+    it('measures yearly labels beside the value axis and preserves the selected central fact', () => {
+      const selected = snapshot('totalDistance', { aggregation: 'yearly', periodLabels: ['2023', '2024', '2025'],
+        series: [{ label: 'Run', values: [1000, 1000, 1000] }] });
+      const plan = planExportPages(selected, { ...options, presentation: { headline: 'My training years',
+        centralValue: 3000, unit: 'km' } }, { measureText: text => String(text).length * 26 });
+      expect(plan.textBlocks.find(block => block.role === 'centralValue')).toMatchObject({ fontSize: 88, lines: ['3,000 km'] });
+      const maximumYearWidth = 4 * 26 + 24;
+      for (const page of plan.pages) expect(page.itemIndexes.length * maximumYearWidth + 7 * 26 + 30).toBeLessThanOrEqual(888);
+    });
+
+    it('preserves naturally coincident scatter observations without jitter or point-dropping pages', () => {
+      const points = [{ x: 5, y: 140, r: 8 }, { x: 5, y: 140, r: 8 }];
+      const selected = snapshot('paceMetrics', { points, xAxisTitle: 'Pace (min/km)', yAxisTitle: 'Heart rate (bpm)' });
+      const before = JSON.stringify(selected);
+      const plan = planExportPages(selected, options, measurements);
+      expect(plan.pages).toHaveLength(1);
+      expect(plan.pages[0].itemIndexes).toEqual([0, 1]);
+      expect(plan.layoutKind).not.toBe('ranking');
+      expect(JSON.stringify(selected)).toBe(before);
+    });
+
+    it('continues a dense pie legend while retaining the complete chart and original denominator', () => {
+      const slices = Array.from({ length: 30 }, (_, index) => ({ label: `Category ${index + 1}`, value: index + 1, color: '#20c9b2' }));
+      const plan = planExportPages(snapshot('pieCharts', { slices }), options, measurements);
+      expect(plan.pages.length).toBeGreaterThan(1);
+      expect(plan.pages.flatMap(page => page.itemIndexes)).toEqual(slices.map((_slice, index) => index));
+      expect(plan.pages.every(page => page.repeatFullChart === true && page.denominator === 465)).toBe(true);
+    });
+
+    it('rebalances caption-off space and rejects unsupported formats, missing data and unknown families', () => {
+      const selected = snapshot('equipment', { items: [{ name: 'Only pair', value: 12 }] });
+      const plain = planExportPages(selected, options, measurements);
+      const humor = planExportPages(selected, { ...options, humorEnabled: true, caption: 'They have seen things.' }, measurements);
+      expect(plain.captionHeight).toBe(0);
+      expect(humor.captionHeight).toBeGreaterThan(0);
+      expect(plain.pages[0].visualization.height).toBeGreaterThan(humor.pages[0].visualization.height);
+      expect(() => planExportPages(selected, { format: 'unsupported' }, measurements)).toThrow(/format/i);
+      expect(() => planExportPages(snapshot('unknown', {}), options, measurements)).toThrow(/family|target/i);
+      expect(() => planExportPages(snapshot('equipment', { items: [] }), options, measurements)).toThrow(/data|empty/i);
+    });
+
+    it('uses the full media column and available height for a single selected collage image', () => {
+      const selected = snapshot('mediaGallery', { mediaKind: 'collage', includeRoutes: false,
+        items: [{ assetKey: 'video.mp4', caption: 'Synthetic training frame', date: Date.parse('2025-01-04') }] });
+      const plan = planExportPages(selected, options, measurements);
+      expect(plan.pages).toHaveLength(1);
+      expect(plan.pages[0].columns).toBe(1);
+      expect(plan.pages[0].imageHeight).toBeGreaterThan(300);
+      expect(plan.pages[0].imageHeight).toBeLessThan(plan.pages[0].visualization.height);
+    });
+  });
+
   it('copies sample provenance into an immutable export snapshot', () => {
     const sampleProvenance = { datasetId: 'sample-v1', synthetic: true, label: 'Synthetic sample training data' };
     const target = createExportTarget({ kind: 'tab', key: 'totalDistance', title: 'Distance',
@@ -46,9 +129,9 @@ describe('export-utils', () => {
           headline: { min: 56, max: 72 },
           centralValue: { min: 88, max: 120 },
           essential: 36,
-          axis: 30,
-          context: 30,
-          branding: 24
+          axis: 36,
+          context: 36,
+          branding: 36
         }
       });
       expect(getContrastRatio(style.colors.headline, style.colors.background)).toBeGreaterThanOrEqual(4.5);
@@ -64,10 +147,47 @@ describe('export-utils', () => {
       expect(() => wrapExportText('A long label that cannot fit', 40, measureText, 1)).toThrow(/line/i);
     });
 
-    it('defaults to square and returns fixed dimensions for both supported formats', () => {
+    it('defaults to square and returns exact dimensions for all three formats', () => {
       expect(getExportFormatConfig()).toEqual({ key: 'square', width: 1080, height: 1080 });
       expect(getExportFormatConfig('portrait')).toEqual({ key: 'portrait', width: 1080, height: 1350 });
+      expect(getExportFormatConfig('story')).toEqual({ key: 'story', width: 1080, height: 1920 });
       expect(getExportFormatConfig('unsupported')).toBeNull();
+    });
+
+    it('plans story content within the exact asymmetric safe area', () => {
+      const layout = computeSocialExportLayout('story', { headerHeight: 180, footerHeight: 72 });
+      expect(layout).toMatchObject({
+        format: 'story', width: 1080, height: 1920,
+        contentBounds: { x: 72, y: 240, width: 888, height: 1320 },
+        visualization: { x: 72, y: 435, width: 888 }
+      });
+      expect(layout.visualization.y + layout.visualization.height).toBeLessThanOrEqual(1560 - 72);
+    });
+
+    it('does not allow caller dimensions or margins to escape story safe bounds', () => {
+      const layout = computeSocialExportLayout('story', {
+        canvasWidth: 2000, canvasHeight: 3000, marginX: 0,
+        headerHeight: 100, bottomMargin: 0, contextHeight: 48, annotationHeight: 40
+      });
+      for (const rect of [layout.context, layout.visualization, layout.annotation].filter(Boolean)) {
+        expect(rect.x).toBeGreaterThanOrEqual(72);
+        expect(rect.y).toBeGreaterThanOrEqual(240);
+        expect(rect.x + rect.width).toBeLessThanOrEqual(960);
+        expect(rect.y + rect.height).toBeLessThanOrEqual(1560);
+      }
+      expect(() => computeSocialExportLayout('story', { headerHeight: 2000 })).toThrow(/fit|space|content/i);
+    });
+
+    it('keeps all essential text at phone-readable source size and contrast', () => {
+      const style = getSocialExportStyleConfig();
+      for (const role of ['essential', 'axis', 'context', 'branding']) {
+        expect(style.typography[role]).toBeGreaterThanOrEqual(36);
+      }
+      expect(getContrastRatio(style.colors.secondary, style.colors.background)).toBeGreaterThanOrEqual(4.5);
+      const browser = { window: {} };
+      require('vm').runInNewContext(require('fs').readFileSync(require('path').join(__dirname, '../src/export-utils.js'), 'utf8'), browser);
+      expect(browser.window.exportUtils.getExportFormatConfig('story')).toEqual({ key: 'story', width: 1080, height: 1920 });
+      expect(browser.window.exportUtils.computeSocialExportLayout('story').contentBounds).toEqual({ x: 72, y: 240, width: 888, height: 1320 });
     });
 
     it('computes a deterministic composition inside the selected format and safe margins', () => {

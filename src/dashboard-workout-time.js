@@ -5,6 +5,7 @@
     let workoutTimeDateRange = { start: 0, end: 0 };
     let workoutTimeDateCandidates = [];
     let workoutTimeActivitySource = null;
+    let workoutTimeExportData = null;
 
     function setWorkoutTimeButtonActive(prefix, activeId) {
       document.querySelectorAll(`[id^="${prefix}"]`).forEach(button => {
@@ -196,6 +197,7 @@
     }
 
     function renderWorkoutTimeChart() {
+      workoutTimeExportData = null;
       const canvas = document.getElementById('workoutTimeChart');
       if (!canvas || !window.workoutTimeUtils) return;
       if (workoutTimeActivitySource !== processedActivities || workoutTimeDateCandidates.length === 0) initWorkoutTimeDateSlider();
@@ -262,4 +264,52 @@
         }
       });
       window.dashboardTooltips?.attachChart('workoutTime', workoutTimeChartInstance, createWorkoutTimeInspection(dataset));
+      const bounds = getWorkoutTimeDateBounds();
+      const chartData = JSON.parse(JSON.stringify(workoutTimeChartInstance.data || workoutTimeChartInstance.config.data));
+      const xAxisTitle = dataset.granularity === 'day' ? 'Start time' : dataset.granularity;
+      workoutTimeExportData = {
+        sport: selectedWorkoutTimeSport, metric: measure, metricLabel: definition.label,
+        unit: { count: 'activities', duration: 'h', distance: 'km' }[measure],
+        rawUnit: { count: 'activities', duration: 's', distance: 'km' }[measure],
+        valueDivisor: definition.divisor, granularity: dataset.granularity,
+        periodMeaning: { day: 'Start-time blocks', week: 'Weekday pattern', month: 'Day-of-month pattern', year: 'Monthly pattern' }[dataset.granularity],
+        period: bounds.minDate && bounds.maxDate ? `${formatDateIso(bounds.minDate)} - ${formatDateIso(bounds.maxDate)}` : null,
+        periodStart: bounds.minDate?.getTime() ?? null, periodEnd: bounds.maxDate?.getTime() ?? null,
+        status: dataset.status, activityCount: dataset.activityCount,
+        groups: dataset.groups.map(group => ({ key: group.key, label: group.label, value: group.value,
+          count: group.count, status: group.status, availableCount: group.availableCount,
+          durationSeconds: group.durationSeconds, distanceKm: group.distanceKm,
+          durationAvailableCount: group.durationAvailableCount, distanceAvailableCount: group.distanceAvailableCount })),
+        xAxisTitle, yAxisTitle: definition.axisTitle,
+        chartInput: { type: 'bar', data: chartData, visibility: [true], plugins: [],
+          options: { responsive: false, animation: false, maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: { enabled: false } },
+            scales: {
+              x: { type: 'category', title: { display: true, text: xAxisTitle, color: '#f8fafc' }, ticks: { color: '#f8fafc' } },
+              y: { beginAtZero: true, title: { display: true, text: definition.axisTitle, color: '#f8fafc' },
+                ticks: { color: '#f8fafc', ...(measure === 'count' ? { precision: 0 } : {}) } }
+            }
+          }
+        }
+      };
     }
+
+    function getWorkoutTimeExportData() {
+      if (!workoutTimeExportData || !workoutTimeChartInstance) return null;
+      const data = JSON.parse(JSON.stringify(workoutTimeExportData));
+      const labels = data.chartInput.data.labels.slice();
+      const granularity = data.granularity;
+      data.xAxisTitle = { day: 'Start hour (2-hour blocks)', week: 'Weekday', month: 'Day of month', year: 'Month' }[granularity];
+      if (granularity === 'day') data.periodMeaning = 'Two-hour start-time blocks';
+      data.chartInput.options.scales.x.title.text = data.xAxisTitle;
+      data.chartInput.options.scales.x.ticks = { color: '#f8fafc', autoSkip: true,
+        maxRotation: 0, minRotation: 0, maxTicksLimit: 12,
+        callback: value => {
+          const label = String(labels[Number(value)] ?? value);
+          return granularity === 'day' ? label.slice(0, 2)
+            : ['week', 'year'].includes(granularity) ? label.slice(0, 3) : label;
+        } };
+      return data;
+    }
+
+    window.workoutTimeDashboard = { getExportData: getWorkoutTimeExportData };

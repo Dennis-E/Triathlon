@@ -424,7 +424,67 @@ function getPaceMetricsExportPresentationData() {
   };
 }
 
+function getPaceMetricsExportData() {
+  if (!paceMetricsChartInstance) return null;
+  const presentation = getPaceMetricsExportPresentationData();
+  const metricPresentation = getPaceMetricPresentation(selectedPaceMetric, selectedPaceMetricsSport);
+  const performance = getPerformanceMetaForSport(selectedPaceMetricsSport);
+  const metricType = performance.metricType;
+  const source = paceMetricsChartInstance;
+  const visibility = source.data.datasets.map((dataset, index) => typeof source.isDatasetVisible === 'function'
+    ? source.isDatasetVisible(index)
+    : !disabledPaceMetricsYears.has(dataset.year) && (dataset.type === 'bubble' || paceMetricsShowTrendLines));
+  const datasets = source.data.datasets.map(dataset => ({
+    type: dataset.type, label: dataset.label, year: dataset.year,
+    clip: false,
+    borderColor: dataset.borderColor, backgroundColor: dataset.backgroundColor,
+    borderWidth: dataset.borderWidth, borderDash: dataset.borderDash?.slice(),
+    pointRadius: dataset.pointRadius, tension: dataset.tension,
+    fill: dataset.fill, showLine: dataset.showLine,
+    data: (dataset.data || []).map(point => ({ x: point.x, y: point.y,
+      ...(Number.isFinite(point.r) ? { r: point.r } : {}) }))
+  }));
+  const points = datasets.flatMap((dataset, index) => visibility[index] && dataset.type === 'bubble'
+    ? dataset.data.map(point => ({ ...point, year: dataset.year })) : []);
+  const domain = axis => {
+    const scale = source.scales?.[axis];
+    const values = datasets.flatMap((dataset, index) => visibility[index] ? dataset.data.map(point => point[axis]) : []).filter(Number.isFinite);
+    return { ...(Number.isFinite(scale?.min) ? { min: scale.min } : values.length ? { min: Math.min(...values) } : {}),
+      ...(Number.isFinite(scale?.max) ? { max: scale.max } : values.length ? { max: Math.max(...values) } : {}) };
+  };
+  const bounds = getScatterDateBounds();
+  const xDomain = domain('x');
+  const xSpan = xDomain.max - xDomain.min;
+  const compact = value => formatPerformanceValue(value, metricType, { compact: true });
+  const narrowRange = xSpan > 0 && compact(xDomain.min) === compact(xDomain.max);
+  const decimalPlaces = narrowRange ? Math.min(8, Math.max(2, Math.ceil(-Math.log10(xSpan)) + 1)) : 0;
+  const xAxisTitle = narrowRange ? selectedPaceMetricsSport === 'Bike' ? 'Speed (km/h)'
+    : selectedPaceMetricsSport === 'Swim' ? 'Pace (min/100m)' : 'Pace (min/km)' : presentation.xAxisTitle;
+  const padding = Math.ceil(Math.max(0, ...points.map(point => point.r || 0))) + 8;
+  return {
+    ...presentation, xAxisTitle, unit: metricPresentation.unit,
+    period: `${formatDateIso(bounds.minDate)} - ${formatDateIso(bounds.maxDate)}`,
+    periodStart: bounds.minDate.getTime(), periodEnd: bounds.maxDate.getTime(),
+    points, visibility: visibility.slice(),
+    chartInput: {
+      type: 'bubble', data: { datasets }, visibility,
+      options: { responsive: false, animation: false, maintainAspectRatio: false,
+        layout: { padding },
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        scales: {
+          x: { type: 'linear', ...xDomain, reverse: source.options.scales.x.reverse === true, offset: true,
+            title: { display: true, text: xAxisTitle },
+            ticks: { maxTicksLimit: narrowRange ? 3 : 6, maxRotation: 0,
+              callback: value => narrowRange ? Number(value).toFixed(decimalPlaces) : compact(value) } },
+          y: { type: 'linear', ...domain('y'), offset: true, title: { display: true, text: presentation.yAxisTitle } }
+        }
+      }, plugins: []
+    }
+  };
+}
+
 window.paceMetricsDashboard = {
   getExportSeries: getPaceMetricsExportSeries,
-  getExportPresentationData: getPaceMetricsExportPresentationData
+  getExportPresentationData: getPaceMetricsExportPresentationData,
+  getExportData: getPaceMetricsExportData
 };

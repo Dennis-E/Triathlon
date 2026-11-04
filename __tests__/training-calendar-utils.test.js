@@ -19,6 +19,46 @@ function activity({ date, sport = 'Run', duration, distance }) {
 }
 
 describe('training-calendar-utils', () => {
+  it('uses unambiguous readable weekday labels that fit a two-column export month', () => {
+    const makeElement = () => ({ style: {}, children: [], appendChild(child) { this.children.push(child); }, remove() {} });
+    const document = { createElement: makeElement, querySelectorAll: () => [], body: makeElement() };
+    const context = { window: { trainingCalendarUtils: require('../src/training-calendar-utils'), exportUtils: require('../src/export-utils') },
+      document, fixtureCalendarModel: buildMultiYearCalendarModel([activity({ date: '2025-01-04', duration: 100, distance: 1 })]) };
+    const vm = require('vm'); vm.createContext(context);
+    vm.runInContext(require('fs').readFileSync(require('path').join(__dirname, '../src/dashboard-training-calendar.js'), 'utf8'), context);
+    vm.runInContext('trainingCalendarModel = fixtureCalendarModel;', context);
+    const data = context.window.trainingCalendarDashboard.getExportData();
+    const page = context.window.trainingCalendarDashboard.createExportPage(data,
+      { monthKeys: ['2025-01'], columns: 2, visualization: { width: 888 } }, document);
+    const weekdays = page.element.children[0].children[1].children.slice(0, 7);
+    expect(weekdays.map(item => item.textContent)).toEqual(['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']);
+    expect(weekdays.every(item => item.style.fontSize === '36px')).toBe(true);
+    page.release();
+  });
+
+  it('exports local calendar days with original per-year intensity and explicit unobserved coverage', () => {
+    const model = buildMultiYearCalendarModel([
+      activity({ date: '2024-02-29', duration: 100, distance: 1 }),
+      activity({ date: '2025-01-04', duration: 10000, distance: 10 })
+    ]);
+    const context = { window: { trainingCalendarUtils: require('../src/training-calendar-utils') },
+      document: { querySelectorAll: () => [] }, fixtureCalendarModel: model };
+    const vm = require('vm');
+    vm.createContext(context);
+    vm.runInContext(require('fs').readFileSync(require('path').join(__dirname, '../src/dashboard-training-calendar.js'), 'utf8'), context);
+    vm.runInContext('trainingCalendarModel = fixtureCalendarModel;', context);
+    const exported = context.window.trainingCalendarDashboard.getExportData();
+    const year = exported.years.find(item => item.year === 2024);
+    const day = year.days.find(item => item.dateKey === '2024-02-29');
+    const original = model.years.find(item => item.year === 2024).days.find(item => item.dateKey === '2024-02-29');
+    expect(day).toMatchObject({ activityCount: 1, metricValue: 100, metricKind: 'duration',
+      intensityLevel: original.intensityLevel, coverage: 'observed' });
+    expect(day.activities).toBeUndefined();
+    expect(year.scale).toMatchObject({ scope: 'year', minValue: 100, maxValue: 100 });
+    expect(year.days.find(item => item.dateKey === '2024-03-01').coverage).toBe('unobserved');
+    expect(exported.scale.scope).toBe('year');
+  });
+
   const activities = [
     activity({ date: '2025-12-31', sport: 'Run', duration: 1800, distance: 5 }),
     activity({ date: '2026-01-01', sport: 'Bike', duration: 3600, distance: 20 }),

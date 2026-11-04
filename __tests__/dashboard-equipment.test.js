@@ -110,6 +110,26 @@ function harness(width = 768) {
 }
 
 describe('equipment chart', () => {
+  it('exports stable ranking identities and date-epoch timeline events without activity titles', () => {
+    const h = harness();
+    h.sandbox.processedActivities = [
+      { id: 'one', equipment: 'Nike Fast', date: new Date('2024-01-01'), distance: 10, duration: 3600, sport: 'Run', name: 'PRIVATE TITLE ONE' },
+      { id: 'two', equipment: 'Nike Fast', date: new Date('2024-02-01'), distance: 5, duration: 1800, sport: 'Run', name: 'PRIVATE TITLE TWO' }
+    ];
+    h.sandbox.renderEquipmentChart();
+    const ranking = h.sandbox.window.equipmentDashboard.getExportModel('ranking');
+    expect(ranking).toMatchObject({ metric: 'distance', unit: 'km', totalCount: 1 });
+    expect(ranking.items[0]).toMatchObject({ id: expect.any(String), name: 'Nike Fast', value: 15 });
+    h.sandbox.setEquipmentTimelineMode('activities', false);
+    const timeline = h.sandbox.window.equipmentDashboard.getExportModel('timeline');
+    expect(timeline).toMatchObject({ mode: 'activities', scaleStart: Date.parse('2024-01-01'), scaleEnd: Date.parse('2024-02-01') });
+    expect(timeline.items[0].activities).toEqual([Date.parse('2024-01-01'), Date.parse('2024-02-01')]);
+    expect(timeline.items[0].firstDate).toBe(Date.parse('2024-01-01'));
+    expect(JSON.stringify(timeline)).not.toContain('PRIVATE TITLE');
+    h.sandbox.processedActivities[0].distance = 99;
+    expect(ranking.items[0].value).toBe(15);
+  });
+
   it('exposes sorted ranking labels and native values for social export', () => {
     const h = harness();
     h.sandbox.renderEquipmentChart();

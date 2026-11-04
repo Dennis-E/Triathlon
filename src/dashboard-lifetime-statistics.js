@@ -3,6 +3,7 @@
   let sourceActivities = null;
   let sourceCountries = null;
   let statisticDetails = new Map();
+  let lifetimeExportData = null;
 
   function inspectionAttributes(key, exportMode = false) {
     const identity = `data-statistic-key="${escapeHtml(key)}"`;
@@ -325,6 +326,7 @@
     }
 
     if (activities.length === 0) {
+      lifetimeExportData = null;
       captureArea.innerHTML = '';
       if (exportArea) exportArea.innerHTML = '';
       captureArea.classList.add('hidden');
@@ -333,6 +335,7 @@
     }
 
     const summary = root.lifetimeStatisticsUtils.aggregateLifetimeStatistics(activities);
+    lifetimeExportData = buildLifetimeExportData(summary, countrySummary, activities);
     captureArea.innerHTML = renderLifetimeStatistics(summary, { countryCountSummary: countrySummary });
     if (exportArea) exportArea.innerHTML = renderLifetimeStatistics(summary, { export: true, countryCountSummary: countrySummary });
     captureArea.classList.remove('hidden');
@@ -340,5 +343,66 @@
     bindStatisticDetails(captureArea, summary, countrySummary);
   }
 
-  root.lifetimeStatisticsDashboard = { render };
+  function buildLifetimeExportData(summary, countrySummary, activities) {
+    const metric = value => value ? { value: Number.isFinite(value.value) ? value.value : null,
+      availableCount: value.availableCount, activityCount: value.activityCount, status: value.status } : null;
+    const milestone = value => value ? { value: value.value,
+      date: Number.isFinite(new Date(value.date).getTime()) ? new Date(value.date).getTime() : null,
+      sport: value.sport || null } : null;
+    const safeSummary = {
+      workoutCount: summary.workoutCount, distance: metric(summary.distance), movingTime: metric(summary.movingTime),
+      elevationGain: metric(summary.elevationGain), activeDayCount: summary.activeDayCount,
+      longestByDistance: milestone(summary.longestByDistance), longestByMovingTime: milestone(summary.longestByMovingTime),
+      equipmentCounts: { shoes: summary.equipmentCounts.shoes, bikes: summary.equipmentCounts.bikes }
+    };
+    const country = countrySummary ? { status: countrySummary.status,
+      countryCount: Number.isSafeInteger(countrySummary.countryCount) ? countrySummary.countryCount : null,
+      countryNames: Array.isArray(countrySummary.countryNames) ? countrySummary.countryNames.slice() : [],
+      totalActivityCount: countrySummary.totalActivityCount } : null;
+    const groups = [];
+    const add = (label, value, context = '') => groups.push({ label, displayValue: String(value), context });
+    const addMetric = (label, value, formatter, unit) => {
+      add(label, value && Number.isFinite(value.value) ? `${formatter(value.value)}${unit ? ` ${unit}` : ''}` : 'Not available',
+        value?.status === 'partial' ? `${value.availableCount} of ${value.activityCount} recorded activities` : '');
+    };
+    addMetric('Total distance', safeSummary.distance, value => formatNumber(value, 0), 'km');
+    addMetric('Moving time', safeSummary.movingTime, formatMovingTime, '');
+    add('Workouts', formatNumber(safeSummary.workoutCount, 0));
+    add('Countries visited', country && country.countryCount !== null ? formatNumber(country.countryCount, 0) : country ? 'Not available' : 'Calculating...',
+      country?.countryNames.join(', ') || '');
+    addMetric('Elevation gain', safeSummary.elevationGain, value => formatNumber(value / 1000), 'km');
+    add('Active days', formatNumber(safeSummary.activeDayCount, 0));
+    for (const [label, value, formatter, unit] of [
+      ['Longest distance', safeSummary.longestByDistance, value => formatNumber(value, 0), 'km'],
+      ['Longest moving time', safeSummary.longestByMovingTime, formatMovingTime, '']
+    ]) add(label, value && Number.isFinite(value.value) ? `${formatter(value.value)}${unit ? ` ${unit}` : ''}` : 'Not available',
+      value?.date !== null && value?.date !== undefined ? new Date(value.date).toLocaleDateString('en-GB') : '');
+    add('Shoes used', formatNumber(safeSummary.equipmentCounts.shoes, 0));
+    add('Bikes used', formatNumber(safeSummary.equipmentCounts.bikes, 0));
+    const dates = activities.map(activity => new Date(activity.date).getTime()).filter(Number.isFinite);
+    return { sport: 'All', metricLabel: 'Training statistics', summary: safeSummary, countrySummary: country, groups,
+      period: dates.length ? `${new Date(Math.min(...dates)).getFullYear()}-${new Date(Math.max(...dates)).getFullYear()}` : null };
+  }
+
+  function createLifetimeExportPage(data, page, ownerDocument = document) {
+    const element = ownerDocument.createElement('div');
+    Object.assign(element.style, { width: `${page.visualization.width}px`, display: 'grid', gap: '24px',
+      fontFamily: 'system-ui, sans-serif', color: '#f8fafc', background: 'transparent' });
+    for (const index of page.itemIndexes) {
+      const group = data.groups[index];
+      if (!group) throw new Error('Statistic export group is unavailable');
+      const section = ownerDocument.createElement('section');
+      section.innerHTML = `<div style="font-size:36px;line-height:42px;color:#d1e5e3;overflow-wrap:anywhere;">${escapeHtml(group.label)}</div><div style="font-size:48px;line-height:56px;font-weight:700;overflow-wrap:anywhere;">${escapeHtml(group.displayValue)}</div>${group.context ? `<div style="font-size:36px;line-height:42px;color:#d1e5e3;overflow-wrap:anywhere;">${escapeHtml(group.context)}</div>` : ''}`;
+      element.appendChild(section);
+    }
+    let released = false;
+    return { element,
+      prepare() { if (released) throw new Error('Statistics export page has been released');
+        Object.assign(element.style, { position: 'fixed', left: '-100000px', top: '0' }); ownerDocument.body.appendChild(element); },
+      release() { if (released) return; released = true; element.remove(); } };
+  }
+
+  root.lifetimeStatisticsDashboard = { render,
+    getExportData: () => lifetimeExportData ? JSON.parse(JSON.stringify(lifetimeExportData)) : null,
+    createExportPage: createLifetimeExportPage };
 })(window);

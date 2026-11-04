@@ -347,7 +347,7 @@
 
   <!-- Instagram-Ready Visualization Export Preview Modal -->
   <div id="exportPreviewModal" class="hidden fixed inset-0 z-[1000] bg-black/60 backdrop-blur-sm items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="exportPreviewModalTitle">
-    <div class="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl">
+    <div class="flex w-full max-w-2xl flex-col rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl" style="height:min(940px, calc(100dvh - 2rem));">
       <div class="flex items-start justify-between gap-4">
         <h2 id="exportPreviewModalTitle" class="text-lg font-semibold text-white">Export preview</h2>
         <button
@@ -359,16 +359,17 @@
           <i data-lucide="x" class="w-4 h-4"></i>
         </button>
       </div>
-      <div id="exportFormatSelector" role="group" aria-label="Export image format" class="mt-4 inline-flex rounded-lg border border-slate-700 bg-slate-950 p-1">
-        <button type="button" id="exportFormatSquare" aria-pressed="true" onclick="setExportFormat('square')" class="rounded-md bg-teal-700 px-3 py-2 text-sm font-semibold text-white" title="Square, 1080 by 1080 pixels">Square</button>
-        <button type="button" id="exportFormatPortrait" aria-pressed="false" onclick="setExportFormat('portrait')" class="rounded-md px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800" title="Portrait, 1080 by 1350 pixels">Portrait</button>
+      <div id="exportFormatSelector" role="group" aria-label="Export image format" class="mt-4 grid grid-cols-3 gap-1 rounded-lg border border-slate-700 bg-slate-950 p-1">
+        <button type="button" id="exportFormatSquare" aria-pressed="true" onclick="setExportFormat('square')" class="min-h-12 rounded-md bg-teal-700 px-2 py-2 text-sm font-semibold text-white" title="Square, 1080 by 1080 pixels">Square · 1:1</button>
+        <button type="button" id="exportFormatPortrait" aria-pressed="false" onclick="setExportFormat('portrait')" class="min-h-12 rounded-md px-2 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800" title="Feed portrait, 1080 by 1350 pixels">Feed portrait · 4:5</button>
+        <button type="button" id="exportFormatStory" aria-pressed="false" onclick="setExportFormat('story')" class="min-h-12 rounded-md px-2 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800" title="Reel or Story image, 1080 by 1920 pixels">Reel / Story · 9:16</button>
       </div>
-      <label for="exportHumorEnabled" class="ml-4 inline-flex items-center gap-2 text-sm font-medium text-slate-300">
+      <label for="exportHumorEnabled" class="mt-3 inline-flex items-center gap-2 text-sm font-medium text-slate-300">
         <input type="checkbox" id="exportHumorEnabled" onchange="setExportHumorEnabled(this.checked)" class="h-4 w-4 rounded border-slate-600 bg-slate-950 text-teal-500 focus:ring-teal-500" />
         Add a light line
       </label>
-      <div class="mt-4 flex items-center justify-center rounded-xl border border-slate-800 bg-slate-950 p-2">
-        <img id="exportPreviewImage" alt="Exported visualization preview" class="max-h-[70vh] w-full rounded-lg object-contain" />
+      <div class="mt-4 flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl border border-slate-800 bg-slate-950 p-2">
+        <img id="exportPreviewImage" alt="Exported visualization preview" class="h-auto w-auto max-h-full max-w-full rounded-lg object-contain" />
       </div>
       <div id="exportPreviewSeriesControls" class="hidden mt-3 flex items-center justify-between gap-3">
         <button type="button" id="exportPreviewSeriesPrevious" onclick="setExportSeriesPage('previous')" class="rounded-lg p-2 text-slate-300 transition hover:bg-slate-800 disabled:opacity-40" aria-label="Previous image" disabled>
@@ -1775,7 +1776,7 @@
             <h2 class="text-2xl font-bold tracking-tight">Media</h2>
             <p class="text-xs text-slate-400">Photos and videos from this Strava import.</p>
           </div>
-          <button type="button" onclick="exportVisualizationTab('mediaGallery')" aria-label="Export media gallery" class="viz-export-button inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">Export</button>
+          <button id="mediaGalleryExportButton" type="button" onclick="window.mediaGalleryDashboard?.createCollage?.()" aria-label="Export selected media" class="viz-export-button inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white">Export media</button>
         </div>
         <div class="flex flex-wrap items-end gap-3">
           <label class="grid gap-1 text-xs text-slate-400">Year

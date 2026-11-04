@@ -269,23 +269,39 @@ function getTrainingCalendarExportData() {
     .map(day => day.metricValue);
   const minValue = activeValues.length ? Math.min(...activeValues) : 0;
   const maxValue = activeValues.length ? Math.max(...activeValues) : 0;
-  const years = modelYears.map(year => ({
+  const years = modelYears.map(year => {
+    const yearValues = (year.days || []).filter(day => day.activityCount > 0)
+      .map(day => day.metricValue).filter(Number.isFinite);
+    return {
     year: year.year,
     activityCount: year.activityCount,
+    scale: {
+      scope: 'year',
+      minValue: yearValues.length ? Math.min(...yearValues) : 0,
+      maxValue: yearValues.length ? Math.max(...yearValues) : 0
+    },
     days: (year.days || []).map(day => ({
       dateKey: day.dateKey,
-      intensityLevel: day.activityCount <= 0 ? 0 : minValue === maxValue ? 5
-        : Math.min(5, Math.floor(((day.metricValue - minValue) / (maxValue - minValue)) * 5) + 1)
+      activityCount: day.activityCount,
+      metricValue: Number.isFinite(day.metricValue) ? day.metricValue : null,
+      metricKind: day.metricKind || null,
+      intensityLevel: day.intensityLevel,
+      coverage: day.activityCount > 0 ? 'observed' : 'unobserved'
     }))
-  }));
+    };
+  });
   const measuredHeights = Array.from(document.querySelectorAll('#trainingCalendarYears > [data-calendar-year]'))
     .map(section => section.getBoundingClientRect?.().height || section.offsetHeight || 0)
     .filter(height => height > 0);
   const palette = selectedTrainingCalendarPalette;
   return {
     years,
+    sport: selectedTrainingCalendarSport,
+    metricLabel: 'Daily training intensity',
+    period: years.length ? `${Math.min(...years.map(year => year.year))}-${Math.max(...years.map(year => year.year))}` : null,
     palette,
     scale: {
+      scope: 'year',
       palette,
       minValue,
       maxValue,
@@ -297,4 +313,59 @@ function getTrainingCalendarExportData() {
   };
 }
 
-window.trainingCalendarDashboard = { getExportData: getTrainingCalendarExportData };
+function createTrainingCalendarExportPage(data, page, ownerDocument = document) {
+  if (!Array.isArray(page.monthKeys) || !page.monthKeys.length) throw new Error('Calendar export requires a ready month page plan');
+  const element = ownerDocument.createElement('div');
+  Object.assign(element.style, { width: `${page.visualization.width}px`, fontFamily: 'system-ui, sans-serif',
+    fontSize: '36px', color: '#f8fafc', background: 'transparent', display: 'grid', gap: '24px',
+    gridTemplateColumns: `repeat(${page.columns || 1}, minmax(0, 1fr))` });
+  for (const monthKey of page.monthKeys) {
+    const [yearNumber, monthNumber] = monthKey.split('-').map(Number);
+    const year = data.years.find(item => item.year === yearNumber);
+    if (!year) throw new Error('Calendar export year is unavailable');
+    const days = year.days.filter(day => day.dateKey.startsWith(monthKey));
+    const section = ownerDocument.createElement('section');
+    const heading = ownerDocument.createElement('div');
+    heading.textContent = `${new Date(yearNumber, monthNumber - 1, 1).toLocaleString('en', { month: 'long' })} ${yearNumber}`;
+    Object.assign(heading.style, { fontWeight: '700', lineHeight: '48px', marginBottom: '8px' });
+    section.appendChild(heading);
+    const grid = ownerDocument.createElement('div');
+    Object.assign(grid.style, { display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '4px' });
+    for (const label of ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']) {
+      const weekday = ownerDocument.createElement('div');
+      weekday.textContent = label;
+      Object.assign(weekday.style, { lineHeight: '44px', textAlign: 'center', fontSize: '36px' });
+      grid.appendChild(weekday);
+    }
+    const offset = (new Date(yearNumber, monthNumber - 1, 1).getDay() + 6) % 7;
+    for (let index = 0; index < offset; index++) grid.appendChild(ownerDocument.createElement('div'));
+    const byKey = new Map(days.map(day => [day.dateKey, day]));
+    const dayCount = new Date(yearNumber, monthNumber, 0).getDate();
+    for (let number = 1; number <= dayCount; number++) {
+      const key = `${monthKey}-${String(number).padStart(2, '0')}`;
+      const day = byKey.get(key);
+      const color = data.scale.colors[day?.intensityLevel || 0];
+      const cell = ownerDocument.createElement('div');
+      cell.textContent = String(number);
+      const whiteContrast = window.exportUtils?.getContrastRatio('#ffffff', color);
+      Object.assign(cell.style, { lineHeight: '48px', height: '48px', textAlign: 'center', fontSize: '36px',
+        backgroundColor: color, color: whiteContrast >= 4.5 ? '#ffffff' : '#000000' });
+      grid.appendChild(cell);
+    }
+    section.appendChild(grid);
+    element.appendChild(section);
+  }
+  let released = false;
+  return {
+    element,
+    prepare() {
+      if (released) throw new Error('Calendar export page has been released');
+      Object.assign(element.style, { position: 'fixed', left: '-100000px', top: '0' });
+      ownerDocument.body.appendChild(element);
+    },
+    release() { if (released) return; released = true; element.remove(); }
+  };
+}
+
+window.trainingCalendarDashboard = { getExportData: getTrainingCalendarExportData,
+  createExportPage: createTrainingCalendarExportPage };

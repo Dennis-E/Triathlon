@@ -5,6 +5,27 @@ const vm = require('vm');
 const PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6XcAAAAASUVORK5CYII=';
 const PNG_DATA_URL = `data:image/png;base64,${PNG_BASE64}`;
 
+function createSizedPngDataUrl(width, height) {
+  const chunk = (type, data) => {
+    const name = Buffer.from(type);
+    const bytes = Buffer.concat([name, data]);
+    let crc = 0xffffffff;
+    for (const byte of bytes) {
+      crc ^= byte;
+      for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+    }
+    const size = Buffer.alloc(4); size.writeUInt32BE(data.length);
+    const checksum = Buffer.alloc(4); checksum.writeUInt32BE((crc ^ 0xffffffff) >>> 0);
+    return Buffer.concat([size, name, data, checksum]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 6;
+  const pixels = Buffer.alloc((width * 4 + 1) * height);
+  const png = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', header),
+    chunk('IDAT', require('zlib').deflateSync(pixels)), chunk('IEND', Buffer.alloc(0))]);
+  return `data:image/png;base64,${png.toString('base64')}`;
+}
+
 function deferredValue() {
   let resolve;
   const promise = new Promise(complete => { resolve = complete; });
@@ -16,7 +37,7 @@ const dashboardExportSource = fs.readFileSync(
   'utf8'
 );
 
-function createDownloadRuntime({ showSaveFilePicker, decodeError, imageWidth = 1, anchorError, onDownload } = {}) {
+function createDownloadRuntime({ showSaveFilePicker, decodeError, imageWidth = 1, imageHeight = 1, pngDataUrl = PNG_DATA_URL, anchorError, onDownload } = {}) {
   const toast = {
     textContent: '',
     classList: {
@@ -69,7 +90,7 @@ function createDownloadRuntime({ showSaveFilePicker, decodeError, imageWidth = 1
     setTimeout(callback) { timers.set(++timerId, callback); return timerId; },
     clearTimeout(id) { timers.delete(id); },
     Image: class {
-      constructor() { this.naturalWidth = imageWidth; this.naturalHeight = 1; }
+      constructor() { this.naturalWidth = imageWidth; this.naturalHeight = imageHeight; }
       decode() { return decodeError ? Promise.reject(decodeError) : Promise.resolve(); }
     },
     window: {
@@ -104,7 +125,7 @@ function createDownloadRuntime({ showSaveFilePicker, decodeError, imageWidth = 1
             width: 0,
             height: 0,
             getContext() { return canvasContext; },
-            toDataURL() { return PNG_DATA_URL; }
+            toDataURL() { return pngDataUrl; }
           };
           canvasCalls.canvases.push(canvas);
           return canvas;
@@ -163,6 +184,7 @@ function createDownloadRuntime({ showSaveFilePicker, decodeError, imageWidth = 1
       elements.captureTarget = {};
       context.html2canvas = jest.fn().mockResolvedValue({});
       context.__mockCapture(dataUrl);
+      vm.runInContext('initializeStructuredExportTarget = target => target;', context);
     },
     getFocus: () => focused
   };
@@ -191,19 +213,19 @@ describe('dashboard export target inventory', () => {
   });
 
   it.each([
-    ['totalDistance', { sport: 'Run', period: '2024-2026', metricLabel: 'Distance', unit: 'km' }, 'My running years'],
+    ['totalDistance', { sport: 'Run', aggregation: 'yearly', period: '2024-2026', metricLabel: 'Distance', unit: 'km' }, 'Run distance by year'],
     ['paceMetrics', { sport: 'Bike', metricLabel: 'Heart rate', period: '2024-2026', unit: 'bpm' }, 'My heart rate vs speed'],
-    ['equipment', { equipmentFilter: 'Shoes', metric: 'distance' }, 'My most-used running shoes'],
-    ['equipmentTimeline', { equipmentFilter: 'Shoes', periodMeaning: 'Usage span' }, 'My running shoe eras'],
+    ['equipment', { equipmentFilter: 'Shoes', metric: 'distance' }, 'Shoe distance ranking'],
+    ['equipmentTimeline', { equipmentFilter: 'Shoes', mode: 'continuous', periodMeaning: 'Usage span' }, 'Shoe usage timeline'],
     ['personalBests', {}, 'My personal bests'],
-    ['heatmap', { sport: 'Run', period: '2024-2026' }, 'My training playground'],
-    ['distributions', {}, 'My training distribution'],
-    ['workoutTime', {}, 'My workout rhythm'],
-    ['trainingCalendar', {}, 'My training year'],
-    ['wordcloud', {}, 'My workout words'],
-    ['pieCharts', {}, 'How I train'],
-    ['lifetimeStatistics', {}, 'My training totals'],
-    ['mediaGallery', {}, 'My training moments']
+    ['heatmap', { sport: 'Run', period: '2024-2026' }, 'Run route heatmap'],
+    ['distributions', {}, 'training distribution'],
+    ['workoutTime', { sport: 'Run', metric: 'duration', granularity: 'week' }, 'Run duration by weekday'],
+    ['trainingCalendar', {}, 'training frequency calendar'],
+    ['wordcloud', {}, 'Workout title frequency: selected words'],
+    ['pieCharts', { groupBy: 'sport' }, 'Activities by sport'],
+    ['lifetimeStatistics', {}, 'Lifetime training summary'],
+    ['mediaGallery', {}, 'Training media collage']
   ])('builds concise, relevant social context for %s', (key, data, headline) => {
     const runtime = createDownloadRuntime();
     const presentation = runtime.context.__socialPresentation(key, data);
@@ -214,6 +236,27 @@ describe('dashboard export target inventory', () => {
     expect(presentation.context).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ label: expect.stringMatching(/filter|colour scheme|color scheme/i) })
     ]));
+  });
+
+  it('uses the selected equipment metric and mode in neutral factual headlines', () => {
+    const runtime = createDownloadRuntime();
+    expect(runtime.context.__socialPresentation('equipment', {
+      sport: 'Run', equipmentFilter: 'Shoes', metric: 'pace', metricLabel: 'Pace', unit: 'min/km', period: '2025'
+    })).toMatchObject({ headline: 'Shoe pace ranking', period: '2025', unit: 'min/km' });
+    expect(runtime.context.__socialPresentation('equipment', {
+      equipmentFilter: 'All', metric: 'count', metricLabel: 'Activity count', unit: 'activities', period: null
+    })).toMatchObject({ headline: 'Equipment activity count ranking', period: null, unit: 'activities' });
+    expect(runtime.context.__socialPresentation('equipmentTimeline', {
+      equipmentFilter: 'All', mode: 'activities', periodMeaning: 'Individual activities'
+    })).toMatchObject({ headline: 'Equipment activity timeline' });
+  });
+
+  it('does not turn a dataset extent into a selected-filter period or record comparison', () => {
+    const runtime = createDownloadRuntime();
+    const presentation = runtime.context.__socialPresentation('totalDistance', { sport: 'Bike', aggregation: 'yearly', unit: 'km' });
+    expect(presentation.headline).toBe('Bike distance by year');
+    expect(presentation.period).toBeNull();
+    expect(presentation.summary).toBeNull();
   });
 
   it('adds named scatter axes and point-size meaning to social context', () => {
@@ -358,6 +401,36 @@ describe('dashboard export target inventory', () => {
     expect(pages.map(page => [page.exportData.pageNumber, page.exportData.pageCount])).toEqual([[1, 2], [2, 2]]);
     expect(pages[0].exportData.scaleStart).toBe(pages[1].exportData.scaleStart);
     expect(pages[0].exportData.scaleEnd).toBe(pages[1].exportData.scaleEnd);
+  });
+
+  it('renders the same global date axis on every structured equipment timeline page', () => {
+    const runtime = createDownloadRuntime();
+    const year = 365 * 24 * 60 * 60 * 1000;
+    const scaleStart = Date.UTC(2015, 0, 1);
+    const scaleEnd = Date.UTC(2025, 11, 31);
+    const items = Array.from({ length: 18 }, (_unused, index) => ({
+      id: `shoe-${index + 1}`, name: `Shoe ${index + 1}`, type: 'Shoes',
+      firstDate: scaleStart + index * year / 2,
+      lastDate: Math.min(scaleEnd, scaleStart + (index + 1) * year / 2), activities: []
+    }));
+    const snapshot = { targetKey: 'equipmentTimeline', period: '2015-2025', metric: 'Usage span', units: null,
+      filters: [], familyData: { mode: 'continuous', items, scaleStart, scaleEnd } };
+    const plan = runtime.context.window.exportUtils.planExportPages(snapshot,
+      { format: 'story', headline: 'Shoe usage timeline', humorEnabled: false },
+      { measureText: text => String(text).length * 18 });
+    const expectedTicks = plan.pages[0].axisTicks.map(tick => String(new Date(tick.date).getFullYear()));
+    expect(plan.pages.length).toBeGreaterThan(1);
+    expect(plan.pages.every(page => page.axisTicks.map(tick => tick.value).join('|')
+      === plan.pages[0].axisTicks.map(tick => tick.value).join('|'))).toBe(true);
+
+    for (const page of plan.pages) {
+      const start = runtime.canvasCalls.text.length;
+      runtime.context.timelineRenderInput = { context: runtime.context.document.createElement('canvas').getContext(), snapshot, page };
+      vm.runInContext('EXPORT_ADAPTERS.equipmentTimeline.renderPage(timelineRenderInput)', runtime.context);
+      const pageText = runtime.canvasCalls.text.slice(start);
+      expect(pageText).toContain('Year');
+      expect(pageText.filter(text => expectedTicks.includes(text))).toEqual(expectedTicks);
+    }
   });
 
   it('splits overflowing Training Calendar years into a complete numbered series on one scale', () => {
@@ -538,14 +611,28 @@ describe('dashboard export target inventory', () => {
     expect(humorous.secondaryLine.trim().split(/\s+/).length).toBeLessThanOrEqual(10);
   });
 
-  it('does not add humor to the heart-rate-versus-performance comparison', () => {
+  it('adds one concise, non-analytical humor line to the heart-rate-versus-performance comparison', () => {
     const runtime = createDownloadRuntime();
     const presentation = runtime.context.__socialPresentation('paceMetrics', {
       sport: 'Bike', metricLabel: 'Heart rate'
     }, { humorEnabled: true });
 
-    expect(presentation.secondaryLine).toBeNull();
+    expect(presentation.secondaryLine).toBe('Dots, not destiny.');
     expect(presentation.headline).toBe('My heart rate vs speed');
+  });
+
+  it.each(['totalDistance', 'paceMetrics', 'equipment', 'equipmentTimeline', 'personalBests', 'heatmap',
+    'distributions', 'workoutTime', 'trainingCalendar', 'wordcloud', 'pieCharts', 'lifetimeStatistics', 'mediaGallery'])
+  ('has exactly one relevant friendly caption for %s and none when disabled', key => {
+    const runtime = createDownloadRuntime();
+    const data = key === 'equipment' ? { equipmentFilter: 'All', metric: 'count', metricLabel: 'Activity count' }
+      : key === 'equipmentTimeline' ? { equipmentFilter: 'All', mode: 'activities' } : {};
+    const enabled = runtime.context.__socialPresentation(key, data, { humorEnabled: true });
+    const disabled = runtime.context.__socialPresentation(key, data, { humorEnabled: false });
+    expect(enabled.secondaryLine).toEqual(expect.any(String));
+    expect(enabled.secondaryLine.trim().split(/\s+/).length).toBeLessThanOrEqual(10);
+    expect(disabled.secondaryLine).toBeNull();
+    expect(enabled.headline).toBe(disabled.headline);
   });
 
   it.each([
@@ -578,6 +665,14 @@ describe('dashboard export target inventory', () => {
 
     expect(runtime.context.window.personalBestsDashboard.getActiveExportData()).toEqual({
       title: 'Run 5 km',
+      definitionKey: 'Run 5 km',
+      sport: 'Run',
+      unit: 's',
+      xAxisMode: 'time',
+      sourceAttribution: 'activity, official race',
+      period: '2024-2025',
+      periodStart: first.date.getTime(),
+      periodEnd: current.date.getTime(),
       metricLabel: 'Time',
       direction: 'down',
       recordCount: 3,
@@ -588,11 +683,11 @@ describe('dashboard export target inventory', () => {
       ],
       firstRecord: { value: 1100, displayValue: '1100', date: first.date, sourceType: 'activity' },
       currentRecord: { value: 850, displayValue: '850', date: current.date, sourceType: 'official race' },
-      best: { value: 850, displayValue: '850', date: current.date, title: 'Current race', sourceType: 'official race' },
+      best: { value: 850, displayValue: '850', date: current.date, sourceType: 'official race' },
       milestones: [
-        { kind: 'first', value: 1100, displayValue: '1100', date: first.date, title: 'First effort', sourceType: 'activity' },
-        { kind: 'largestImprovement', value: 900, displayValue: '900', date: improvement.date, title: 'Big improvement', sourceType: null },
-        { kind: 'current', value: 850, displayValue: '850', date: current.date, title: 'Current race', sourceType: 'official race' }
+        { kind: 'first', value: 1100, displayValue: '1100', date: first.date, sourceType: 'activity' },
+        { kind: 'largestImprovement', value: 900, displayValue: '900', date: improvement.date, sourceType: null },
+        { kind: 'current', value: 850, displayValue: '850', date: current.date, sourceType: 'official race' }
       ]
     });
   });
@@ -644,7 +739,7 @@ describe('dashboard export composition', () => {
     expect(runtime.context.__targetForTest('workoutTime')).not.toBeNull();
   });
 
-  it('draws one rounded speech-bubble path and correctly projected tail without shrinking the visualization', () => {
+  it('never draws pinned inspector content into a social export', () => {
     const runtime = createDownloadRuntime();
     const captured = { width: 800, height: 400 };
     const assets = { logo: { naturalWidth: 120, naturalHeight: 60 }, qrCode: {} };
@@ -657,16 +752,11 @@ describe('dashboard export composition', () => {
     runtime.context.window.exportUtils.computeTooltipCalloutLayout = layoutHelper;
     runtime.context.__drawComposition(captured, target, assets);
     const pinnedDraw = runtime.canvasCalls.images.find(args => args[0] === captured);
-    expect(runtime.canvasCalls.paths.filter(step => step[0] === 'fill')).toHaveLength(1);
-    expect(runtime.canvasCalls.paths.filter(step => step[0] === 'curve')).toHaveLength(4);
-    const anchor = { x: pinnedDraw[1] + pinnedDraw[3] / 2, y: pinnedDraw[2] + pinnedDraw[4] / 2 };
-    expect(layoutHelper.mock.calls[0][0].protectedRects).toContainEqual({
-      x: pinnedDraw[1] + pinnedDraw[3] * 0.75, y: pinnedDraw[2] + pinnedDraw[4] * 0.1,
-      width: pinnedDraw[3] * 0.2, height: pinnedDraw[4] * 0.4
-    });
-    expect(runtime.canvasCalls.paths.filter(step => step[0] === 'line').some(step => Math.abs(Math.hypot(step[1] - anchor.x, step[2] - anchor.y) - 10) < 0.01)).toBe(true);
-    expect(runtime.canvasCalls.text.filter(text => text === 'Selected run')).toHaveLength(1);
-    expect(runtime.canvasCalls.text).toContain('Distance: 12 km');
+    expect(pinnedDraw).toBeDefined();
+    expect(layoutHelper).not.toHaveBeenCalled();
+    expect(runtime.canvasCalls.paths).toHaveLength(0);
+    expect(runtime.canvasCalls.text).not.toContain('Selected run');
+    expect(runtime.canvasCalls.text).not.toContain('Distance: 12 km');
     const noPin = createDownloadRuntime();
     noPin.context.__drawComposition(captured, { ...target, pinnedSelection: null }, assets);
     expect(runtime.canvasCalls.fills).toEqual(noPin.canvasCalls.fills);
@@ -674,15 +764,15 @@ describe('dashboard export composition', () => {
     expect(noPin.canvasCalls.paths).toHaveLength(0);
   });
 
-  it.each(['outside-view', 'not-in-export'])('draws a compact, truthful non-pointing bubble for %s', visibility => {
+  it.each(['outside-view', 'not-in-export'])('omits %s inspector details from social exports', visibility => {
     const runtime = createDownloadRuntime();
     runtime.context.__drawComposition({ width: 800, height: 400 }, { title: 'View', pinnedSelection: {
       content: { title: 'Run', notes: ['Detail '.repeat(400)] },
       anchor: { visibility, associationLabel: 'Run: outside this capture' }
     } }, { logo: { naturalWidth: 120, naturalHeight: 60 }, qrCode: {} });
-    expect(runtime.canvasCalls.paths.filter(step => step[0] === 'line')).toHaveLength(4);
-    expect(runtime.canvasCalls.text.join(' ')).toContain('Run: outside this capture');
-    expect(runtime.canvasCalls.paths.filter(step => step[0] === 'fill')).toHaveLength(1);
+    expect(runtime.canvasCalls.paths).toHaveLength(0);
+    expect(runtime.canvasCalls.text.join(' ')).not.toContain('Run: outside this capture');
+    expect(runtime.canvasCalls.text.join(' ')).not.toContain('Detail');
   });
 
   it('omits filter context and expands the chart into the available square canvas', () => {
@@ -756,6 +846,181 @@ describe('dashboard export composition', () => {
       { label: 'Aggregation', value: 'Yearly' },
       { label: 'Timeframe', value: '2026' }
     ]);
+  });
+});
+
+describe('immutable export selection foundation', () => {
+  it('copies allowlisted fields before later mutation and normalizes dates without losing zero or missing values', () => {
+    const runtime = createDownloadRuntime();
+    const firstDate = new Date('2025-01-02T07:00:00Z');
+    const data = { period: '2025', unit: 'km', items: [{ id: 'one', name: 'Long equipment name',
+      firstDate, lastDate: null, value: 0, activities: [firstDate] }],
+      rawActivities: [{ name: 'PRIVATE ACTIVITY TITLE' }], sourceElement: { nodeType: 1 } };
+    const filters = [{ label: 'Mode', value: 'Activities' }];
+    const dataset = { activities: ['mutable dashboard data'] };
+    runtime.context.snapshotTarget = { kind: 'tab', key: 'equipmentTimeline', hasData: true, filters,
+      sampleProvenance: { synthetic: true } };
+    runtime.context.snapshotData = data;
+    runtime.context.snapshotContext = { dataset };
+    const snapshot = vm.runInContext('captureExportSelection(snapshotTarget, snapshotData, snapshotContext)', runtime.context);
+    data.items[0].value = 999;
+    firstDate.setUTCFullYear(2030);
+    filters[0].value = 'Changed';
+    expect(snapshot).toMatchObject({ targetKey: 'equipmentTimeline', targetKind: 'tab',
+      filters: [{ label: 'Mode', value: 'Activities' }], provenance: { synthetic: true },
+      familyData: { items: [{ id: 'one', name: 'Long equipment name',
+        firstDate: Date.parse('2025-01-02T07:00:00Z'), lastDate: null, value: 0,
+        activities: [Date.parse('2025-01-02T07:00:00Z')] }] } });
+    expect(snapshot.familyData.rawActivities).toBeUndefined();
+    expect(snapshot.familyData.sourceElement).toBeUndefined();
+    expect(Object.isFrozen(snapshot.familyData.items[0])).toBe(true);
+    expect(Object.isFrozen(snapshot.filters)).toBe(true);
+    expect(Object.isFrozen(dataset)).toBe(false);
+  });
+
+  it('gives each new capture a unique selection identity while preserving dataset identity', () => {
+    const runtime = createDownloadRuntime();
+    runtime.context.snapshotTarget = { kind: 'tab', key: 'totalDistance', hasData: true };
+    runtime.context.snapshotData = { period: '2025', series: [{ label: 'Run', values: [0, null, 12] }] };
+    runtime.context.snapshotContext = { dataset: { token: 'first' } };
+    const capture = () => vm.runInContext('captureExportSelection(snapshotTarget, snapshotData, snapshotContext)', runtime.context);
+    const first = capture();
+    const second = capture();
+    expect(first.selectionId).not.toBe(second.selectionId);
+    expect(first.datasetIdentity).toBe(second.datasetIdentity);
+    runtime.context.snapshotContext = { dataset: { token: 'second' } };
+    expect(capture().datasetIdentity).not.toBe(first.datasetIdentity);
+    expect(first.familyData.series[0].values).toEqual([0, null, 12]);
+  });
+
+  it('rejects unknown, empty and non-plain export content rather than silently capturing an unrelated view', () => {
+    const runtime = createDownloadRuntime();
+    runtime.context.snapshotData = { items: [{ id: 'one', value: () => 1 }] };
+    for (const target of [{ kind: 'tab', key: 'unknown', hasData: true },
+      { kind: 'tab', key: 'equipment', hasData: false }, { kind: 'tab', key: 'equipment', hasData: true }]) {
+      runtime.context.snapshotTarget = target;
+      expect(() => vm.runInContext('captureExportSelection(snapshotTarget, snapshotData)', runtime.context)).toThrow(/export|content|data|target/i);
+    }
+  });
+
+  it('registers private descriptor boundaries for every capture target without advertising a generic renderer fallback', () => {
+    const runtime = createDownloadRuntime();
+    const descriptors = vm.runInContext('EXPORT_ADAPTERS', runtime.context);
+    expect(Object.keys(descriptors).sort()).toEqual(Object.keys(runtime.context.__exportTargetIds).sort());
+    for (const descriptor of Object.values(descriptors)) {
+      expect(typeof descriptor.captureSelection).toBe('function');
+      expect(typeof descriptor.renderPage).toBe('function');
+      expect(() => descriptor.renderPage({})).toThrow(/renderer|ready|implementation/i);
+    }
+  });
+
+  it('releases acquired media and partial snapshot DOM when snapshot attachment fails', () => {
+    const runtime = createDownloadRuntime();
+    const release = jest.fn();
+    const remove = jest.fn();
+    const clone = { id: '', nodeType: 1, tagName: 'DIV', style: {}, setAttribute() {}, remove,
+      querySelectorAll: () => [] };
+    runtime.context.sourceElement = { id: 'mediaGalleryExportArea', tagName: 'DIV',
+      cloneNode: () => clone, querySelectorAll: () => [],
+      getBoundingClientRect: () => ({ width: 960, height: 600 }) };
+    runtime.context.window.mediaGalleryDashboard = { acquireExportCapture: () => ({ release }) };
+    runtime.context.document.body.appendChild = () => { throw new Error('Synthetic snapshot attachment failure'); };
+    expect(() => vm.runInContext('createExportCaptureSnapshot(sourceElement, "mediaGallery")', runtime.context)).toThrow('Synthetic snapshot attachment failure');
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('full social export renderer coverage', () => {
+  it('samples dense date ticks by measured label width without dropping plotted periods', () => {
+    const runtime = createDownloadRuntime();
+    runtime.context.tickContext = runtime.context.document.createElement('canvas').getContext('2d');
+    runtime.context.tickData = { aggregation: 'daily', periodLabels: Array.from({ length: 100 },
+      (_, index) => `Wednesday ${String(index + 1).padStart(2, '0')} September 2025`),
+      series: [{ label: 'Run', values: Array.from({ length: 100 }, () => 10), color: '#20c9b2' }] };
+    expect(() => vm.runInContext('drawDistanceExportChart(tickContext, tickData, { x: 72, y: 600, width: 888, height: 700 })', runtime.context)).not.toThrow();
+    expect(runtime.canvasCalls.text.join(' ')).toContain('Wednesday 01 September 2025');
+    expect(runtime.canvasCalls.text.join(' ')).toContain('Wednesday 100 September 2025');
+  });
+
+  it('prepares and approves the complete structured story image at actual PNG dimensions', async () => {
+    const png = createSizedPngDataUrl(1080, 1920);
+    const runtime = createDownloadRuntime({ imageWidth: 1080, imageHeight: 1920, pngDataUrl: png });
+    runtime.closePreview();
+    runtime.mockCapture(png);
+    await runtime.context.__setExportFormat('story');
+    runtime.context.structuredTarget = { kind: 'tab', key: 'equipment', title: 'Equipment', hasData: true };
+    runtime.context.structuredData = { metric: 'distance', unit: 'km', period: '2025', equipmentFilter: 'Shoes',
+      items: [{ id: 'one', name: 'Only pair', value: 12, displayValue: '12 km' }], totalCount: 1 };
+    vm.runInContext('structuredTarget.selectionSnapshot = captureExportSelection(structuredTarget, structuredData);', runtime.context);
+    await runtime.capture(runtime.context.structuredTarget);
+    expect(runtime.getImage()).toMatchObject({ width: 1080, height: 1920,
+      target: { format: 'story', seriesPage: 1, seriesCount: 1, selectionSnapshot: { targetKey: 'equipment' } } });
+    expect(runtime.elements.exportPreviewImage.src).toBe(png);
+    expect(runtime.canvasCalls.text).toContain('Only pair');
+    expect(runtime.canvasCalls.text).toContain('12 km');
+  });
+
+  it.each(['paceMetrics', 'distributions', 'workoutTime'])('renders %s from the isolated frozen chart source at final dimensions', key => {
+    const runtime = createDownloadRuntime();
+    const canvas = { width: 888, height: 600 };
+    const snapshotCapture = jest.fn(() => ({ canvas }));
+    runtime.context.chartPageInput = {
+      snapshot: { targetKey: key, familyData: {} },
+      page: { visualization: { x: 72, y: 600, width: 888, height: 600 } },
+      context: runtime.context.document.createElement('canvas').getContext('2d'),
+      resources: { chartAdapter: { snapshotCapture }, chartInput: { data: { datasets: [] }, visibility: [] } }
+    };
+    vm.runInContext(`EXPORT_ADAPTERS['${key}'].renderPage(chartPageInput)`, runtime.context);
+    expect(snapshotCapture).toHaveBeenCalledWith(expect.objectContaining({
+      width: 888, height: 600, minFontSize: 36, includeInspection: false,
+      chartInput: runtime.context.chartPageInput.resources.chartInput
+    }));
+    expect(runtime.canvasCalls.images).toContainEqual([canvas, 72, 600, 888, 600]);
+  });
+
+  it('draws the measured story frame inside its central bounds at readable source size', () => {
+    const runtime = createDownloadRuntime();
+    const positions = [];
+    const context = runtime.context.document.createElement('canvas').getContext('2d');
+    context.fillText = function (text, x, y) { positions.push({ text, x, y, font: this.font }); };
+    runtime.context.framePlan = runtime.context.window.exportUtils.planExportPages({ targetKey: 'equipment',
+      period: '2025', metric: 'Distance', units: 'km', provenance: { synthetic: true },
+      familyData: { items: [{ name: 'Only pair', value: 12 }] } },
+    { format: 'story', headline: 'My equipment distance', humorEnabled: true, caption: 'They have seen things.' });
+    const frame = vm.runInContext('drawStructuredExportFrame(framePlan, {})', runtime.context);
+    expect(frame.canvas).toMatchObject({ width: 1080, height: 1920 });
+    expect(positions.map(item => item.text)).toEqual(expect.arrayContaining([
+      'My equipment distance', 'Synthetic sample training data', 'They have seen things.', 'TriAnalytica', 'https://example.test/'
+    ]));
+    for (const item of positions) {
+      expect(item.x).toBeGreaterThanOrEqual(72);
+      expect(item.y).toBeGreaterThanOrEqual(240);
+      expect(item.y + Number(item.font.match(/(\d+)px/)[1])).toBeLessThanOrEqual(1560);
+      expect(Number(item.font.match(/(\d+)px/)[1])).toBeGreaterThanOrEqual(36);
+    }
+  });
+
+  it('keeps power-profile duration axes and FIT attribution without inventing record milestones or private titles', () => {
+    const runtime = createDownloadRuntime();
+    runtime.openPb({ title: 'All-time bike power profile', exportKey: 'Bike-power-all-time-profile',
+      axisLabel: 'Power (W)', sport: 'Bike', direction: 'up', xAxisMode: 'duration',
+      records: [
+        { date: new Date('2025-01-04'), value: 600, durationSeconds: 5, durationLabel: '5s', effortSource: 'fit-rolling', title: 'PRIVATE TITLE ONE' },
+        { date: new Date('2025-01-04'), value: 240, durationSeconds: 3600, durationLabel: '60m', effortSource: 'fit-rolling', title: 'PRIVATE TITLE TWO' }
+      ] }, { focus() {} });
+    const model = runtime.context.window.personalBestsDashboard.getActiveExportData();
+    expect(model).toMatchObject({ xAxisMode: 'duration', sport: 'Bike', unit: 'W' });
+    expect(model.records.map(record => [record.durationSeconds, record.durationLabel])).toEqual([[5, '5s'], [3600, '60m']]);
+    expect(model.sourceAttribution).toMatch(/fit/i);
+    expect(model.milestones).toEqual([]);
+    expect(JSON.stringify(model)).not.toContain('PRIVATE TITLE');
+  });
+
+  it('registers a deliberate renderer for every export target instead of a generic story screenshot fallback', () => {
+    const runtime = createDownloadRuntime();
+    const rendererKeys = vm.runInContext('Object.keys(EXPORT_FAMILY_RENDERERS)', runtime.context);
+    expect(Array.from(rendererKeys).sort()).toEqual(Object.keys(runtime.context.__exportTargetIds).sort());
   });
 });
 
@@ -877,8 +1142,8 @@ describe('dashboard export download destination', () => {
 
     const sizes = runtime.canvasCalls.textFonts.map(font => Number(String(font).match(/(\d+)px/)?.[1])).filter(Number.isFinite);
     const chart = runtime.canvasCalls.images.find(args => args[0] === captured);
-    expect(sizes).toEqual(expect.arrayContaining([64, 104, 30, 24]));
-    expect(Math.min(...sizes)).toBeGreaterThanOrEqual(24);
+    expect(sizes).toEqual(expect.arrayContaining([64, 104, 36]));
+    expect(Math.min(...sizes)).toBeGreaterThanOrEqual(36);
     expect(chart[1]).toBeGreaterThanOrEqual(48);
     expect(chart[2]).toBeGreaterThanOrEqual(48);
     expect(chart[1] + chart[3]).toBeLessThanOrEqual(1032);
@@ -955,7 +1220,8 @@ describe('dashboard export download destination', () => {
 
     await runtime.capture(target);
 
-    expect(snapshotCapture).toHaveBeenCalledWith({ width: 960, height: 500, minFontSize: 30, axisTextColor: '#f8fafc' });
+    expect(snapshotCapture).toHaveBeenCalledWith({ width: 960, height: 500, minFontSize: 30,
+      axisTextColor: '#f8fafc', includeInspection: false, selection: null });
     expect(drawImage).toHaveBeenCalledWith(chartPixels, 0, 0, 960, 500);
     const previewDataUrl = runtime.elements.exportPreviewImage.src;
     expect(previewDataUrl).toBe(PNG_DATA_URL);
@@ -1034,7 +1300,7 @@ describe('dashboard export download destination', () => {
     expect(runtime.elements.exportHumorEnabled.checked).toBe(true);
   });
 
-  it('limits yearly distance to ten periods and marks an incomplete current year', () => {
+  it('preserves all selected yearly periods and marks an incomplete current year', () => {
     const runtime = createDownloadRuntime();
     const years = Array.from({ length: 12 }, (_, index) => String(2015 + index));
     runtime.context.__drawComposition({ width: 960, height: 500 }, {
@@ -1051,7 +1317,7 @@ describe('dashboard export download destination', () => {
     }, { logo: { naturalWidth: 100, naturalHeight: 50 } });
 
     const renderedText = runtime.canvasCalls.text.join(' ');
-    expect(renderedText).not.toContain('2015');
+    expect(renderedText).toContain('2015');
     expect(renderedText).toContain('2017');
     expect(renderedText).toContain('2026 YTD');
   });
@@ -2000,6 +2266,91 @@ describe('PNG preparation', () => {
     expect(runtime.elements.exportPreviewModal.classList.contains('hidden')).toBe(false);
   });
 
+  it('publishes only the latest format when composition validations finish out of order', async () => {
+    const runtime = createDownloadRuntime();
+    const context = runtime.context;
+    const storyGate = deferredValue();
+    const portraitGate = deferredValue();
+    context.storyGate = storyGate;
+    context.portraitGate = portraitGate;
+    context.captureStateForTest = {
+      sessionId: 0,
+      captured: { width: 960, height: 500 },
+      target: { kind: 'tab', key: 'totalDistance', title: 'Run distance', exportData: { sport: 'Run', metricLabel: 'Distance', unit: 'km' } },
+      assets: {}, pbOpening: null
+    };
+    vm.runInContext(`
+      lastExportCaptureState = captureStateForTest;
+      drawExportComposition = (_captured, target) => target.format;
+      prepareExportImage = (dataUrl, target) => dataUrl === 'story' ? storyGate.promise : portraitGate.promise;
+    `, context);
+
+    const storyComposition = context.__setExportFormat('story');
+    const portraitComposition = context.__setExportFormat('portrait');
+    const storyImage = { dataUrl: 'story', target: { format: 'story' }, blob: { size: 1 } };
+    const portraitImage = { dataUrl: 'portrait', target: { format: 'portrait' }, blob: { size: 1 } };
+    portraitGate.resolve(portraitImage);
+    await portraitComposition;
+    storyGate.resolve(storyImage);
+    await storyComposition;
+
+    expect(runtime.getImage()).toBe(portraitImage);
+    expect(runtime.elements.exportPreviewImage.src).toBe('portrait');
+    expect(runtime.elements.exportPreviewDownloadBtn.disabled).toBe(false);
+  });
+
+  it('does not reopen a preview when its capture finishes after close', async () => {
+    const runtime = createDownloadRuntime();
+    const context = runtime.context;
+    const captureGate = deferredValue();
+    runtime.elements.captureTarget = { id: 'captureTarget' };
+    runtime.mockCapture(PNG_DATA_URL);
+    context.html2canvas = jest.fn(() => captureGate.promise);
+    const target = { kind: 'tab', key: 'paceMetrics', targetElementId: 'captureTarget', hasData: true };
+
+    const capture = runtime.capture(target);
+    expect(runtime.elements.exportPreviewDownloadBtn.disabled).toBe(true);
+    expect(runtime.elements.exportPreviewImage.src).toBe('');
+    for (let attempt = 0; attempt < 10 && !context.html2canvas.mock.calls.length; attempt += 1) await Promise.resolve();
+    expect(context.html2canvas).toHaveBeenCalledTimes(1);
+    runtime.closePreview();
+    captureGate.resolve({ width: 960, height: 500 });
+    await capture;
+
+    expect(runtime.getImage()).toBeNull();
+    expect(runtime.elements.exportPreviewModal.classList.contains('hidden')).toBe(true);
+  });
+
+  it('keeps download disabled when an older save finishes during a newer composition', async () => {
+    const pickerGate = deferredValue();
+    const compositionGate = deferredValue();
+    const runtime = createDownloadRuntime({ showSaveFilePicker: () => pickerGate.promise });
+    const context = runtime.context;
+    context.compositionGate = compositionGate;
+    context.captureStateForTest = {
+      sessionId: 0,
+      captured: { width: 960, height: 500 },
+      target: { kind: 'tab', key: 'totalDistance', title: 'Run distance', exportData: { sport: 'Run', metricLabel: 'Distance', unit: 'km' } },
+      assets: {}, pbOpening: null
+    };
+    vm.runInContext(`
+      lastExportCaptureState = captureStateForTest;
+      drawExportComposition = () => 'new-preview';
+      prepareExportImage = () => compositionGate.promise;
+    `, context);
+
+    const save = runtime.download();
+    const composition = context.__setExportFormat('story');
+    expect(runtime.elements.exportPreviewDownloadBtn.disabled).toBe(true);
+    pickerGate.resolve({ createWritable: async () => ({ write: async () => {}, close: async () => {} }) });
+    await save;
+
+    expect(runtime.elements.exportPreviewDownloadBtn.disabled).toBe(true);
+    compositionGate.resolve({ dataUrl: 'new-preview', target: { format: 'story' }, blob: { size: 1 } });
+    await composition;
+    expect(runtime.elements.exportPreviewDownloadBtn.disabled).toBe(false);
+  });
+
   it('clears stale no-data feedback when a later export succeeds', async () => {
     const runtime = createDownloadRuntime();
     runtime.toast.textContent = 'Nothing to export for this selection yet.';
@@ -2058,7 +2409,7 @@ describe('owned export surface lifecycle', () => {
     expect(source).toMatchObject({ width: 256, height: 420 });
   });
 
-  it.each(require('../src/tooltip-selection-utils').TAB_IDS)('resolves %s from the isolated layout and composes only once for preview and download', async key => {
+  it.each(require('../src/tooltip-selection-utils').TAB_IDS)('excludes pinned %s inspection data while composing one image for preview and download', async key => {
     const runtime = createDownloadRuntime();
     runtime.closePreview();
     const snapshotElement = { id: 'captureTarget', style: {}, clientWidth: 800, querySelectorAll: () => [], querySelector: () => null,
@@ -2066,13 +2417,10 @@ describe('owned export surface lifecycle', () => {
     const liveElement = { ...snapshotElement, cloneNode: () => ({ ...snapshotElement, style: {} }) };
     runtime.elements.captureTarget = liveElement;
     const pin = { selectionKey: key + ':selected', content: { title: 'Captured selection' }, anchor: { visibility: 'visible', capturePoint: { x: 0.9, y: 0.9 } } };
-    const resolveExportAnchor = jest.fn((selected, captureContext) => {
-      expect(selected.selectionKey).toBe(key + ':selected');
-      expect(captureContext.element).not.toBe(liveElement);
-      return { visibility: 'visible', capturePoint: { x: 0.25, y: 0.5 } };
-    });
-    const snapshotCapture = jest.fn(() => null);
-    runtime.context.window.dashboardTooltips = { getPinned: () => pin, adapters: new Map([[key, { snapshotCapture, resolveExportAnchor }]]) };
+    const resolveExportAnchor = jest.fn();
+    const snapshotCapture = jest.fn(options => { expect(options).toMatchObject({ includeInspection: false, selection: null }); return null; });
+    const getPinned = jest.fn(() => pin);
+    runtime.context.window.dashboardTooltips = { getPinned, adapters: new Map([[key, { snapshotCapture, resolveExportAnchor }]]) };
     runtime.context.window.wordcloudDashboard = { hasExportableCloud: () => true };
     runtime.context.processedActivities = new Proxy([], { get() { throw new Error('Callout placement must not scan activities'); } });
     runtime.context.window.Chart = jest.fn(() => { throw new Error('Callout placement must not rerender charts'); });
@@ -2085,11 +2433,12 @@ describe('owned export surface lifecycle', () => {
     await runtime.capture({ kind: 'tab', key, title: 'View', targetElementId: 'captureTarget', hasData: true });
     expect(runtime.context.console.error).not.toHaveBeenCalled();
     const captureCount = key === 'trainingCalendar' ? 2 : 1;
-    expect(resolveExportAnchor).toHaveBeenCalledTimes(captureCount);
+    expect(resolveExportAnchor).not.toHaveBeenCalled();
+    expect(getPinned).not.toHaveBeenCalled();
     expect(snapshotCapture).toHaveBeenCalledTimes(1);
     expect(runtime.context.window.Chart).not.toHaveBeenCalled();
     expect(runtime.context.html2canvas).toHaveBeenCalledTimes(captureCount);
-    expect(runtime.getImage().target.pinnedSelection.anchor.capturePoint).toEqual({ x: 0.25, y: 0.5 });
+    expect(runtime.getImage().target.pinnedSelection).toBeNull();
     const renderedCount = runtime.canvasCalls.images.length;
     const originalImage = runtime.getImage();
     const previewData = runtime.elements.exportPreviewImage.src;
@@ -2099,15 +2448,17 @@ describe('owned export surface lifecycle', () => {
     expect(runtime.canvasCalls.images).toHaveLength(renderedCount);
     expect(runtime.canvasCalls.canvases).toHaveLength(1);
     expect(runtime.context.html2canvas).toHaveBeenCalledTimes(captureCount);
-    expect(runtime.canvasCalls.paths.filter(step => step[0] === 'fill')).toHaveLength(1);
+    expect(runtime.canvasCalls.paths.filter(step => step[0] === 'fill')).toHaveLength(0);
   });
 
-  it('fails rather than inventing an anchor for an unresolved captured item', async () => {
+  it('exports the chart without attempting to resolve a pinned inspection anchor', async () => {
     const runtime = createDownloadRuntime();
     runtime.mockCapture(PNG_DATA_URL);
-    runtime.context.window.dashboardTooltips = { getPinned: () => ({ content: { title: 'Run' }, anchor: { visibility: 'visible' } }), adapters: new Map() };
+    const getPinned = jest.fn(() => ({ content: { title: 'Run' }, anchor: { visibility: 'visible' } }));
+    runtime.context.window.dashboardTooltips = { getPinned, adapters: new Map() };
     await runtime.capture({ key: 'totalDistance', hasData: true, targetElementId: 'captureTarget' });
-    expect(runtime.toast.textContent).toMatch(/resolve the selected item/);
+    expect(getPinned).not.toHaveBeenCalled();
+    expect(runtime.getImage()).not.toBeNull();
     expect(runtime.elements.exportPreviewModal.classList.contains('hidden')).toBe(false);
   });
 
@@ -2171,8 +2522,9 @@ describe('owned export surface lifecycle', () => {
     const source = { id: 'captureTarget', content: 'original pixels', cloneNode: () => ({ ...copiedSource }), querySelectorAll: () => [], getBoundingClientRect: () => ({ width: 800, height: 400 }) };
     runtime.elements.captureTarget = source;
     let pin = { content: { title: 'Original selection' }, anchor: { visibility: 'visible' } };
-    const resolveExportAnchor = jest.fn(selection => ({ ...selection.anchor, capturePoint: { x: 0.25, y: 0.5 } }));
-    runtime.context.window.dashboardTooltips = { getPinned: () => pin, adapters: new Map([['totalDistance', { resolveExportAnchor }]]) };
+    const resolveExportAnchor = jest.fn();
+    const getPinned = jest.fn(() => pin);
+    runtime.context.window.dashboardTooltips = { getPinned, adapters: new Map([['totalDistance', { resolveExportAnchor }]]) };
     runtime.context.assetGate = gate;
     vm.runInContext('loadExportAssets = () => assetGate.promise; drawExportComposition = (canvas, target) => { this.capturedTarget = target; return "' + PNG_DATA_URL + '"; };', runtime.context);
     const target = { key: 'totalDistance', hasData: true, targetElementId: 'captureTarget', filters: [{ label: 'Sport', value: 'Run' }] };
@@ -2186,9 +2538,9 @@ describe('owned export surface lifecycle', () => {
     expect(capturedSource).not.toBe(source);
     expect(capturedSource.content).toBe('original pixels');
     expect(runtime.context.capturedTarget.filters[0].value).toBe('Run');
-    expect(runtime.context.capturedTarget.pinnedSelection.content.title).toBe('Original selection');
-    expect(runtime.context.capturedTarget.pinnedSelection.anchor.capturePoint).toEqual({ x: 0.25, y: 0.5 });
-    expect(resolveExportAnchor.mock.calls[0][0].content.title).toBe('Original selection');
+    expect(runtime.context.capturedTarget.pinnedSelection).toBeNull();
+    expect(resolveExportAnchor).not.toHaveBeenCalled();
+    expect(getPinned).not.toHaveBeenCalled();
     expect(pin.content.title).toBe('New selection');
   });
 

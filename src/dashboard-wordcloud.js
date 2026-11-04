@@ -429,7 +429,97 @@
 
   window.renderWordcloud = renderWordcloud;
   window.toggleWordcloudList = toggleWordcloudList;
+  function getWordcloudExportData() {
+    if (activitySource !== processedActivities || !window.wordcloudUtils) return null;
+    const requested = Number(getElements().slider?.value) || 50;
+    const words = window.wordcloudUtils.getTopWords(rankedWords, requested)
+      .filter(entry => selectedWords.get(entry.word) !== false)
+      .map(entry => ({ text: entry.word, count: entry.count, color: getWordColor(entry.word) }));
+    if (!words.length) return null;
+    const dates = processedActivities.map(activity => new Date(activity.date).getTime()).filter(Number.isFinite);
+    const start = dates.length ? Math.min(...dates) : null;
+    const end = dates.length ? Math.max(...dates) : null;
+    return { sport: 'All', metric: 'frequency', metricLabel: 'Workout word frequency', unit: 'occurrences',
+      words, weightDomain: { minCount: Math.min(...words.map(word => word.count)), maxCount: Math.max(...words.map(word => word.count)) },
+      period: start !== null ? `${new Date(start).getFullYear()}-${new Date(end).getFullYear()}` : null,
+      periodStart: start, periodEnd: end };
+  }
+
+  function createWordcloudExportCanvas(data, page, ownerDocument = document) {
+    if (!window.WordCloud?.isSupported || !Array.isArray(page.itemIndexes)) throw new Error('Wordcloud export renderer is not ready');
+    const words = page.itemIndexes.map(index => data.words[index]);
+    if (!words.length || words.some(word => !word)) throw new Error('Wordcloud export page has no valid words');
+    const canvas = ownerDocument.createElement('canvas');
+    canvas.width = Math.floor(page.visualization.width);
+    canvas.height = Math.floor(page.visualization.height);
+    const minLog = Math.log(data.weightDomain.minCount);
+    const maxLog = Math.log(data.weightDomain.maxCount);
+    const colours = new Map(data.words.map(word => [word.text, word.color]));
+    let released = false;
+    let pending = null;
+    let rejectPending = null;
+    let cleanup = () => {};
+    return {
+      canvas,
+      prepare() {
+        if (released) return Promise.reject(new Error('Wordcloud export canvas has been released'));
+        if (pending) return pending;
+        pending = new Promise((resolve, reject) => {
+          rejectPending = reject;
+          const drawn = new Set();
+          let timeout;
+          const drawnWord = event => {
+            if (event.detail?.drawn && event.detail.item?.[0]) drawn.add(event.detail.item[0]);
+          };
+          cleanup = () => {
+            window.clearTimeout(timeout);
+            canvas.removeEventListener('wordclouddrawn', drawnWord);
+            canvas.removeEventListener('wordcloudstop', finish);
+            canvas.removeEventListener('wordcloudabort', finish);
+          };
+          const finish = () => {
+            cleanup(); rejectPending = null;
+            const missing = words.filter(word => !drawn.has(word.text)).map(word => word.text);
+            if (released || missing.length) {
+              const error = new Error(released ? 'Wordcloud export canvas has been released' : 'Not every selected word fits the export page');
+              error.code = 'WORD_PLACEMENT_FAILED'; error.missingWords = missing;
+              reject(error);
+            } else resolve(canvas);
+          };
+          canvas.addEventListener('wordclouddrawn', drawnWord);
+          canvas.addEventListener('wordcloudstop', finish);
+          canvas.addEventListener('wordcloudabort', finish);
+          timeout = window.setTimeout(finish, 15000);
+          try {
+            window.WordCloud(canvas, {
+              list: words.map(word => [word.text, word.count]), shuffle: false,
+              rotateRatio: 0, minRotation: 0, maxRotation: 0,
+              minSize: 35, shrinkToFit: false, drawOutOfBound: false, clearCanvas: true,
+              abortThreshold: 2000, backgroundColor: '#071719', gridSize: 8,
+              color: word => colours.get(word),
+              weightFactor: count => maxLog <= minLog ? 64
+                : 36 + Math.max(0, Math.min(1, (Math.log(count) - minLog) / (maxLog - minLog))) * 60
+            });
+          } catch (error) { cleanup(); rejectPending = null; reject(error); }
+        });
+        return pending;
+      },
+      release() {
+        if (released) return;
+        released = true;
+        cleanup();
+        rejectPending?.(new Error('Wordcloud export canvas has been released'));
+        rejectPending = null;
+        const EventType = ownerDocument.defaultView?.Event || window.Event;
+        if (EventType) canvas.dispatchEvent(new EventType('wordcloudstart'));
+        canvas.width = 0; canvas.height = 0;
+      }
+    };
+  }
+
   window.wordcloudDashboard = {
+    getExportData: getWordcloudExportData,
+    createExportCanvas: createWordcloudExportCanvas,
     getKeyboardAdapter: getWordcloudKeyboardAdapter,
     cancelPendingRender() {
       if (!resolveCurrentRender) return;

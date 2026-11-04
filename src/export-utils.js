@@ -56,7 +56,8 @@ const EXPORT_LAYOUT_CONFIG = {
 
 const EXPORT_FORMATS = Object.freeze({
   square: Object.freeze({ key: 'square', width: 1080, height: 1080 }),
-  portrait: Object.freeze({ key: 'portrait', width: 1080, height: 1350 })
+  portrait: Object.freeze({ key: 'portrait', width: 1080, height: 1350 }),
+  story: Object.freeze({ key: 'story', width: 1080, height: 1920 })
 });
 
 const SOCIAL_EXPORT_STYLE = Object.freeze({
@@ -65,9 +66,9 @@ const SOCIAL_EXPORT_STYLE = Object.freeze({
     headline: Object.freeze({ min: 56, max: 72 }),
     centralValue: Object.freeze({ min: 88, max: 120 }),
     essential: 36,
-    axis: 30,
-    context: 30,
-    branding: 24
+    axis: 36,
+    context: 36,
+    branding: 36
   }),
   colors: Object.freeze({
     background: '#071719',
@@ -227,6 +228,34 @@ function computeSocialExportLayout(format = 'square', options = {}) {
     throw new RangeError('Social export layout requires a 48 px safe margin and a nonnegative footer height');
   }
 
+  if (formatConfig.key === 'story') {
+    const contentBounds = { x: 72, y: 240, width: 888, height: 1320 };
+    const relative = computeExportContentLayout({
+      ...layoutOptions,
+      canvasWidth: contentBounds.width,
+      canvasHeight: contentBounds.height,
+      marginX: 0,
+      headerHeight: Math.max(0, Number(layoutOptions.headerHeight ?? 190)),
+      topGap: Math.max(0, Number(layoutOptions.topGap ?? 15)),
+      contextGap: Math.max(0, Number(layoutOptions.contextGap ?? 12)),
+      bottomMargin: Math.max(footerHeight, Number(layoutOptions.bottomMargin ?? footerHeight))
+    });
+    const translated = {};
+    for (const [name, rect] of Object.entries(relative)) {
+      if (!rect) { translated[name] = null; continue; }
+      if (![rect.x, rect.y, rect.width, rect.height].every(Number.isFinite)
+          || rect.x < 0 || rect.y < 0 || rect.width <= 0 || rect.height < 0
+          || rect.x + rect.width > contentBounds.width
+          || rect.y + rect.height > contentBounds.height
+          || (name === 'visualization' && rect.height === 0)) {
+        throw new RangeError('Export content cannot fit in the story safe area');
+      }
+      translated[name] = { ...rect, x: rect.x + contentBounds.x, y: rect.y + contentBounds.y };
+    }
+    return { format: formatConfig.key, width: formatConfig.width, height: formatConfig.height,
+      safeMargin, footerHeight, contentBounds, ...translated };
+  }
+
   const layout = computeExportContentLayout({
     canvasWidth: formatConfig.width,
     canvasHeight: formatConfig.height,
@@ -242,6 +271,238 @@ function computeSocialExportLayout(format = 'square', options = {}) {
     footerHeight,
     ...layout
   };
+}
+
+function planExportPages(snapshot, options = {}, measurements = {}) {
+  const format = getExportFormatConfig(options.format || 'square');
+  if (!format) throw new RangeError('Unsupported export format');
+  const families = { totalDistance: 'periods', paceMetrics: 'scatter', equipment: 'ranking',
+    equipmentTimeline: 'timeline', personalBests: 'records', heatmap: 'map', distributions: 'distribution',
+    workoutTime: 'pattern', trainingCalendar: 'calendar', wordcloud: 'words', pieCharts: 'pie',
+    lifetimeStatistics: 'statistics', mediaGallery: 'media' };
+  const layoutKind = families[snapshot?.targetKey];
+  if (!layoutKind) throw new RangeError('Unknown export target family');
+  const data = snapshot.familyData || {};
+  const bounds = format.key === 'story' ? { x: 72, y: 240, width: 888, height: 1320 }
+    : { x: 48, y: 48, width: format.width - 96, height: format.height - 96 };
+  const measure = measurements.measureText || ((text, size = 36) => String(text).length * size * 0.55);
+  const linesFor = (text, width, size = 36, maxLines = Infinity) => wrapExportText(String(text || ''), width,
+    value => measure(value, size), maxLines);
+  const presentation = options.presentation || {};
+  const headline = options.headline || presentation.headline || data.title || 'My training';
+  const context = options.contextText ?? presentation.summary ?? (presentation.context?.length
+    ? presentation.context.map(item => `${item.label}: ${item.value}`).join(' · ')
+    : [snapshot.period || data.period, snapshot.metric || data.metricLabel, snapshot.units || data.unit].filter(Boolean).join(' · '));
+  const textBlocks = [];
+  let cursor = bounds.y + 16;
+  const addText = (role, text, size, lineHeight, weight = 500) => {
+    if (!text) return;
+    const lines = linesFor(text, bounds.width, size);
+    textBlocks.push({ role, lines, x: bounds.x, y: cursor, fontSize: size, lineHeight, weight });
+    cursor += lines.length * lineHeight + 12;
+  };
+  addText('headline', headline, 64, 74, 700);
+  if (Number.isFinite(presentation.centralValue)) {
+    addText('centralValue', presentation.centralDisplayValue || [presentation.centralValue.toLocaleString('en-US', { maximumFractionDigits: 1 }),
+      presentation.unit || data.unit].filter(Boolean).join(' '), 88, 100, 700);
+  }
+  addText('context', context, 36, 44);
+  if (snapshot.provenance?.synthetic) addText('provenance', 'Synthetic sample training data', 36, 44);
+  const attribution = Array.isArray(snapshot.attribution) ? snapshot.attribution.join(' · ') : snapshot.attribution;
+  addText('attribution', attribution, 36, 44);
+  if (options.reservePageIndicator) addText('page', 'Page 999999 of 999999', 36, 44);
+  let captionHeight = 0;
+  if (options.humorEnabled) {
+    const caption = options.caption || presentation.secondaryLine;
+    if (!caption) throw new Error('Enabled export humour requires one relevant caption');
+    const lines = linesFor(caption, bounds.width, 36, 1);
+    captionHeight = 56;
+    textBlocks.push({ role: 'caption', lines, x: bounds.x, y: cursor, fontSize: 36, lineHeight: 44, weight: 500 });
+    cursor += captionHeight;
+  }
+  const footer = { x: bounds.x, y: bounds.y + bounds.height - 104, width: bounds.width, height: 104 };
+  const legendItems = layoutKind === 'pie' ? [] : options.legendItems || data.legend?.items || data.series || snapshot.legend?.items || [];
+  const legendRows = [];
+  let row = [];
+  let rowWidth = 0;
+  let rowHeight = 0;
+  for (const item of legendItems) {
+    const label = String(item.label || '');
+    if (!label) continue;
+    const lines = linesFor(label, bounds.width - 48);
+    const width = Math.min(bounds.width, measure(label, 36) + 60);
+    if (row.length && rowWidth + width > bounds.width) {
+      legendRows.push({ entries: row, height: rowHeight }); row = []; rowWidth = 0; rowHeight = 0;
+    }
+    row.push({ label, lines, color: item.color || item.borderColor || '#20c9b2', line: item.line === true, offsetX: rowWidth });
+    rowWidth += width;
+    rowHeight = Math.max(rowHeight, lines.length * 44);
+  }
+  if (row.length) legendRows.push({ entries: row, height: rowHeight });
+  const legendHeight = legendRows.reduce((total, entry) => total + entry.height + 8, 0);
+  const visualization = { x: bounds.x, y: cursor + 12, width: bounds.width,
+    height: footer.y - 20 - legendHeight - (cursor + 12) };
+  if (visualization.height < 160) throw new RangeError('Export content has insufficient readable space');
+  let legendY = visualization.y + visualization.height + 12;
+  for (const entry of legendRows) { entry.y = legendY; legendY += entry.height + 8; }
+  const numericValues = Array.isArray(data.items) ? data.items.map(item => item.value).filter(Number.isFinite) : [];
+  const totals = (data.periodLabels || []).map((_label, index) => (data.series || []).reduce((total, series) => total + (Number(series.values?.[index]) || 0), 0));
+  const scale = Object.freeze({ min: 0, max: Math.max(0, ...numericValues, ...totals) });
+  const pages = [];
+  const addPage = (itemIndexes, extra = {}) => pages.push({ pageIndex: pages.length,
+    visualization: { ...visualization }, itemIndexes, scale, ...extra });
+  const pack = (indexes, heightFor, extra = {}) => {
+    let indexesOnPage = [];
+    let used = 0;
+    for (const index of indexes) {
+      const height = heightFor(index);
+      if (!(height > 0) || height > visualization.height) throw new RangeError('Export item cannot fit at readable size');
+      if (indexesOnPage.length && used + height > visualization.height) {
+        addPage(indexesOnPage, { rowHeights: indexesOnPage.map(heightFor), ...extra }); indexesOnPage = []; used = 0;
+      }
+      indexesOnPage.push(index); used += height;
+    }
+    if (indexesOnPage.length) addPage(indexesOnPage, { rowHeights: indexesOnPage.map(heightFor), ...extra });
+  };
+  const indexesOf = items => (items || []).map((_item, index) => index);
+  if (layoutKind === 'ranking' || layoutKind === 'timeline') {
+    if (!data.items?.length) throw new Error('No equipment data to export');
+    const domain = layoutKind === 'timeline' ? { min: data.scaleStart ?? Math.min(...data.items.map(item => item.firstDate)),
+      max: data.scaleEnd ?? Math.max(...data.items.map(item => item.lastDate)) } : scale;
+    if (layoutKind === 'timeline') {
+      const axisHeight = 104;
+      const rowHeights = data.items.map(item => 44 * Math.max(1, linesFor(item.name, bounds.width).length) + 88);
+      let selected = [];
+      let used = axisHeight;
+      const finish = () => {
+        if (!selected.length) return;
+        const values = [domain.min, domain.min + (domain.max - domain.min) / 4,
+          domain.min + (domain.max - domain.min) / 2,
+          domain.min + (domain.max - domain.min) * 3 / 4, domain.max];
+        addPage(selected, { scale: domain, axisHeight, rowHeights: selected.map(index => rowHeights[index]),
+          axisTicks: values.map(value => ({ value, date: new Date(value).getTime() })) });
+        selected = []; used = axisHeight;
+      };
+      for (let index = 0; index < data.items.length; index += 1) {
+        if (rowHeights[index] + axisHeight > visualization.height) throw new RangeError('Timeline row cannot fit at readable size');
+        if (selected.length && used + rowHeights[index] > visualization.height) finish();
+        selected.push(index); used += rowHeights[index];
+      }
+      finish();
+    } else pack(indexesOf(data.items), index => 44 * Math.max(1, linesFor(data.items[index].name, bounds.width - 96).length) + 112, { scale: domain });
+  } else if (layoutKind === 'periods') {
+    if (!data.periodLabels?.length || !data.series?.length) throw new Error('No period data to export');
+    const axisWidth = Math.max(...Array.from({ length: 5 }, (_unused, tick) => measure(`${Math.round(Math.max(1, scale.max) * tick / 4)} km`, 36))) + 30;
+    const yearWidth = Math.max(88, ...data.periodLabels.map(label => measure(String(label).split(/\s+/)[0], 36) + 24));
+    const capacities = { daily: 366, weekly: 104, monthly: 48,
+      yearly: Math.max(1, Math.floor((bounds.width - axisWidth) / yearWidth)) };
+    const capacity = capacities[data.aggregation] || capacities.yearly;
+    for (let start = 0; start < data.periodLabels.length; start += capacity) addPage(indexesOf(data.periodLabels).slice(start, start + capacity));
+  } else if (layoutKind === 'pie') {
+    if (!data.slices?.length) throw new Error('No pie data to export');
+    const circleSize = Math.min(bounds.width, Math.max(220, Math.min(560, visualization.height * 0.56)));
+    const legendSpace = visualization.height - circleSize - 24;
+    const denominator = Number.isFinite(data.denominator) ? data.denominator : data.slices.reduce((total, slice) => total + slice.value, 0);
+    let selected = [];
+    let used = 0;
+    const finish = () => {
+      if (!selected.length) return;
+      addPage(selected, { repeatFullChart: true, denominator, circleSize,
+        chartBounds: { x: bounds.x + (bounds.width - circleSize) / 2, y: visualization.y, width: circleSize, height: circleSize },
+        legendBounds: { x: bounds.x, y: visualization.y + circleSize + 24, width: bounds.width, height: legendSpace } });
+      selected = []; used = 0;
+    };
+    for (const index of indexesOf(data.slices)) {
+      const slice = data.slices[index];
+      const height = Math.max(1, linesFor(`${slice.label}  ${slice.displayValue || slice.value}  ${Number(slice.percentage || slice.value / denominator * 100).toFixed(1)}%`, bounds.width - 48).length) * 44 + 12;
+      if (height > legendSpace) throw new RangeError('Pie legend item cannot fit at readable size');
+      if (selected.length && used + height > legendSpace) finish();
+      selected.push(index); used += height;
+    }
+    finish();
+  } else if (layoutKind === 'calendar') {
+    if (!data.years?.length) throw new Error('No calendar data to export');
+    const monthKeys = data.years.flatMap(year => Array.from({ length: 12 }, (_unused, month) => `${year.year}-${String(month + 1).padStart(2, '0')}`));
+    const columns = 2;
+    const monthHeight = 48 + 8 + 44 + 6 * 52;
+    const capacity = columns * Math.floor((visualization.height + 24) / (monthHeight + 24));
+    if (!capacity) throw new RangeError('Calendar month cannot fit at readable size');
+    for (let start = 0; start < monthKeys.length; start += capacity) addPage([], { monthKeys: monthKeys.slice(start, start + capacity), columns, monthHeight });
+  } else if (layoutKind === 'statistics') {
+    if (!data.groups?.length) throw new Error('No statistics data to export');
+    pack(indexesOf(data.groups), index => {
+      const item = data.groups[index];
+      return 44 * Math.max(1, linesFor(item.label, bounds.width).length)
+        + 56 * Math.max(1, linesFor(item.displayValue, bounds.width, 48).length)
+        + 44 * linesFor(item.context, bounds.width).length + 24;
+    });
+  } else if (layoutKind === 'media') {
+    if (!data.items?.length) throw new Error('No selected media to export');
+    const columns = data.mediaKind === 'annual' || data.items.length === 1 ? 1 : 2;
+    const itemWidth = (bounds.width - 24 * (columns - 1)) / columns;
+    const singleCaptionHeight = data.items.length === 1 ? 44 * Math.max(1, linesFor(
+      `${data.items[0].date !== null ? '04/01/2025 ' : ''}${data.items[0].caption || ''}`, itemWidth).length)
+      + (data.includeRoutes && data.items[0].routeSvgs ? itemWidth / 2 : 0) : 0;
+    const imageHeight = data.items.length === 1 ? Math.max(160, visualization.height - singleCaptionHeight - 24)
+      : Math.min(300, Math.max(160, visualization.height * 0.36));
+    let chosen = [];
+    let used = 0;
+    for (let index = 0; index < data.items.length; index += columns) {
+      const indexes = indexesOf(data.items).slice(index, index + columns);
+      const height = Math.max(...indexes.map(itemIndex => imageHeight + 44 * Math.max(1, linesFor(
+        `${data.items[itemIndex].date !== null ? '04/01/2025 ' : ''}${data.items[itemIndex].caption || ''}`, itemWidth).length)
+        + (data.includeRoutes && data.items[itemIndex].routeSvgs ? itemWidth / 2 : 0))) + 24;
+      if (height > visualization.height) throw new RangeError('Media item cannot fit at readable size');
+      if (chosen.length && used + height > visualization.height) { addPage(chosen, { imageHeight, columns }); chosen = []; used = 0; }
+      chosen.push(...indexes); used += height;
+    }
+    if (chosen.length) addPage(chosen, { imageHeight, columns });
+  } else if (layoutKind === 'words') {
+    if (!data.words?.length) throw new Error('No word data to export');
+    const domain = data.weightDomain || { minCount: Math.min(...data.words.map(word => word.count)), maxCount: Math.max(...data.words.map(word => word.count)) };
+    let chosen = [];
+    let used = 0;
+    const budget = visualization.width * visualization.height * 0.45;
+    for (const index of indexesOf(data.words)) {
+      const word = data.words[index];
+      const ratio = domain.maxCount > domain.minCount ? (Math.log(word.count) - Math.log(domain.minCount)) / (Math.log(domain.maxCount) - Math.log(domain.minCount)) : 0.4666666667;
+      const size = 36 + ratio * 60;
+      const width = measure(word.text, size);
+      if (width > visualization.width) throw new RangeError('Selected word cannot fit at readable size');
+      const area = (width + 24) * (size + 24);
+      if (chosen.length && used + area > budget) { addPage(chosen, { weightDomain: domain }); chosen = []; used = 0; }
+      chosen.push(index); used += area;
+    }
+    if (chosen.length) addPage(chosen, { weightDomain: domain });
+  } else if (layoutKind === 'records') {
+    if (data.groups?.length) {
+      pack(indexesOf(data.groups), () => Math.min(360, visualization.height), { overview: true });
+    } else if (data.records?.length) {
+      const chartHeight = Math.min(480, visualization.height * 0.55);
+      const recordHeight = 52;
+      const capacity = Math.floor((visualization.height - chartHeight - 24) / recordHeight);
+      if (capacity < 1) throw new RangeError('Record chart and values cannot fit at readable size');
+      for (let start = 0; start < data.records.length; start += capacity) addPage(indexesOf(data.records).slice(start, start + capacity), { chartHeight, recordHeight, repeatFullChart: true });
+    } else throw new Error('No record data to export');
+  } else {
+    const items = data.points || data.bins || data.groups || data.chartInput?.data?.datasets?.flatMap(dataset => dataset.data || []) || [];
+    if (layoutKind !== 'map' && !items.length) throw new Error('No chart data to export');
+    const extra = {};
+    if (layoutKind === 'map') {
+      const viewport = data.viewport;
+      if (!viewport) throw new Error('Selected map viewport is unavailable');
+      const fit = computeContainFit(viewport.width || viewport.aspectRatio || 1, viewport.height || 1, visualization.width, visualization.height);
+      extra.mapBounds = { x: visualization.x + fit.offsetX, y: visualization.y + fit.offsetY, width: fit.drawWidth, height: fit.drawHeight };
+    }
+    addPage(indexesOf(items), extra);
+  }
+  if (!pages.length) throw new Error('No export page data');
+  if (pages.length > 1 && !options.reservePageIndicator) {
+    return planExportPages(snapshot, { ...options, reservePageIndicator: true }, measurements);
+  }
+  pages.forEach(page => { page.pageCount = pages.length; page.scopeLabel = `Page ${page.pageIndex + 1} of ${pages.length}`; });
+  return { format: format.key, width: format.width, height: format.height, contentBounds: bounds,
+    minFontSize: 36, layoutKind, textBlocks, captionHeight, footer, legendRows, pages };
 }
 
 function createSocialExportMetadata(input = {}) {
@@ -678,6 +939,7 @@ if (typeof module !== 'undefined' && module.exports) {
     getContrastRatio,
     wrapExportText,
     computeSocialExportLayout,
+    planExportPages,
     createSocialExportMetadata,
     computeSquareFit,
     computeContainFit,
@@ -710,6 +972,7 @@ if (typeof window !== 'undefined') {
     getContrastRatio,
     wrapExportText,
     computeSocialExportLayout,
+    planExportPages,
     createSocialExportMetadata,
     computeSquareFit,
     computeContainFit,

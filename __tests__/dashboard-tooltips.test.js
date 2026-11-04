@@ -103,6 +103,63 @@ test('private chart capture disables native tooltips and leaves the live configu
   expect(destroy).toHaveBeenCalledTimes(1);
 });
 
+test('export chart input freezes data, axis options and visibility independently of the live chart', () => {
+  const { window, document } = makeController();
+  window.Chart = jest.fn(function () { this.setDatasetVisibility = jest.fn(); this.update = jest.fn(); this.destroy = jest.fn(); });
+  let visible = true;
+  const chart = {
+    canvas: document.createElement('canvas'), width: 800, height: 400,
+    data: { labels: ['Original'], datasets: [{ label: 'Run', data: [12] }] },
+    config: { type: 'bar', plugins: [], options: { scales: { y: { reverse: false, ticks: { font: { size: 12 } } } }, plugins: { tooltip: { enabled: true } } } },
+    options: { interaction: { mode: 'index' } }, getElementsAtEventForMode: () => [],
+    isDatasetVisible: () => visible, update: jest.fn()
+  };
+  window.dashboardTooltips.attachChart('totalDistance', chart);
+  const adapter = window.dashboardTooltips.adapters.get('totalDistance');
+  const input = adapter.captureExportInput();
+  chart.data.labels[0] = 'Changed';
+  chart.data.datasets[0].data[0] = 99;
+  chart.config.options.scales.y.reverse = true;
+  visible = false;
+  const snapshot = adapter.snapshotCapture({ chartInput: input, width: 888, height: 700,
+    minFontSize: 36, includeInspection: false, selection: makeSelection() });
+  const [canvas, config] = window.Chart.mock.calls[0];
+  expect(canvas).toMatchObject({ width: 888, height: 700 });
+  expect(config.data.labels).toEqual(['Original']);
+  expect(config.data.datasets[0].data).toEqual([12]);
+  expect(config.options.scales.y.reverse).toBe(false);
+  expect(config.options.scales.y.ticks.font.size).toBe(36);
+  expect(window.Chart.mock.instances[0].setDatasetVisibility).toHaveBeenCalledWith(0, true);
+  expect(Object.isFrozen(input.data.datasets[0].data)).toBe(true);
+  expect(snapshot.resolveExportAnchor).toBeNull();
+  const noTickInput = adapter.captureExportInput({ options: { scales: { x: {}, y: { title: { display: true, text: 'Heart rate' } } }, plugins: {} }, plugins: [] });
+  adapter.snapshotCapture({ chartInput: noTickInput, width: 888, height: 700, minFontSize: 36, axisTextColor: '#f8fafc', includeInspection: false });
+  expect(window.Chart.mock.calls.at(-1)[1].options.scales.y.ticks.font.size).toBe(36);
+  expect(window.Chart.mock.calls.at(-1)[1].options.scales.y.ticks.color).toBe('#f8fafc');
+  expect(window.Chart.mock.calls.at(-1)[1].options.scales.x.ticks.font.size).toBe(36);
+  chart.config.options.scales.y.ticks.callback = () => chart.data.labels[0];
+  expect(() => adapter.captureExportInput()).toThrow(/callback|frozen/i);
+});
+
+test('export chart cleanup destroys its private instance even when visibility preparation throws', () => {
+  const { window, document } = makeController();
+  const destroy = jest.fn();
+  window.Chart = jest.fn(function () {
+    this.setDatasetVisibility = () => { throw new Error('Synthetic export visibility failure'); };
+    this.update = jest.fn(); this.destroy = destroy;
+  });
+  const chart = {
+    canvas: document.createElement('canvas'), width: 800, height: 400,
+    data: { labels: ['Original'], datasets: [{ label: 'Run', data: [12] }] },
+    config: { type: 'bar', plugins: [], options: { plugins: { tooltip: { enabled: true } } } },
+    options: { interaction: { mode: 'index' } }, getElementsAtEventForMode: () => [],
+    isDatasetVisible: () => true, update: jest.fn()
+  };
+  window.dashboardTooltips.attachChart('totalDistance', chart);
+  expect(() => window.dashboardTooltips.adapters.get('totalDistance').snapshotCapture({ includeInspection: false })).toThrow('Synthetic export visibility failure');
+  expect(destroy).toHaveBeenCalledTimes(1);
+});
+
 test('capture projection accounts for nested canvas offsets and source-relative points without DPR drift', () => {
   const { window } = makeController();
   const selection = makeSelection();

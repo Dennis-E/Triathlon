@@ -365,9 +365,42 @@
       };
     }
 
+    function getEquipmentExportModel(view = 'ranking') {
+      const source = view === 'timeline' ? getEquipmentTimelineExportData() : getEquipmentExportData();
+      if (!source?.items?.length) return null;
+      const epoch = value => {
+        const time = new Date(value).getTime();
+        return value !== null && value !== undefined && Number.isFinite(time) ? time : null;
+      };
+      const items = source.items.map((item, index) => ({
+        ...item,
+        id: `${item.type || window.equipmentUtils.getEquipmentType(item.name)}:${item.name}`,
+        ...(view === 'timeline' ? {
+          firstDate: epoch(item.firstDate), lastDate: epoch(item.lastDate),
+          activities: (item.activities || []).map(activity => epoch(activity.date)).filter(Number.isFinite)
+        } : { rank: index > 0 && source.items[index - 1].value === item.value
+          ? source.items.findIndex(previous => previous.value === item.value) + 1 : index + 1 })
+      }));
+      const dates = view === 'timeline'
+        ? items.flatMap(item => [item.firstDate, item.lastDate]).filter(Number.isFinite)
+        : processedActivities.filter(activity => items.some(item => item.name === activity.equipment))
+          .map(activity => epoch(activity.date)).filter(Number.isFinite);
+      const scaleStart = dates.length ? Math.min(...dates) : null;
+      const scaleEnd = dates.length ? Math.max(...dates) : null;
+      return {
+        ...source, items, totalCount: items.length,
+        colorScheme: selectedEquipmentColorScheme,
+        sport: source.equipmentFilter === 'Shoes' ? 'Run' : source.equipmentFilter === 'Bikes' ? 'Bike' : 'All',
+        period: scaleStart !== null ? `${new Date(scaleStart).getFullYear()}-${new Date(scaleEnd).getFullYear()}` : null,
+        periodStart: scaleStart, periodEnd: scaleEnd,
+        ...(view === 'timeline' ? { scaleStart, scaleEnd } : {})
+      };
+    }
+
     window.equipmentDashboard = {
       getExportData: getEquipmentExportData,
-      getTimelineExportData: getEquipmentTimelineExportData
+      getTimelineExportData: getEquipmentTimelineExportData,
+      getExportModel: getEquipmentExportModel
     };
 
     // ─── shared helpers ────────────────────────────────────────────────────────

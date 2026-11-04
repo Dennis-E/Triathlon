@@ -723,27 +723,31 @@
     }
 
     function getTotalDistanceExportData() {
-      const totalKm = Number.parseFloat(document.getElementById('cardTotalKm')?.textContent);
-      if (!chartInstance || !Number.isFinite(totalKm)) return null;
+      if (!chartInstance) return null;
+      const chartData = chartInstance.data || chartInstance.config?.data || {};
+      const series = (chartData.datasets || []).map(dataset => ({
+        label: dataset.label,
+        color: Array.isArray(dataset.backgroundColor) ? dataset.backgroundColor[0] : dataset.backgroundColor,
+        values: Array.isArray(dataset.data) ? dataset.data.slice() : []
+      }));
+      if (!series.length || !(chartData.labels || []).length) return null;
+      const totalKm = series.reduce((total, item) => total + item.values.reduce((sum, value) => sum + (Number.isFinite(value) ? value : 0), 0), 0);
       const { minDate, maxDate } = getTimeframeRange();
       const firstYear = minDate.getFullYear();
       const lastYear = maxDate.getFullYear();
       const currentYear = new Date().getFullYear();
       const incompleteYear = lastYear === currentYear ? String(lastYear) : null;
-      const chartData = chartInstance.data || chartInstance.config?.data || {};
       return {
         sport: selectedSportFilter,
         metric: 'Distance',
         period: firstYear === lastYear ? String(firstYear) : `${firstYear}-${lastYear}`,
+        periodStart: minDate.getTime(),
+        periodEnd: maxDate.getTime(),
         unit: 'km',
         centralValue: totalKm,
         aggregation: selectedAggregationLevel,
         periodLabels: (chartData.labels || []).map(String),
-        series: (chartData.datasets || []).map(dataset => ({
-          label: dataset.label,
-          color: Array.isArray(dataset.backgroundColor) ? dataset.backgroundColor[0] : dataset.backgroundColor,
-          values: Array.isArray(dataset.data) ? dataset.data.slice() : []
-        })),
+        series,
         incompleteYear
       };
     }

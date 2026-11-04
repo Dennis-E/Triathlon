@@ -247,19 +247,58 @@
       window.dashboardTooltips?.attachChart('pieCharts', pieChartInstance);
     }
 
-    function getExportChartImage(size = 560) {
-      if (!currentPieResult || currentPieResult.slices.length === 0 || !(size > 0)) return null;
+    function getPieExportData() {
+      if (!currentPieResult?.slices.length) return null;
+      const slices = currentPieResult.slices.map(slice => ({ ...slice,
+        displayValue: window.pieChartUtils.formatPieMeasureValue(selectedPieMeasure, slice.value) }));
+      const dates = processedActivities.filter(activity => selectedPieSport === 'All' || activity.sport === selectedPieSport)
+        .map(activity => new Date(activity.date).getTime()).filter(Number.isFinite);
+      const start = dates.length ? Math.min(...dates) : null;
+      const end = dates.length ? Math.max(...dates) : null;
+      return {
+        sport: selectedPieSport, metric: selectedPieMeasure, groupBy: selectedPieDimension,
+        unit: { count: 'activities', time: 's', distance: 'km' }[selectedPieMeasure],
+        colorScheme: selectedPieColorScheme, slices, denominator: currentPieResult.total,
+        activityCount: currentPieResult.activityCount, excludedCount: currentPieResult.excludedCount,
+        period: start !== null ? `${new Date(start).getFullYear()}-${new Date(end).getFullYear()}` : null,
+        periodStart: start, periodEnd: end,
+        legend: { items: slices.map(slice => ({ label: slice.label, color: slice.color,
+          value: slice.value, displayValue: slice.displayValue, percentage: slice.percentage })) }
+      };
+    }
 
+    function createPieExportCanvas(data, size = 560) {
+      if (!data?.slices?.length || !(size > 0)) throw new Error('Pie export data or dimensions are unavailable');
+      const slices = data.slices.map(slice => ({ ...slice }));
       const canvas = document.createElement('canvas');
       canvas.width = size;
       canvas.height = size;
-      const exportChart = new Chart(canvas, {
+      const exportPlugin = {
+        id: 'snapshotPiePercentages',
+        afterDatasetsDraw(chart) {
+          const context = chart.ctx;
+          context.save(); context.font = '700 36px system-ui, sans-serif';
+          context.textAlign = 'center'; context.textBaseline = 'middle';
+          chart.getDatasetMeta(0).data.forEach((arc, index) => {
+            const slice = slices[index];
+            if (!slice || slice.percentage < 8) return;
+            const point = arc.tooltipPosition();
+            const ratio = window.exportUtils?.getContrastRatio('#ffffff', slice.color);
+            context.fillStyle = ratio === undefined ? getPieLabelTextColor(slice.color) : ratio >= 4.5 ? '#ffffff' : '#000000';
+            context.fillText(`${Math.round(slice.percentage)}%`, point.x, point.y);
+          });
+          context.restore();
+        }
+      };
+      let exportChart;
+      try {
+      exportChart = new Chart(canvas, {
         type: 'pie',
         data: {
-          labels: currentPieResult.slices.map(slice => slice.label),
+          labels: slices.map(slice => slice.label),
           datasets: [{
-            data: currentPieResult.slices.map(slice => slice.value),
-            backgroundColor: currentPieResult.slices.map(slice => slice.color),
+            data: slices.map(slice => slice.value),
+            backgroundColor: slices.map(slice => slice.color),
             borderColor: '#020617',
             borderWidth: 2
           }]
@@ -269,13 +308,22 @@
           maintainAspectRatio: true,
           animation: false,
           layout: { padding: 16 },
-          plugins: { legend: { display: false } }
+          plugins: { legend: { display: false }, tooltip: { enabled: false } }
         },
-        plugins: [piePercentageLabelPlugin]
+        plugins: [exportPlugin]
       });
-      const image = canvas.toDataURL('image/png');
-      exportChart.destroy();
-      return image;
+      exportChart.update?.('none');
+      const copy = document.createElement('canvas');
+      copy.width = canvas.width; copy.height = canvas.height;
+      copy.getContext('2d').drawImage(canvas, 0, 0);
+      return copy;
+      } finally { exportChart?.destroy(); }
     }
 
-    window.pieChartsDashboard = { render: renderPieCharts, getExportChartImage };
+    function getExportChartImage(size = 560) {
+      const data = getPieExportData();
+      return data && size > 0 ? createPieExportCanvas(data, size).toDataURL('image/png') : null;
+    }
+
+    window.pieChartsDashboard = { render: renderPieCharts, getExportChartImage,
+      getExportData: getPieExportData, createExportCanvas: createPieExportCanvas };

@@ -228,8 +228,33 @@
         if (!point) return selection.anchor;
         return { ...selection.anchor, normalizedPoint: { x: (rect.left + point.x * rect.width) / (root.innerWidth || 800), y: (rect.top + point.y * rect.height) / (root.innerHeight || 600) } };
       },
+      captureExportInput(overrides = {}) {
+        const freeze = (value, callbacksAllowed = false) => {
+          if (typeof value === 'function' && !callbacksAllowed) throw new TypeError('Export callbacks require explicit frozen input options');
+          if (value && typeof value === 'object') {
+            Object.values(value).forEach(entry => freeze(entry, callbacksAllowed));
+            Object.freeze(value);
+          }
+          return value;
+        };
+        const data = copyChartInput(overrides.data || chart.data);
+        return Object.freeze({
+          type: overrides.type || chart.config.type,
+          data: freeze(data),
+          options: freeze(copyChartInput(overrides.options || chart.config.options), Object.prototype.hasOwnProperty.call(overrides, 'options')),
+          plugins: freeze(copyChartInput(overrides.plugins || (chart.config.plugins || []).filter(entry => entry !== plugin)), Object.prototype.hasOwnProperty.call(overrides, 'plugins')),
+          visibility: Object.freeze(data.datasets.map((_dataset, index) => overrides.visibility
+            ? overrides.visibility[index] === true : chart.isDatasetVisible(index)))
+        });
+      },
       snapshotCapture(captureOptions = {}) {
-  const selection = captureOptions.selection || (captureOptions.anchor ? captureOptions : null);
+        const selection = captureOptions.includeInspection === false ? null
+          : captureOptions.selection || (captureOptions.anchor ? captureOptions : null);
+        const input = captureOptions.chartInput || {
+          type: chart.config.type, data: chart.data, options: chart.config.options,
+          plugins: (chart.config.plugins || []).filter(entry => entry !== plugin),
+          visibility: chart.data.datasets.map((_dataset, index) => chart.isDatasetVisible(index))
+        };
         const privateCanvas = root.document.createElement('canvas');
         const sourceRect = canvas.parentElement?.getBoundingClientRect?.() || canvas.getBoundingClientRect?.();
         const captureWidth = captureOptions.width > 0 ? captureOptions.width
@@ -241,11 +266,14 @@
         }
         privateCanvas.width = captureWidth;
         privateCanvas.height = captureHeight;
-        const options = copyChartInput(chart.config.options);
+        const options = copyChartInput(input.options);
         options.responsive = false; options.animation = false; options.devicePixelRatio = 1;
         options.plugins = { ...options.plugins, tooltip: { enabled: false } };
         const minimumFontSize = Number(captureOptions.minFontSize) || 0;
         const axisTextColor = captureOptions.axisTextColor;
+        if (minimumFontSize > 0 || axisTextColor) {
+          Object.values(options.scales || {}).forEach(scale => { if (!scale.ticks) scale.ticks = {}; });
+        }
         if (typeof axisTextColor === 'string' && axisTextColor) {
           Object.values(options.scales || {}).forEach(scale => {
             if (scale.ticks) scale.ticks.color = axisTextColor;
@@ -264,22 +292,23 @@
           const legendLabels = options.plugins.legend?.labels;
           if (legendLabels) legendLabels.font = enlargeFont(legendLabels.font);
         }
-        const privateChart = new root.Chart(privateCanvas, {
-          type: chart.config.type, data: copyChartInput(chart.data), options,
-          plugins: (chart.config.plugins || []).filter(entry => entry !== plugin)
-        });
-        chart.data.datasets.forEach((dataset, index) => privateChart.setDatasetVisibility(index, chart.isDatasetVisible(index)));
-        privateChart.update('none');
         const hit = selection?.anchor.chartElements?.[0];
         const copy = root.document.createElement('canvas');
+        let privateChart;
         let exportPoint;
         try {
+          privateChart = new root.Chart(privateCanvas, {
+            type: input.type, data: copyChartInput(input.data), options,
+            plugins: copyChartInput(input.plugins || [])
+          });
+          input.data.datasets.forEach((_dataset, index) => privateChart.setDatasetVisibility(index, input.visibility[index] === true));
+          privateChart.update('none');
           const selectedPoint = hit && pointFor(privateChart, hit);
           exportPoint = selectedPoint ? { x: selectedPoint.x / privateCanvas.width, y: selectedPoint.y / privateCanvas.height } : selection?.anchor.capturePoint;
           copy.width = privateCanvas.width; copy.height = privateCanvas.height;
           copy.getContext('2d').drawImage(privateCanvas, 0, 0);
         } finally {
-          privateChart.destroy();
+          privateChart?.destroy();
         }
         return { canvas: copy, sourceCanvas: canvas, resolveExportAnchor: selection ? captureContext => {
           if (!exportPoint) throw new Error('Could not resolve the selected chart item');

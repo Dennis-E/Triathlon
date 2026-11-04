@@ -4,6 +4,14 @@ function escapeMediaGalleryHtml(value) {
   })[character]);
 }
 
+function invalidatePreparedMediaExport(session, area) {
+  if (!session) return;
+  session.exportPreparationVersion = (session.exportPreparationVersion || 0) + 1;
+  session.exportData = null;
+  session.preparedLease?.release();
+  session.preparedLease = null;
+  if (area) area.innerHTML = '';
+}
 const mediaLibraryUtils = typeof window !== 'undefined' ? window.mediaUtils : null;
 let mediaGallerySession = null;
 let mediaTooltipAdapter = null;
@@ -108,6 +116,7 @@ function renderMediaGallery(mediaLibrary, options = {}) {
   }
 
   if (!mediaGallerySession || mediaGallerySession.library !== mediaLibrary) {
+    invalidatePreparedMediaExport(mediaGallerySession, doc.getElementById('mediaGalleryExportArea'));
     mediaGallerySession = {
       library: mediaLibrary,
       filters: { year: 'all', sport: 'all', activityId: 'all' },
@@ -210,6 +219,7 @@ function renderMediaGallery(mediaLibrary, options = {}) {
 
   const updateFilters = () => {
     window.dashboardTooltips?.invalidate?.();
+    invalidatePreparedMediaExport(session, exportArea);
     session.filters = {
       year: yearFilter ? yearFilter.value : 'all',
       sport: sportFilter ? sportFilter.value : 'all',
@@ -223,6 +233,7 @@ function renderMediaGallery(mediaLibrary, options = {}) {
   if (activityFilter) activityFilter.onchange = updateFilters;
   if (includeRoutesControl) includeRoutesControl.onchange = () => {
     window.dashboardTooltips?.invalidate?.();
+    invalidatePreparedMediaExport(session, exportArea);
     session.includeRoutes = includeRoutesControl.checked;
   };
   if (createRecapButton) createRecapButton.onclick = () => createMediaExport('annual', { document: doc });
@@ -242,6 +253,7 @@ function renderMediaGallery(mediaLibrary, options = {}) {
     const checkbox = event.target && event.target.closest ? event.target.closest('[data-media-select-key]') : null;
     if (!checkbox) return;
     window.dashboardTooltips?.invalidate?.();
+    invalidatePreparedMediaExport(session, exportArea);
     if (checkbox.checked) session.selectedKeys.add(checkbox.dataset.mediaSelectKey);
     else session.selectedKeys.delete(checkbox.dataset.mediaSelectKey);
   };
@@ -352,7 +364,9 @@ async function createMediaExport(kind, options = {}) {
   const session = mediaGallerySession;
   const area = doc && doc.getElementById('mediaGalleryExportArea');
   if (!session || !area) return;
-
+  invalidatePreparedMediaExport(session, area);
+  const preparationVersion = session.exportPreparationVersion;
+  const isCurrent = () => mediaGallerySession === session && session.exportPreparationVersion === preparationVersion;
   const library = session.library;
   const filtered = mediaLibraryUtils.filterMediaAssets(library.assets, session.filters);
   let assets = kind === 'collage' && session.selectedKeys.size
@@ -362,8 +376,9 @@ async function createMediaExport(kind, options = {}) {
     doc.getElementById('mediaGalleryStatus').textContent = 'Choose a year before creating an annual recap.';
     return;
   }
-  assets = mediaLibraryUtils.sortMediaAssetsChronologically(assets)
-    .filter(asset => asset.status === 'readable').slice(0, 12);
+  assets = mediaLibraryUtils.sortMediaAssetsChronologically(assets).filter(asset => asset.status === 'readable');
+  const eligibleCount = assets.length;
+  assets = assets.slice(0, 12).map(asset => ({ ...asset, activityIds: (asset.activityIds || []).slice() }));
   if (!assets.length) {
     doc.getElementById('mediaGalleryStatus').textContent = 'Select or filter readable media before exporting.';
     return;
@@ -372,25 +387,45 @@ async function createMediaExport(kind, options = {}) {
   const includeRoutes = session.includeRoutes || !!(doc.getElementById('mediaGalleryIncludeRoutes') || {}).checked;
   const title = kind === 'annual' ? `${session.filters.year} Annual Recap` : 'Training Media Collage';
   const cards = [];
+  const items = [];
+  const filters = { ...session.filters };
+  let sourceLease = null;
   try {
+    sourceLease = typeof library.acquireExportSources === 'function' ? library.acquireExportSources(assets.map(asset => asset.key)) : null;
+    const isolatedLibrary = sourceLease ? { getObjectUrl: asset => sourceLease.getObjectUrl(asset.key) } : library;
     for (const asset of assets) {
       const src = asset.mediaType === 'video'
-        ? await createVideoPreview(asset, library, doc)
-        : await library.getObjectUrl(asset);
-      if (mediaGallerySession !== session) return;
+        ? await createVideoPreview(asset, isolatedLibrary, doc)
+        : await isolatedLibrary.getObjectUrl(asset);
+      if (!isCurrent()) return;
       const captions = `<figcaption>${escapeMediaGalleryHtml(asset.caption || asset.filename)}</figcaption>`;
       const routeSvgs = includeRoutes ? (asset.activityIds || []).map(activityId => {
         const track = library.gpsTracksByActivityId && library.gpsTracksByActivityId[String(activityId)];
         return track ? createMediaRouteSvg(track.points) : '';
       }).join('') : '';
+      const date = asset.date || asset.capturedAt;
+      items.push({ assetKey: asset.key, mediaType: asset.mediaType, src, caption: asset.caption || '',
+        date: date && Number.isFinite(new Date(date).getTime()) ? new Date(date).getTime() : null, routeSvgs });
       cards.push(`<figure><img data-export-asset-key="${escapeMediaGalleryHtml(asset.key)}" src="${escapeMediaGalleryHtml(src)}" alt="${escapeMediaGalleryHtml(asset.caption || asset.mediaType)}" style="width:100%;height:200px;object-fit:cover;"/>${captions}${routeSvgs}</figure>`);
     }
+    session.preparedLease = sourceLease;
+    sourceLease = null;
   } catch (error) {
-    if (mediaGallerySession !== session) return;
+    if (!isCurrent()) return;
     doc.getElementById('mediaGalleryStatus').textContent = 'A selected media file could not be prepared for export.';
     return;
+  } finally {
+    sourceLease?.release();
   }
-
+  const dates = items.map(item => item.date).filter(Number.isFinite);
+  session.exportData = {
+    mediaKind: kind, preparationVersion, title, filters,
+    sport: filters.sport === 'all' ? 'All' : filters.sport,
+    period: filters.year !== 'all' ? String(filters.year) : dates.length
+      ? `${new Date(Math.min(...dates)).getFullYear()}-${new Date(Math.max(...dates)).getFullYear()}` : 'Undated media',
+    metricLabel: 'Selected media', includeRoutes, eligibleCount, displayedCount: items.length,
+    selectedAssetKeys: items.map(item => item.assetKey), items
+  };
   area.innerHTML = `<section data-media-export="true" style="width:960px;background:#020617;color:#f8fafc;font-family:Arial,sans-serif;padding:32px;"><h1 style="font-size:30px;margin:0 0 8px;">${escapeMediaGalleryHtml(title)}</h1><p style="margin:0 0 24px;color:#94a3b8;">${assets.length} selected media items${includeRoutes ? ' · routes included' : ''}</p><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;">${cards.join('')}</div></section>`;
   const activityFilter = doc.getElementById('mediaGalleryActivityFilter');
   session.exportContext = [
@@ -402,7 +437,7 @@ async function createMediaExport(kind, options = {}) {
   ];
   doc.getElementById('mediaGalleryStatus').textContent = `${title} ready for local preview. Review it before downloading.`;
   if (typeof window !== 'undefined' && typeof window.exportVisualizationTab === 'function') {
-    window.exportVisualizationTab('mediaGallery');
+    return window.exportVisualizationTab('mediaGallery');
   }
 }
 
@@ -419,21 +454,66 @@ function getMediaGalleryExportContext() {
     ? mediaGallerySession.exportContext : [];
 }
 
-function createMediaExportCapture(sources, sourceLease) {
+function acquirePreparedMediaExportSources(data) {
+  if (!mediaGallerySession || mediaGallerySession.exportData?.preparationVersion !== data?.preparationVersion) throw new Error('Prepared media selection is no longer available');
+  const sources = data.items.map(item => ({ key: item.assetKey, src: item.src, ready: item.src.startsWith('data:') }));
+  const keys = sources.filter(source => !source.ready).map(source => source.key);
+  const lease = keys.length ? mediaGallerySession.library.acquireExportSources(keys) : null;
+  return createMediaExportCapture(sources, lease, { allowSubset: true });
+}
+
+function createMediaExportPage(data, page, ownerDocument = document) {
+  const element = ownerDocument.createElement('div');
+  const columns = page.columns || (data.mediaKind === 'annual' ? 1 : 2);
+  Object.assign(element.style, { width: `${page.visualization.width}px`, display: 'grid',
+    gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: '24px',
+    fontFamily: 'system-ui, sans-serif', color: '#f8fafc', background: 'transparent' });
+  for (const index of page.itemIndexes) {
+    const item = data.items[index];
+    if (!item) throw new Error('Media export item is unavailable');
+    const figure = ownerDocument.createElement('figure');
+    figure.style.margin = '0';
+    figure.innerHTML = `<img data-export-asset-key="${escapeMediaGalleryHtml(item.assetKey)}" src="${escapeMediaGalleryHtml(item.src)}" alt="${escapeMediaGalleryHtml(item.mediaType)}" style="display:block;width:100%;height:${page.imageHeight || 240}px;object-fit:contain;"/><figcaption style="font-size:36px;line-height:42px;overflow-wrap:anywhere;">${item.date !== null ? escapeMediaGalleryHtml(new Date(item.date).toLocaleDateString('en-GB')) : ''}${item.caption ? ` ${escapeMediaGalleryHtml(item.caption)}` : ''}</figcaption>${data.includeRoutes ? item.routeSvgs : ''}`;
+    element.appendChild(figure);
+  }
   let released = false;
-  const release = () => {
-    if (released) return;
+  return { element,
+    async prepare(sources) {
+      if (released) throw new Error('Media export page has been released');
+      Object.assign(element.style, { position: 'fixed', left: '-100000px', top: '0' });
+      ownerDocument.body.appendChild(element);
+      if (sources) await sources.prepare(element);
+      await Promise.all(Array.from(element.querySelectorAll('img')).map(image => typeof image.decode === 'function' ? image.decode() : Promise.resolve()));
+    },
+    release() { if (released) return; released = true; element.remove(); } };
+}
+
+function createMediaExportCapture(sources, sourceLease, options = {}) {
+  let released = false;
+  let releaseRequested = false;
+  let activePreparations = 0;
+  const dispose = () => {
+    if (released || !releaseRequested || activePreparations > 0) return;
     released = true;
     sourceLease?.release();
     sourceLease = null;
     sources.length = 0;
   };
+  const release = () => {
+    releaseRequested = true;
+    dispose();
+  };
   return {
     prepare: async clonedTarget => {
+      if (released || releaseRequested) throw new Error('Media export capture has been released.');
+      activePreparations++;
       try {
-        if (released) throw new Error('Media export capture has been released.');
         const images = Array.from(clonedTarget.querySelectorAll('img[data-export-asset-key]'));
-        const replacements = await Promise.all(sources.map(async source => {
+        if (options.allowSubset && (!images.length || images.some(image => !sources.some(source => source.key === image.dataset.exportAssetKey)))) {
+          throw new Error('Media export page contains an unknown or unselected image');
+        }
+        const selectedSources = options.allowSubset ? sources.filter(source => images.some(image => image.dataset.exportAssetKey === source.key)) : sources;
+        const replacements = await Promise.all(selectedSources.map(async source => {
           const matches = images.filter(image => image.dataset.exportAssetKey === source.key);
           if (!matches.length) throw new Error('Media export clone is missing a captured image.');
           const url = source.ready ? source.src : await sourceLease.getObjectUrl(source.key);
@@ -446,6 +526,9 @@ function createMediaExportCapture(sources, sourceLease) {
       } catch (error) {
         release();
         throw error;
+      } finally {
+        activePreparations--;
+        dispose();
       }
     },
     release
@@ -469,6 +552,7 @@ function clearMediaGallery() {
   if (mediaGallerySession && mediaGallerySession.thumbnailObserver) {
     mediaGallerySession.thumbnailObserver.disconnect();
   }
+  invalidatePreparedMediaExport(mediaGallerySession);
   mediaGallerySession = null;
   if (typeof document !== 'undefined') {
     const preview = document.getElementById('mediaGalleryPreview');
@@ -484,9 +568,13 @@ if (typeof window !== 'undefined') {
     render: renderMediaGallery,
     createAnnualRecap: createMediaAnnualRecap,
     createCollage: createMediaCollage,
+    getExportData: () => mediaGallerySession?.exportData ? JSON.parse(JSON.stringify(mediaGallerySession.exportData)) : null,
+    acquirePreparedExportSources: acquirePreparedMediaExportSources,
+    createExportPage: createMediaExportPage,
     setIncludeRoutes: include => {
       if (mediaGallerySession && mediaGallerySession.includeRoutes !== (include === true)) {
         window.dashboardTooltips?.invalidate?.();
+        invalidatePreparedMediaExport(mediaGallerySession, document.getElementById('mediaGalleryExportArea'));
         mediaGallerySession.includeRoutes = include === true;
       }
     },

@@ -52,10 +52,84 @@ function loadDashboardMedia() {
   vm.runInContext(`${dashboardMediaSource}\nthis.__renderMediaGallery = renderMediaGallery;`, context, {
     filename: 'src/dashboard-media.js'
   });
-  return { render: context.__renderMediaGallery, nodes, createdElements, window: context.window };
+  return { render: context.__renderMediaGallery, nodes, createdElements, window: context.window, context };
 }
 
 describe('dashboard media gallery', () => {
+  it('prepares successive page subsets from the same frozen media selection and rejects unknown images', async () => {
+    const runtime = loadDashboardMedia();
+    const fixture = createMediaZipFixture({
+      activityRows: [{ id: 'one', sport: 'Run', date: '2025-01-02', media: 'first.jpg;second.jpg' }],
+      mediaRows: [{ filename: 'first.jpg', caption: 'First' }, { filename: 'second.jpg', caption: 'Second' }],
+      mediaFiles: { 'media/first.jpg': { content: 'first' }, 'media/second.jpg': { content: 'second' } }
+    });
+    const library = await extractMediaFromZip(fixture.zip, fixture.activityCsv);
+    runtime.render(library);
+    await runtime.window.mediaGalleryDashboard.createCollage();
+    const data = runtime.window.mediaGalleryDashboard.getExportData();
+    const sources = runtime.window.mediaGalleryDashboard.acquirePreparedExportSources(data);
+    for (const item of data.items) {
+      const image = { dataset: { exportAssetKey: item.assetKey }, src: '' };
+      await sources.prepare({ querySelectorAll: () => [image] });
+      expect(image.src).toMatch(/^blob:/);
+    }
+    await expect(sources.prepare({ querySelectorAll: () => [{ dataset: { exportAssetKey: 'not-selected.jpg' } }] })).rejects.toThrow(/captured|selected|unknown/i);
+    sources.release();
+    runtime.window.mediaGalleryDashboard.clear();
+    library.release();
+  });
+
+  it.each([['annual', 1], ['annual', 14], ['collage', 1], ['collage', 14]])('exports a frozen prepared %s selection for %i eligible assets', async (kind, count) => {
+    const runtime = loadDashboardMedia();
+    runtime.context.createVideoPreview = async () => 'data:image/jpeg;base64,PREPARED_VIDEO_STILL';
+    const filenames = Array.from({ length: count }, (_, index) => `frame-${String(index + 1).padStart(2, '0')}.${index === count - 1 ? 'mp4' : 'jpg'}`);
+    const fixture = createMediaZipFixture({
+      activityRows: [{ id: 'one', sport: 'Run', date: '2025-01-02', media: filenames.join(';') }],
+      mediaRows: filenames.map(filename => ({ filename, caption: `Synthetic ${filename}` })),
+      mediaFiles: Object.fromEntries(filenames.map(filename => [`media/${filename}`, { content: 'synthetic fixture bytes' }]))
+    });
+    const library = await extractMediaFromZip(fixture.zip, fixture.activityCsv);
+    runtime.render(library);
+    runtime.nodes.mediaGalleryYearFilter.value = '2025';
+    runtime.nodes.mediaGalleryYearFilter.onchange();
+    await (kind === 'annual' ? runtime.window.mediaGalleryDashboard.createAnnualRecap() : runtime.window.mediaGalleryDashboard.createCollage());
+    const model = runtime.window.mediaGalleryDashboard.getExportData();
+    expect(model).toMatchObject({ mediaKind: kind, eligibleCount: count, displayedCount: Math.min(count, 12), includeRoutes: false });
+    expect(model.selectedAssetKeys).toHaveLength(Math.min(count, 12));
+    expect(model.items).toHaveLength(Math.min(count, 12));
+    if (count === 1) expect(model.items[0].src).toBe('data:image/jpeg;base64,PREPARED_VIDEO_STILL');
+    const before = JSON.stringify(model);
+    library.assets[0].caption = 'Changed live gallery caption';
+    expect(JSON.stringify(runtime.window.mediaGalleryDashboard.getExportData())).toBe(before);
+    library.release();
+  });
+
+  it('defers releasing an export source until its already-started preparation finishes', async () => {
+    const runtime = loadDashboardMedia();
+    let finishRead;
+    const release = jest.fn();
+    const library = {
+      hasReadableMedia: true,
+      assets: [{ key: 'photo.jpg', filename: 'photo.jpg', mediaType: 'photo', status: 'readable', activityIds: [] }],
+      getObjectUrl: async () => 'blob:gallery',
+      acquireExportSources: () => ({ getObjectUrl: () => new Promise(resolve => { finishRead = resolve; }), release })
+    };
+    runtime.render(library);
+    const source = { dataset: { exportAssetKey: 'photo.jpg' }, getAttribute: () => 'blob:gallery' };
+    const image = { dataset: { exportAssetKey: 'photo.jpg' }, src: '' };
+    const capture = runtime.window.mediaGalleryDashboard.acquireExportCapture({ querySelectorAll: () => [source] });
+    const pending = capture.prepare({ querySelectorAll: () => [image] });
+    capture.release();
+    expect(release).not.toHaveBeenCalled();
+    finishRead('blob:independent-export');
+    await pending;
+    expect(image.src).toBe('blob:independent-export');
+    expect(release).toHaveBeenCalledTimes(1);
+    capture.release();
+    expect(release).toHaveBeenCalledTimes(1);
+    await expect(capture.prepare({ querySelectorAll: () => [image] })).rejects.toThrow(/released/i);
+  });
+
   it.each(['preview', 'collage'])('discards a late %s after the gallery session is cleared', async mode => {
     const runtime = loadDashboardMedia();
     let finishRead;
@@ -410,7 +484,7 @@ describe('dashboard media gallery', () => {
       }));
       const capture = runtime.window.mediaGalleryDashboard.acquireExportCapture(target(originals));
       const preparing = capture.prepare(target(clonedImages));
-      const rejected = expect(preparing).rejects.toThrow(mode === 'failure' ? /synthetic failure/i : /released/i);
+      const completion = mode === 'failure' ? expect(preparing).rejects.toThrow(/synthetic failure/i) : preparing;
       await Promise.resolve();
       const ownedUrl = createUrl.mock.results[createUrl.mock.results.length - 1].value;
       expect(originals.map(item => item.src)).not.toContain(ownedUrl);
@@ -425,14 +499,23 @@ describe('dashboard media gallery', () => {
       } else {
         failRead(new Error('Synthetic failure'));
       }
-      await rejected;
+      await completion;
       capture.release();
       capture.release();
-      expect(createUrl).toHaveBeenCalledTimes(callsBeforeCompletion);
+      expect(createUrl).toHaveBeenCalledTimes(callsBeforeCompletion + (mode === 'cancel' ? 1 : 0));
       expect(revokeUrl.mock.calls.filter(([url]) => url === ownedUrl)).toHaveLength(1);
       expect(revokeUrl).not.toHaveBeenCalledWith(replacementUrl);
       expect(validUrls.has(replacementUrl)).toBe(true);
-      expect(clonedImages.map(item => item.src)).toEqual(originals.map(item => item.src));
+      if (mode === 'failure') {
+        expect(clonedImages.map(item => item.src)).toEqual(originals.map(item => item.src));
+      } else {
+        expect(clonedImages[0].src).toBe(ownedUrl);
+        expect(clonedImages.map(item => item.src)).not.toEqual(originals.map(item => item.src));
+        for (const clone of clonedImages) {
+          expect(revokeUrl.mock.calls.filter(([url]) => url === clone.src)).toHaveLength(1);
+          expect(validUrls.has(clone.src)).toBe(false);
+        }
+      }
     });
 
     it('preserves ready data thumbnails without acquiring or regenerating video sources', async () => {

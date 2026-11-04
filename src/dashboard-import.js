@@ -976,15 +976,15 @@
           showImportProgressModal();
           document.getElementById('importProgressError').classList.add('hidden');
           setImportModalVisualState('loader', true);
-          updateImportProgress(0, 'Reading Apple Health export...');
+          updateImportProgress(0, 'Reading Apple Health export...', false, true);
           const dataset = await executeAppleHealthZipImport(file, { operation,
-            reportProgress: progress => updateImportProgress(progress.percent, progress.stage) });
+            reportProgress: progress => updateImportProgress(progress.percent, progress.stage, false, true) });
           if (!dataset || !isCurrentImportOperation(operation)) return;
           const report = dataset.diagnostics;
           const unsupported = Object.values(report.unsupportedBySport || {}).reduce((sum, value) => sum + value, 0);
           const incomplete = Object.values(report.unavailableByMetricAndReason || {}).reduce((sum, value) => sum + value, 0);
           if (status) status.textContent = `${dataset.activities.length} workouts imported. ${unsupported} unsupported, ${report.invalidWorkoutCount || 0} invalid, ${report.duplicateCount || 0} duplicates skipped. ${report.skippedRouteCount || 0} optional routes skipped; ${incomplete} unavailable optional measurements.`;
-          updateImportProgress(100, 'Apple Health import complete');
+          updateImportProgress(100, 'Apple Health import complete', false, true);
           hideImportProgressModal();
         } catch (error) {
           if (!isCurrentImportOperation(operation)) return;
@@ -996,7 +996,7 @@
       input.click();
     }
 
-    function updateImportProgress(percent, stage, isError = false) {
+    function updateImportProgress(percent, stage, isError = false, roundPercentForDisplay = false) {
       const modal = document.getElementById('importProgressModal');
       const bar = document.getElementById('importProgressBar');
       const percentEl = document.getElementById('importProgressPercent');
@@ -1009,7 +1009,7 @@
       if (hasProgressValue) {
         const boundedPercent = Math.max(0, Math.min(100, percent));
         bar.style.width = boundedPercent + '%';
-        percentEl.textContent = boundedPercent + '%';
+        percentEl.textContent = (roundPercentForDisplay ? Math.round(boundedPercent) : boundedPercent) + '%';
       }
       stageEl.textContent = stage;
       if (detailContainer) detailContainer.classList.toggle('hidden', !isError);

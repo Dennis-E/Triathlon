@@ -795,6 +795,32 @@ describe('runtime dashboard-import progress updates', () => {
     expect(runtime.nodes.importProgressDetail.textContent).toBe('');
   });
 
+  it('rounds Apple Health progress labels without changing the precise progress value', () => {
+    const runtime = loadRuntimeProgress();
+    [[0, '0%'], [42.375, '42%'], [42.5, '43%'], [100, '100%']].forEach(([percent, label]) => {
+      runtime.updateProgress(percent, 'Reading Apple Health export...', false, true);
+      expect(runtime.nodes.importProgressPercent.textContent).toBe(label);
+      expect(runtime.nodes.importProgressBar.style.width).toBe(`${percent}%`);
+    });
+
+    runtime.updateProgress(null, 'Preparing visualizations...');
+    expect(runtime.nodes.importProgressPercent.textContent).toBe('100%');
+  });
+
+  it('enables whole-percent label formatting for Apple Health progress updates', () => {
+    expect(dashboardImportSource.includes(
+      'reportProgress: progress => updateImportProgress(progress.percent, progress.stage, false, true)'
+    )).toBe(true);
+  });
+
+  it('preserves fractional percentage labels for non-Apple Health imports', () => {
+    const runtime = loadRuntimeProgress();
+    runtime.updateProgress(42.375, 'Extracting GPS tracks...');
+
+    expect(runtime.nodes.importProgressPercent.textContent).toBe('42.375%');
+    expect(runtime.nodes.importProgressBar.style.width).toBe('42.375%');
+  });
+
   it('excludes percentage-only eligibility and keeps the final message phase-gated', () => {
     const session = importExperienceCatalog.createSession({ phase: 'processing', random: () => 0 });
     expect(session.orderedMessageIds).not.toContain('message-20');

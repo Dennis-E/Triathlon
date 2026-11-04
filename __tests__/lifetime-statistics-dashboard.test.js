@@ -179,7 +179,8 @@ describe('lifetime statistics dashboard', () => {
     expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain('text-lg');
     expect(elements.lifetimeStatisticsExportArea.innerHTML).not.toContain('text-xs font-medium uppercase tracking-wide text-slate-400');
     expect(elements.lifetimeStatisticsCaptureArea.innerHTML).toContain('text-xs font-medium uppercase tracking-wide text-slate-400');
-    expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain('0,3 km');
+    const formattedElevation = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(0.3);
+    expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain(`${formattedElevation} km`);
     expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain('grid-cols-4');
     expect(elements.lifetimeStatisticsExportArea.innerHTML).toContain('Lifetime milestones');
   });

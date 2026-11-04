@@ -18,8 +18,10 @@
   "devDependencies": {
     "@testing-library/dom": "^10.4.1",
     "@zip.js/zip.js": "2.8.11",
+    "express": "^4.21.2",
     "husky": "^9.1.7",
     "jest": "^30.4.2",
-    "sax": "1.6.1"
+    "sax": "1.6.1",
+    "supertest": "^7.1.1"
   }
 }

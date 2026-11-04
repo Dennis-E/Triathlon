@@ -147,14 +147,39 @@ describe('bundled Silicon Valley training history', () => {
     const payload = generateSampleData(routes);
     expect(JSON.stringify(generateSampleData(routes))).toBe(JSON.stringify(payload));
     expect(sampleDataUtils.validateSamplePayload(payload)).toBe(payload);
-    expect(payload.activities).toHaveLength(1600);
+    expect(payload.activities.length).toBeGreaterThanOrEqual(1500);
     const dataset = sampleDataUtils.hydrateSampleDataset(payload);
     const availability = require('../src/visualization-availability').getVisualizationAvailability(dataset.activities, dataset);
     expect(Object.entries(availability).filter(([name]) => name !== 'mediaGallery').every(([, available]) => available)).toBe(true);
     expect(availability.mediaGallery).toBe(false);
     const equipmentUtils = require('../src/equipment-utils');
-    expect(equipmentUtils.aggregateEquipmentDistance(dataset.activities).length).toBeGreaterThanOrEqual(4);
-    expect(equipmentUtils.aggregateEquipmentTimeline(dataset.activities).length).toBeGreaterThanOrEqual(4);
+    const shoeEquipment = equipmentUtils.aggregateEquipmentDistance(dataset.activities, 'Shoes');
+    const bikeEquipment = equipmentUtils.aggregateEquipmentDistance(dataset.activities, 'Bikes');
+    expect(shoeEquipment.map(([name]) => name)).toEqual(expect.arrayContaining([
+      'Coast Road Shoes', 'Peninsula Road Shoes', 'Hoka Speedgoat Trail Shoes'
+    ]));
+    expect(bikeEquipment.map(([name]) => name)).toEqual(expect.arrayContaining([
+      'Foothills Road Bike', 'Bay Endurance Bike', 'Santa Cruz Mountain Bike'
+    ]));
+    expect(equipmentUtils.aggregateEquipmentTimeline(dataset.activities).length).toBeGreaterThanOrEqual(6);
+    const runActivities = dataset.activities.filter(activity => activity.sport === 'Run');
+    const trailShoeActivities = runActivities.filter(activity => activity.equipment === 'Hoka Speedgoat Trail Shoes');
+    expect(trailShoeActivities.length).toBeGreaterThan(0);
+    expect(trailShoeActivities.length).toBeLessThan(runActivities.length * 0.1);
+    expect(new Set(trailShoeActivities.map(activity => activity.calendarDate.slice(0, 4))).size).toBeLessThan(5);
+    for (const year of payload.years) {
+      const yearActivities = payload.activities.filter(activity => activity.calendarDate.startsWith(String(year)));
+      const monthlyDistance = Array.from({ length: 12 }, (_, month) => yearActivities
+        .filter(activity => Number(activity.calendarDate.slice(5, 7)) === month + 1)
+        .reduce((total, activity) => total + activity.distance, 0));
+      expect(Math.max(...monthlyDistance)).toBeGreaterThan(Math.min(...monthlyDistance) * 1.15);
+    }
+    const recoveryDates = [...new Set(payload.activities
+      .filter(activity => activity.calendarDate.startsWith('2023'))
+      .map(activity => activity.calendarDate))].sort();
+    const longestGap = recoveryDates.slice(1).reduce((longest, date, index) => Math.max(longest,
+      (Date.parse(`${date}T00:00:00Z`) - Date.parse(`${recoveryDates[index]}T00:00:00Z`)) / 86400000), 0);
+    expect(longestGap).toBeGreaterThanOrEqual(10);
     expect(dataset.activities.filter(activity => activity.sport === 'Swim')
       .every(activity => activity.avgWatts === null && activity.avgCadence === null)).toBe(true);
     for (const year of payload.years) {

@@ -49,11 +49,14 @@ npm test -- --runInBand __tests__/sample-data-utils.test.js
 ```
 
 Generation is offline from the committed catalog, with seed 76 and generator
-version 1. The output contains 1,600 activities, 923 GPS tracks, all 60 months and
-all three sports in every year; the uncompressed payload is approximately 1.3 MiB.
-Both shoe and bicycle changes are represented. Cycling power averages and all
-eight best-effort durations are derived from the same deterministic power series
-using the application's existing best-effort calculation. Raw series are not shipped.
+version 2. The output contains 1,628 activities and 933 GPS tracks across all 60
+months, with all three sports in every year; the uncompressed payload is
+approximately 1.4 MiB. Seasonal winter recovery reduces training, and August
+2023 includes a fictional injury-recovery break. Road shoes and bikes change
+over the years, with trail shoes and a mountain bike used only occasionally on
+trail routes. Cycling power averages and all eight best-effort durations are
+derived from the same deterministic power series using the application's
+existing best-effort calculation. Raw series are not shipped.
 `--check` validates and compares expected bytes without writing or network access.
 Visitors load the ready-made public payload and never run a generator.
 

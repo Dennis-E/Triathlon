@@ -28,7 +28,7 @@ function generateSampleData(routeCatalog) {
 
   for (let yearIndex = 0; yearIndex < 5; yearIndex++) {
     const year = 2021 + yearIndex;
-    const count = 300 + yearIndex * 10;
+    const count = 330 + yearIndex * 10;
     const routeVisits = { Run: 0, Bike: 0, Swim: 0 };
     for (let session = 0; session < count; session++) {
       const sport = schedule[session % schedule.length];
@@ -36,21 +36,26 @@ function generateSampleData(routeCatalog) {
       if (day.getUTCDay() === 1) day.setUTCDate(day.getUTCDate() - 1);
       const month = day.getUTCMonth();
       const seasonal = Math.sin((month - 2) / 12 * Math.PI * 2);
+      const winterRecovery = [0, 1, 11].includes(month) && session % 4 === 0;
+      const injuryRecovery = year === 2023 && month === 7 && day.getUTCDate() >= 7 && day.getUTCDate() <= 20;
+      if (winterRecovery || injuryRecovery) continue;
       const recovery = Math.floor(session / 6) % 4 === 3;
       const outdoor = sport === 'Swim' ? session % 4 === 0 && month >= 4 && month <= 8
         : session % (sport === 'Bike' ? 3 : 9) !== 0;
       let route = null;
+      let routeVisit = -1;
       if (outdoor) {
-        const visit = routeVisits[sport]++;
-        const index = sport === 'Swim' ? visit % 2 : favorites[visit % favorites.length];
+        routeVisit = routeVisits[sport]++;
+        const index = sport === 'Swim' ? routeVisit % 2 : favorites[routeVisit % favorites.length];
         route = bySport[sport][index];
         if (!route) throw new Error(`Missing ${sport} route ${index}`);
       }
       const speed = sport === 'Run' ? 9.5 + yearIndex * 0.35 + random() * 2 + (recovery ? -0.5 : 0.5)
         : sport === 'Bike' ? 24 + yearIndex * 0.8 + random() * 5 + seasonal
           : 2.2 + yearIndex * 0.08 + random() * 0.5;
-      const distance = route ? route.distanceKm : sport === 'Run' ? 5 + random() * (recovery ? 3 : 8)
+      const indoorDistance = sport === 'Run' ? 5 + random() * (recovery ? 3 : 8)
         : sport === 'Bike' ? 28 + random() * (recovery ? 12 : 40) : 1.4 + random() * 1.8;
+      const distance = route ? route.distanceKm : indoorDistance * (1 + seasonal * 0.18);
       const duration = Math.round(distance / speed * 3600);
       const avgCadence = sport === 'Run' ? Math.round(163 + random() * 14 + yearIndex)
         : sport === 'Bike' ? Math.round(77 + random() * 18) : null;
@@ -72,8 +77,14 @@ function generateSampleData(routeCatalog) {
               endKm: Math.min(distance, effort.endKm) }))
         };
       }
-      const equipment = sport === 'Run' ? (yearIndex < 2 ? 'Coast Road Shoes' : 'Peninsula Road Shoes')
-        : sport === 'Bike' ? (yearIndex < 3 ? 'Foothills Road Bike' : 'Bay Endurance Bike') : 'Pool and open water';
+      const trailUse = route && /trail|ridge/i.test(route.name) && routeVisit % 4 === 0;
+      const equipment = sport === 'Run'
+        ? yearIndex >= 2 && trailUse ? 'Hoka Speedgoat Trail Shoes'
+          : yearIndex < 2 ? 'Coast Road Shoes' : 'Peninsula Road Shoes'
+        : sport === 'Bike'
+          ? [1, 3].includes(yearIndex) && trailUse ? 'Santa Cruz Mountain Bike'
+            : yearIndex < 3 ? 'Foothills Road Bike' : 'Bay Endurance Bike'
+          : '';
       activities.push({
         id, name: `${recovery ? 'Recovery' : sessionTypes[session % sessionTypes.length]} ${route ? route.name : sport === 'Swim' ? 'pool technique' : 'indoor training'}`,
         sport, sportRaw: sport, calendarDate: day.toISOString().slice(0, 10),
@@ -89,10 +100,10 @@ function generateSampleData(routeCatalog) {
     }
   }
   return {
-    schemaVersion: 1, datasetId: 'silicon-valley-triathlete-v1', synthetic: true,
+    schemaVersion: 1, datasetId: 'silicon-valley-triathlete-v2', synthetic: true,
     label: 'Synthetic sample training data',
     athlete: { name: 'Alex Morgan (fictional)', region: 'Silicon Valley', sportProfile: 'triathlon' },
-    years: [2021, 2022, 2023, 2024, 2025], generation: { seed: 76, version: 1 },
+    years: [2021, 2022, 2023, 2024, 2025], generation: { seed: 76, version: 2 },
     routes, activities, fitBestEffortsByActivityId
   };
 }

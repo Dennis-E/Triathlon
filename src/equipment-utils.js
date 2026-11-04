@@ -1,4 +1,4 @@
-const SHOE_PATTERN = /(asics|nike|adidas|saucony|hoka|brooks|mizuno|altra|saguaro)/i;
+const SHOE_PATTERN = /(asics|nike|adidas|saucony|hoka|brooks|mizuno|altra|saguaro|\bshoes?\b)/i;
 
 function getEquipmentType(name) {
   if (!name) return null;

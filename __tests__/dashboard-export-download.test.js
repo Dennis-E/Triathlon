@@ -50,7 +50,7 @@ function createDownloadRuntime({ showSaveFilePicker, decodeError, imageWidth = 1
   const anchors = [];
   const downloadLinks = [];
   const pickerCalls = [];
-  const canvasCalls = { text: [], textFonts: [], images: [], fills: [], canvases: [], paths: [] };
+  const canvasCalls = { text: [], textFonts: [], textPositions: [], images: [], fills: [], canvases: [], paths: [] };
   const canvasContext = {
     beginPath() { canvasCalls.paths.push(['begin']); },
     moveTo(...args) { canvasCalls.paths.push(['move', ...args]); },
@@ -60,7 +60,10 @@ function createDownloadRuntime({ showSaveFilePicker, decodeError, imageWidth = 1
     fill() { canvasCalls.paths.push(['fill']); },
     stroke() { canvasCalls.paths.push(['stroke']); },
     measureText(text) { return { width: String(text).length * 12 }; },
-    fillText(text) { canvasCalls.text.push(String(text)); canvasCalls.textFonts.push(this.font); },
+    fillText(text, x, y) {
+      canvasCalls.text.push(String(text)); canvasCalls.textFonts.push(this.font);
+      canvasCalls.textPositions.push({ text: String(text), x, y, align: this.textAlign });
+    },
     drawImage(...args) { canvasCalls.images.push(args); },
     fillRect(...args) { canvasCalls.fills.push(args); }
   };
@@ -95,6 +98,7 @@ function createDownloadRuntime({ showSaveFilePicker, decodeError, imageWidth = 1
     },
     window: {
       powerPbUtils: { POWER_DURATIONS: [] },
+      exportPunchlineUtils: require('../src/export-punchline-utils'),
       exportUtils: {
         ...require('../src/export-utils'),
         getExportBrandConfig: () => ({ domain: 'https://example.test/' }),
@@ -189,6 +193,13 @@ function createDownloadRuntime({ showSaveFilePicker, decodeError, imageWidth = 1
     getFocus: () => focused
   };
 }
+
+describe('F080 T005 punchline runtime integration', () => {
+  it('makes the pure helper available in the existing export runtime', () => {
+    const runtime = createDownloadRuntime();
+    expect(typeof runtime.context.window.exportPunchlineUtils?.buildPunchlineSuggestions).toBe('function');
+  });
+});
 
 describe('dashboard export target inventory', () => {
   const expectedTargets = {
@@ -668,6 +679,8 @@ describe('dashboard export target inventory', () => {
     const first = { date: new Date('2024-01-01'), value: 1100, title: 'First effort', sourceType: 'activity' };
     const improvement = { date: new Date('2024-06-01'), value: 900, title: 'Big improvement' };
     const current = { date: new Date('2025-03-01'), value: 850, title: 'Current race', sourceType: 'official race' };
+    const expectedSource = record => ({ workoutTitle: record.title, activityDate: record.date.getTime(),
+      kind: 'unknown', estimated: false });
     runtime.openPb({
       title: 'Run 5 km',
       axisLabel: 'Time',
@@ -689,17 +702,17 @@ describe('dashboard export target inventory', () => {
       direction: 'down',
       recordCount: 3,
       records: [
-        { value: 1100, displayValue: '1100', date: first.date, sourceType: 'activity' },
-        { value: 900, displayValue: '900', date: improvement.date, sourceType: null },
-        { value: 850, displayValue: '850', date: current.date, sourceType: 'official race' }
+        { value: 1100, displayValue: '1100', date: first.date, sourceType: 'activity', source: expectedSource(first) },
+        { value: 900, displayValue: '900', date: improvement.date, sourceType: null, source: expectedSource(improvement) },
+        { value: 850, displayValue: '850', date: current.date, sourceType: 'official race', source: expectedSource(current) }
       ],
-      firstRecord: { value: 1100, displayValue: '1100', date: first.date, sourceType: 'activity' },
-      currentRecord: { value: 850, displayValue: '850', date: current.date, sourceType: 'official race' },
-      best: { value: 850, displayValue: '850', date: current.date, sourceType: 'official race' },
+      firstRecord: { value: 1100, displayValue: '1100', date: first.date, sourceType: 'activity', source: expectedSource(first) },
+      currentRecord: { value: 850, displayValue: '850', date: current.date, sourceType: 'official race', source: expectedSource(current) },
+      best: { value: 850, displayValue: '850', date: current.date, sourceType: 'official race', source: expectedSource(current) },
       milestones: [
-        { kind: 'first', value: 1100, displayValue: '1100', date: first.date, sourceType: 'activity' },
-        { kind: 'largestImprovement', value: 900, displayValue: '900', date: improvement.date, sourceType: null },
-        { kind: 'current', value: 850, displayValue: '850', date: current.date, sourceType: 'official race' }
+        { kind: 'first', value: 1100, displayValue: '1100', date: first.date, sourceType: 'activity', source: expectedSource(first) },
+        { kind: 'largestImprovement', value: 900, displayValue: '900', date: improvement.date, sourceType: null, source: expectedSource(improvement) },
+        { kind: 'current', value: 850, displayValue: '850', date: current.date, sourceType: 'official race', source: expectedSource(current) }
       ]
     });
   });
@@ -989,6 +1002,645 @@ describe('immutable export selection foundation', () => {
   });
 });
 
+describe('F080 T007 compact insight snapshot boundaries', () => {
+  function capture(runtime, data) {
+    runtime.context.insightTarget = { kind: 'tab', key: 'workoutTime', hasData: true };
+    runtime.context.insightData = data;
+    return vm.runInContext('captureExportSelection(insightTarget, insightData)', runtime.context);
+  }
+
+  it('copies and freezes compact analysis and evidence without retaining activity objects', () => {
+    const runtime = createDownloadRuntime();
+    const data = {
+      startTimeAnalysis: { basis: 'activity-start-count', selectedCount: 12, validStartCount: 10,
+        excludedStartCount: 2, windows: [{ key: 'morning', count: 6 }, { key: 'afternoon', count: 2 },
+          { key: 'evening', count: 1 }, { key: 'night', count: 1 }], dominantWindow: 'morning', status: 'supported' },
+      punchlineEvidence: [{ factKey: 'starts', kind: 'start-window', metric: 'activity starts',
+        value: 6, denominator: 10, labels: ['morning'], qualifiers: [], isTie: false }]
+    };
+    const snapshot = capture(runtime, data);
+    data.startTimeAnalysis.windows[0].count = 99;
+    data.punchlineEvidence[0].labels[0] = 'changed';
+    expect(snapshot.familyData.startTimeAnalysis.windows[0].count).toBe(6);
+    expect(snapshot.familyData.punchlineEvidence[0].labels).toEqual(['morning']);
+    expect(Object.isFrozen(snapshot.familyData.startTimeAnalysis.windows)).toBe(true);
+    expect(Object.isFrozen(snapshot.familyData.punchlineEvidence[0])).toBe(true);
+  });
+
+  it('does not open a title, raw-activity or precise-location disclosure path through insights', () => {
+    const runtime = createDownloadRuntime();
+    const snapshot = capture(runtime, { punchlineEvidence: [{ factKey: 'one', kind: 'selected-total',
+      metric: 'activities', value: 0, date: null, title: 'PRIVATE', workoutTitle: 'PRIVATE',
+      rawActivities: [{ name: 'PRIVATE' }], latitude: 42, longitude: 7 }] });
+    expect(snapshot.familyData.punchlineEvidence[0]).toMatchObject({ value: 0 });
+    expect(JSON.stringify(snapshot)).not.toMatch(/PRIVATE|latitude|longitude|rawActivities|workoutTitle/);
+  });
+
+  it('rejects invalid numeric or cyclic insight content', () => {
+    const runtime = createDownloadRuntime();
+    expect(() => capture(runtime, { punchlineEvidence: [{ factKey: 'bad', value: NaN }] })).toThrow(/numeric|evidence/i);
+    const cyclic = {};
+    cyclic.self = cyclic;
+    expect(() => capture(runtime, { startTimeAnalysis: cyclic })).toThrow(/acyclic|analysis|content/i);
+  });
+});
+
+describe('F080 T010 concise export context', () => {
+  it('does not repeat a complete period already named in a media recap headline', () => {
+    const runtime = createDownloadRuntime();
+    const presentation = runtime.context.__socialPresentation('mediaGallery', { mediaKind: 'annual', period: '2025',
+      displayedCount: 12, eligibleCount: 14, metricLabel: 'Selected media' });
+    expect(presentation.headline).toContain('2025');
+    expect(presentation.contextText).not.toContain('2025');
+    expect(presentation.contextText).toContain('12 of 14');
+  });
+
+  it('does not repeat a self-explanatory scatter relationship while retaining sport, period and point-size meaning', () => {
+    const runtime = createDownloadRuntime();
+    const presentation = runtime.context.__socialPresentation('paceMetrics', { sport: 'Run', metric: 'heartRate',
+      period: '2024-2025', unit: 'bpm', pointSizeMeaning: 'Duration',
+      xAxisTitle: 'Pace (min/km)', yAxisTitle: 'Average heart rate (bpm)' });
+    expect(presentation.contextText).not.toMatch(/heart rate|pace/i);
+    expect(presentation.contextText).toContain('Run');
+    expect(presentation.contextText).toContain('2024–2025');
+    expect(presentation.contextText).toMatch(/Size.*Duration/);
+    expect(presentation.summary).toContain('Heart rate vs. Pace');
+  });
+
+  it('keeps the existing calendar scale qualification inside the compact context without repeating the headline metric', () => {
+    const runtime = createDownloadRuntime();
+    const presentation = runtime.context.__socialPresentation('trainingCalendar', { sport: 'All',
+      metricLabel: 'Daily training frequency', unit: 'activities', period: '2025' });
+    expect(presentation.contextText).toMatch(/yearly scale|each year/i);
+    expect(presentation.contextText).toMatch(/empty.*no record/i);
+    expect(presentation.contextText).not.toContain('Daily training frequency');
+    expect(presentation.context.filter(item => item.label === 'Intensity')).toHaveLength(1);
+  });
+
+  it('collapses identical boundary years and avoids repeating a metric-embedded unit', () => {
+    const runtime = createDownloadRuntime();
+    const presentation = runtime.context.__socialPresentation('pb-tile', { title: 'Bike power 5s',
+      sport: 'Bike', metricLabel: 'Power (W)', unit: 'W', period: '2025-2025' });
+    expect(presentation.contextText).not.toMatch(/2025[-–]2025/);
+    expect(presentation.contextText.match(/\bW\b/g)).toHaveLength(1);
+    expect(presentation.contextText).toContain('2025');
+  });
+
+  it('uses direct values and a short axis relationship without internal filter labels', () => {
+    const runtime = createDownloadRuntime();
+    const presentation = runtime.context.__socialPresentation('distributions', {
+      sport: 'All', metric: 'length', period: '2024-2025', unit: 'km',
+      resolution: '2-hour-blocks', xAxisTitle: 'Length', yAxisTitle: 'activities'
+    });
+    expect(presentation.contextText).toEqual(expect.stringContaining('2024–2025'));
+    expect(presentation.contextText).toContain('Length vs activities');
+    expect(presentation.contextText).toContain('km');
+    expect(presentation.contextText).not.toMatch(/Metric:|Period:|Unit:|X axis:|Y axis:|All sports|2-hour-blocks/);
+  });
+
+  it('keeps otherwise invisible sport restrictions and partial-period context', () => {
+    const runtime = createDownloadRuntime();
+    const presentation = runtime.context.__socialPresentation('paceMetrics', {
+      sport: 'Run', metric: 'heartRate', period: '2026 YTD', unit: 'bpm'
+    });
+    expect(presentation.contextText).toContain('Run');
+    expect(presentation.contextText).toContain('2026 YTD');
+    expect(presentation.contextText.match(/2026 YTD/g)).toHaveLength(1);
+  });
+});
+
+describe('F080 T011 structured chart title containment', () => {
+  it('wraps long rotated axis titles within the available export chart height without mutating input', () => {
+    const runtime = createDownloadRuntime();
+    const original = Object.freeze({ type: 'scatter', data: Object.freeze({ datasets: [] }), options: Object.freeze({
+      scales: Object.freeze({ y: Object.freeze({ title: Object.freeze({ display: true,
+        text: 'Average heart rate with source units (bpm)' }) }) })
+    }) });
+    const snapshotCapture = jest.fn(() => ({ canvas: { width: 800, height: 400 } }));
+    runtime.context.chartResourcesForTest = { chartInput: original, chartAdapter: { snapshotCapture } };
+    vm.runInContext("renderChartExportPage({ context: document.createElement('canvas').getContext('2d'), snapshot: {}, page: { visualization: {x:48,y:300,width:800,height:400} }, resources: chartResourcesForTest })", runtime.context);
+    const title = snapshotCapture.mock.calls[0][0].chartInput.options.scales.y.title.text;
+    expect(Array.isArray(title)).toBe(true);
+    expect(title.join(' ')).toBe('Average heart rate with source units (bpm)');
+    expect(original.options.scales.y.title.text).toBe('Average heart rate with source units (bpm)');
+  });
+});
+
+describe('F080 T012 visible story branding', () => {
+  it('makes the actual proportional story logo at least 50 percent taller than square', () => {
+    const runtime = createDownloadRuntime();
+    const source = { targetKey: 'equipment', familyData: { items: [{ name: 'Shoes', value: 1 }] } };
+    const logo = { naturalWidth: 250, naturalHeight: 90 };
+    const heights = [];
+    for (const format of ['square', 'story']) {
+      runtime.context.framePlan = runtime.context.window.exportUtils.planExportPages(source, { format });
+      runtime.context.frameLogo = logo;
+      vm.runInContext('drawStructuredExportFrame(framePlan, { logo: frameLogo })', runtime.context);
+      heights.push(runtime.canvasCalls.images.at(-1)[4]);
+    }
+    expect(heights[1]).toBeGreaterThanOrEqual(heights[0] * 1.5);
+  });
+});
+
+describe('F080 T013 story session default', () => {
+  it('starts each new session with story while keeping explicit choices within the session', () => {
+    const runtime = createDownloadRuntime();
+    vm.runInContext("selectedExportFormat = 'square'; beginExportSession()", runtime.context);
+    expect(runtime.context.__getExportFormat()).toBe('story');
+    vm.runInContext("selectedExportFormat = 'portrait'", runtime.context);
+    expect(runtime.context.__getExportFormat()).toBe('portrait');
+    vm.runInContext('beginExportSession()', runtime.context);
+    expect(runtime.context.__getExportFormat()).toBe('story');
+  });
+
+  it('lists story first and selected in the existing layout controls', () => {
+    const markup = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+    expect(markup.indexOf('id="exportFormatStory"')).toBeLessThan(markup.indexOf('id="exportFormatSquare"'));
+    expect(markup.match(/<button[^>]*id="exportFormatStory"[^>]*>/)[0]).toContain('aria-pressed="true"');
+  });
+});
+
+describe('F080 T020 punchline session state', () => {
+  it('initializes the confirmed caption independently from drafts and resets only on a new session', () => {
+    const runtime = createDownloadRuntime();
+    runtime.context.punchlineSnapshot = { selectionId: 'selection-caption', targetKey: 'paceMetrics', familyData: {} };
+    vm.runInContext('beginExportSession(punchlineSnapshot)', runtime.context);
+    const state = vm.runInContext('exportPunchlineSelection', runtime.context);
+    expect(state).toMatchObject({ enabled: true, source: 'default', selectionId: 'selection-caption',
+      validationStatus: 'valid', blockedAfterApply: false, hasUnconfirmedDraft: false });
+    expect(state.confirmedText).toBeTruthy();
+    expect(runtime.elements.exportHumorEnabled.checked).toBe(true);
+  });
+});
+
+async function preparePunchlineRuntime() {
+  const runtime = createDownloadRuntime();
+  runtime.closePreview();
+  runtime.mockCapture(PNG_DATA_URL);
+  await runtime.capture({ kind: 'tab', key: 'paceMetrics', title: 'Training', targetElementId: 'captureTarget', hasData: true });
+  return runtime;
+}
+
+describe('F080 T022 confirmed punchline transitions', () => {
+  it('keeps a draft out of the image until confirmed and renders exact text without HTML interpretation', async () => {
+    const runtime = await preparePunchlineRuntime();
+    const before = runtime.getImage();
+    runtime.context.draftForTest = '  One  two <b>three</b>  ';
+    vm.runInContext('setExportPunchlineDraft(draftForTest)', runtime.context);
+    expect(runtime.getImage()).toBe(before);
+    await vm.runInContext('applyExportPunchline()', runtime.context);
+    expect(runtime.getImage().target.presentation.secondaryLine).toBe('One  two <b>three</b>');
+    expect(vm.runInContext('exportPunchlineSelection.source', runtime.context)).toBe('custom');
+  });
+
+  it('retains the selected text through format and activation changes', async () => {
+    const runtime = await preparePunchlineRuntime();
+    vm.runInContext("setExportPunchlineDraft('My chosen training caption')", runtime.context);
+    await vm.runInContext('applyExportPunchline()', runtime.context);
+    await runtime.context.__setExportHumorEnabled(false);
+    expect(runtime.getImage().target.presentation.secondaryLine).toBeNull();
+    await runtime.context.__setExportFormat('portrait');
+    await runtime.context.__setExportHumorEnabled(true);
+    expect(runtime.getImage().target.presentation.secondaryLine).toBe('My chosen training caption');
+    expect(runtime.context.__getExportFormat()).toBe('portrait');
+  });
+});
+
+describe('F080 T023 punchline download revision guards', () => {
+  it('restores the current confirmed caption when discarding an unapplied draft instead of reverting an older choice', async () => {
+    const runtime = await preparePunchlineRuntime();
+    vm.runInContext("setExportPunchlineDraft('Confirmed custom caption')", runtime.context);
+    await vm.runInContext('applyExportPunchline()', runtime.context);
+    vm.runInContext("setExportPunchlineDraft('Unapplied draft')", runtime.context);
+    await vm.runInContext('restoreExportPunchline()', runtime.context);
+    expect(runtime.getImage().target.presentation.secondaryLine).toBe('Confirmed custom caption');
+    expect(vm.runInContext('exportPunchlineSelection.draftText', runtime.context)).toBe('Confirmed custom caption');
+    expect(vm.runInContext('exportPunchlineSelection.hasUnconfirmedDraft', runtime.context)).toBe(false);
+  });
+
+  it('invalidates an in-flight composition when an invalid draft is applied without starting another render', async () => {
+    const runtime = await preparePunchlineRuntime();
+    const reached = deferredValue();
+    const release = deferredValue();
+    runtime.context.invalidRaceReached = reached;
+    runtime.context.invalidRaceRelease = release;
+    vm.runInContext(`const originalInvalidRacePrepare = prepareExportImage;
+      prepareExportImage = async (...args) => { const result = await originalInvalidRacePrepare(...args);
+        if (args[1].presentation?.secondaryLine === 'Pending caption') { invalidRaceReached.resolve(); await invalidRaceRelease.promise; }
+        return result; }; setExportPunchlineDraft('Pending caption');`, runtime.context);
+    const pending = vm.runInContext('applyExportPunchline()', runtime.context);
+    await reached.promise;
+    vm.runInContext("setExportPunchlineDraft('   ')", runtime.context);
+    await vm.runInContext('applyExportPunchline()', runtime.context);
+    release.resolve();
+    await pending;
+    expect(runtime.getImage()).toBeNull();
+    expect(runtime.elements.exportPreviewDownloadBtn.disabled).toBe(true);
+  });
+
+  it('blocks an obsolete download after invalid Apply, then supports explicit restore and caption-off recovery', async () => {
+    const runtime = await preparePunchlineRuntime();
+    const original = runtime.getImage().target.presentation.secondaryLine;
+    vm.runInContext("setExportPunchlineDraft('   ')", runtime.context);
+    await vm.runInContext('applyExportPunchline()', runtime.context);
+    expect(runtime.elements.exportPreviewDownloadBtn.disabled).toBe(true);
+    await runtime.download();
+    expect(runtime.downloadLinks).toHaveLength(0);
+    await vm.runInContext('restoreExportPunchline()', runtime.context);
+    expect(runtime.elements.exportPreviewDownloadBtn.disabled).toBe(false);
+    expect(runtime.getImage().target.presentation.secondaryLine).toBe(original);
+    vm.runInContext("setExportPunchlineDraft('x'.repeat(121))", runtime.context);
+    await vm.runInContext('applyExportPunchline()', runtime.context);
+    await runtime.context.__setExportHumorEnabled(false);
+    expect(runtime.elements.exportPreviewDownloadBtn.disabled).toBe(false);
+    expect(runtime.getImage().target.presentation.secondaryLine).toBeNull();
+  });
+
+  it('cannot let a delayed older caption overwrite the latest confirmed revision', async () => {
+    const runtime = await preparePunchlineRuntime();
+    const olderReached = deferredValue();
+    const releaseOlder = deferredValue();
+    runtime.context.olderReached = olderReached;
+    runtime.context.releaseOlder = releaseOlder;
+    vm.runInContext(`const originalPunchlinePrepare = prepareExportImage;
+      prepareExportImage = async (...args) => { const result = await originalPunchlinePrepare(...args);
+        if (args[1].presentation?.secondaryLine === 'Older caption') { olderReached.resolve(); await releaseOlder.promise; }
+        return result; }; setExportPunchlineDraft('Older caption');`, runtime.context);
+    const older = vm.runInContext('applyExportPunchline()', runtime.context);
+    await olderReached.promise;
+    vm.runInContext("setExportPunchlineDraft('Latest caption')", runtime.context);
+    await vm.runInContext('applyExportPunchline()', runtime.context);
+    releaseOlder.resolve();
+    await older;
+    expect(runtime.getImage().target.presentation.secondaryLine).toBe('Latest caption');
+  });
+});
+
+describe('F080 T024 series axis label containment', () => {
+  it('keeps endpoint year labels inside the export region while retaining their actual tick values', () => {
+    const runtime = createDownloadRuntime();
+    const start = Date.UTC(2013, 0, 4);
+    const end = Date.UTC(2025, 8, 8);
+    runtime.context.timelineReviewSnapshot = { targetKey: 'equipmentTimeline', familyData: {
+      mode: 'activities', items: [{ name: 'Synthetic shoes', firstDate: start, lastDate: end,
+        activities: [start, end] }] } };
+    runtime.context.timelineReviewPlan = runtime.context.window.exportUtils.planExportPages(runtime.context.timelineReviewSnapshot,
+      { format: 'square', humorEnabled: false });
+    vm.runInContext("renderEquipmentExportPage({ context: document.createElement('canvas').getContext('2d'), snapshot: timelineReviewSnapshot, page: timelineReviewPlan.pages[0] })", runtime.context);
+    const bounds = runtime.context.timelineReviewPlan.pages[0].visualization;
+    const years = runtime.canvasCalls.textPositions.filter(item => /^\d{4}$/.test(item.text));
+    expect(years.map(item => item.text)).toEqual(expect.arrayContaining(['2013', '2025']));
+    for (const year of years) {
+      const halfWidth = year.text.length * 12 / 2;
+      expect(year.x - halfWidth).toBeGreaterThanOrEqual(bounds.x);
+      expect(year.x + halfWidth).toBeLessThanOrEqual(bounds.x + bounds.width);
+    }
+  });
+});
+
+function reviewPbData(runtime, records, extra = {}) {
+  runtime.context.pbReviewModel = { title: 'Run 5 km', exportKey: 'Run-5km', sport: 'Run', axisLabel: 'Time',
+    direction: 'down', records, formatValue: value => String(value), ...extra };
+  return vm.runInContext('buildPbExportData(pbReviewModel)', runtime.context);
+}
+
+function capturePbChart(runtime, data) {
+  const configs = [];
+  runtime.context.window.Chart = jest.fn(function (_canvas, config) {
+    configs.push(config);
+    return { update() {}, destroy() {} };
+  });
+  runtime.context.pbChartReviewData = data;
+  vm.runInContext('createPbExportChart(pbChartReviewData, { width: 888, height: 400 })', runtime.context);
+  return configs[0];
+}
+
+describe('F080 T029 attributed PB export records', () => {
+  it('uses the already associated source and preserves values while normalizing source dates', () => {
+    const runtime = createDownloadRuntime();
+    const first = new Date('2024-12-31T00:00:00Z');
+    const second = new Date('2025-01-01T00:00:00Z');
+    const model = reviewPbData(runtime, [
+      { value: 1200, date: first, title: 'Wrapper label', record: { name: 'Track morning', date: first,
+        effortSource: 'modeled', isInterimEstimated: true, distance: 5, sourceDistance: 10 } },
+      { value: 1100, date: null, record: { name: 'New year workout', date: second, effortSource: 'full-activity' } }
+    ]);
+    expect(model.records.map(record => record.value)).toEqual([1200, 1100]);
+    expect(model.records[0].source).toMatchObject({ workoutTitle: 'Track morning', activityDate: first.getTime(),
+      kind: 'modeled', estimated: true, sourceDistanceKm: 10 });
+    expect(model.records[1].source).toMatchObject({ workoutTitle: 'New year workout', activityDate: second.getTime(),
+      kind: 'full-activity', estimated: false });
+    expect(model.records[1].date).toEqual(second);
+    expect(model.best.source.workoutTitle).toBe('New year workout');
+    expect(model.sourceAttribution).not.toMatch(/modeled|full-activity/);
+  });
+
+  it('keeps missing dates missing, retains the real epoch zero date and invents no source title', () => {
+    const runtime = createDownloadRuntime();
+    const model = reviewPbData(runtime, [{ value: 0, date: 0 }, { value: 1, date: 'invalid' }]);
+    expect(model.records[0].date.getTime()).toBe(0);
+    expect(model.records[0].source).toMatchObject({ workoutTitle: null, activityDate: 0 });
+    expect(model.records[1].date).toBeNull();
+    expect(model.records[1].source).toMatchObject({ workoutTitle: null, activityDate: null, kind: 'unknown' });
+  });
+});
+
+describe('F080 T030 PB-only source disclosure', () => {
+  it('permits a schema-valid source only at associated PB record paths', () => {
+    const runtime = createDownloadRuntime();
+    const source = { workoutTitle: 'Approved workout', activityDate: Date.UTC(2025, 0, 1), kind: 'modeled',
+      estimated: true, rawActivity: { name: 'PRIVATE' }, latitude: 42, nested: { workoutTitle: 'PRIVATE' } };
+    runtime.context.pbSourceTarget = { key: 'personalBests', kind: 'tab', hasData: true };
+    runtime.context.pbSourceData = { records: [{ value: 1200, date: Date.UTC(2025, 0, 1), source }],
+      groups: [{ definitionKey: 'Run-5km', title: 'Run 5 km', records: [{ value: 1200, source }] }],
+      items: [{ source: { workoutTitle: 'PRIVATE' } }] };
+    const snapshot = vm.runInContext('captureExportSelection(pbSourceTarget, pbSourceData)', runtime.context);
+    expect(snapshot.familyData.records[0].source.workoutTitle).toBe('Approved workout');
+    expect(snapshot.familyData.groups[0].records[0].source.workoutTitle).toBe('Approved workout');
+    expect(JSON.stringify(snapshot)).not.toMatch(/PRIVATE|latitude|rawActivity/);
+    expect(Object.isFrozen(snapshot.familyData.records[0].source)).toBe(true);
+    runtime.context.pbSourceTarget.key = 'equipment';
+    const other = vm.runInContext('captureExportSelection(pbSourceTarget, pbSourceData)', runtime.context);
+    expect(JSON.stringify(other)).not.toContain('Approved workout');
+  });
+
+  it('rejects invalid source field types rather than broadly allowing nested personal metadata', () => {
+    const runtime = createDownloadRuntime();
+    runtime.context.pbSourceTarget = { key: 'personalBests', hasData: true };
+    runtime.context.pbSourceData = { records: [{ value: 1200, source: { workoutTitle: { name: 'PRIVATE' },
+      kind: 'modeled', estimated: 'yes' } }] };
+    expect(() => vm.runInContext('captureExportSelection(pbSourceTarget, pbSourceData)', runtime.context))
+      .toThrow(/source|title|schema/i);
+  });
+});
+
+describe('F080 T031 understandable PB source rows', () => {
+  it('renders the workout title and the estimation meaning instead of an internal source code', () => {
+    const runtime = createDownloadRuntime();
+    runtime.context.window.Chart = jest.fn(function () { return { update() {}, destroy() {} }; });
+    runtime.context.pbRowSnapshot = { targetKey: 'personalBests', familyData: { unit: 's', xAxisMode: 'time',
+      records: [{ date: Date.UTC(2025, 0, 1), value: 1200, displayValue: '20:00', sourceType: 'modeled',
+        source: { workoutTitle: 'Track morning', activityDate: Date.UTC(2025, 0, 1), kind: 'modeled', estimated: true } }] } };
+    runtime.context.pbRowPlan = runtime.context.window.exportUtils.planExportPages(runtime.context.pbRowSnapshot, { format: 'story' });
+    vm.runInContext("renderPbExportPage({ context: document.createElement('canvas').getContext('2d'), snapshot: pbRowSnapshot, page: pbRowPlan.pages[0] })", runtime.context);
+    expect(runtime.canvasCalls.text.join(' ')).toContain('Track morning');
+    expect(runtime.canvasCalls.text.join(' ')).toMatch(/estimated/i);
+    expect(runtime.canvasCalls.text.join(' ')).not.toContain('modeled');
+  });
+});
+
+describe('F080 T032 data-bound PB calendar axes', () => {
+  it('selects date ticks by real temporal spacing rather than evenly spaced record indexes', () => {
+    const runtime = createDownloadRuntime();
+    const dates = [Date.UTC(2013, 0, 4), Date.UTC(2013, 8, 8), Date.UTC(2016, 8, 8), Date.UTC(2025, 8, 8)];
+    const config = capturePbChart(runtime, { xAxisMode: 'time', unit: 'm',
+      records: dates.map((date, index) => ({ date, value: 100 + index * 10 })) });
+    const axis = { ticks: [] };
+    config.options.scales.x.afterBuildTicks(axis);
+    const ticks = axis.ticks.map(tick => tick.value);
+    expect(ticks[0]).toBe(dates[0]);
+    expect(ticks.at(-1)).toBe(dates.at(-1));
+    for (let index = 1; index < ticks.length; index++) {
+      const spacing = (ticks[index] - ticks[index - 1]) / (dates.at(-1) - dates[0]) * (888 - 200);
+      const left = config.options.scales.x.ticks.callback(ticks[index - 1]).length * 12;
+      const right = config.options.scales.x.ticks.callback(ticks[index]).length * 12;
+      expect(spacing).toBeGreaterThanOrEqual((left + right) / 2 + 24);
+    }
+  });
+
+  it('preserves a real leap day without generating substitute observation dates', () => {
+    const runtime = createDownloadRuntime();
+    const leapDay = Date.UTC(2024, 1, 29);
+    const nextDay = Date.UTC(2024, 2, 1);
+    const config = capturePbChart(runtime, { xAxisMode: 'time', unit: 's', records: [
+      { date: leapDay, value: 1300 }, { date: nextDay, value: 1200 } ] });
+    expect(config.data.datasets[0].data.map(point => point.x)).toEqual([leapDay, nextDay]);
+    expect(config.options.scales.x.ticks.callback(leapDay)).toBe('29 Feb 2024');
+    expect(config.options.scales.x.ticks.callback(nextDay)).toBe('01 Mar 2024');
+  });
+
+  it('uses short, multiline time units rather than clipping a long rotated PB axis title', () => {
+    const runtime = createDownloadRuntime();
+    const config = capturePbChart(runtime, { xAxisMode: 'time', unit: 's',
+      records: [{ date: Date.UTC(2025, 0, 1), value: 1200 }] });
+    expect(config.options.scales.y.title.text).toEqual(['Time', '(h:m:s)']);
+  });
+
+  it('uses observation extent and unambiguous year labels rather than an unrelated dataset period', () => {
+    const runtime = createDownloadRuntime();
+    const first = Date.UTC(2024, 11, 31);
+    const last = Date.UTC(2025, 0, 1);
+    const config = capturePbChart(runtime, { xAxisMode: 'time', unit: 's', periodStart: Date.UTC(1990, 0, 1),
+      periodEnd: Date.UTC(2030, 0, 1), records: [{ date: first, value: 1300 }, { date: last, value: 1200 }] });
+    expect(config.options.scales.x.min).toBe(first);
+    expect(config.options.scales.x.max).toBe(last);
+    expect(config.options.scales.x.ticks.callback(first)).toContain('2024');
+    expect(config.options.scales.x.ticks.callback(last)).toContain('2025');
+  });
+
+  it('keeps real same-day points without a trend line and does not position missing dates at epoch zero', () => {
+    const runtime = createDownloadRuntime();
+    const date = Date.UTC(2025, 1, 1);
+    const config = capturePbChart(runtime, { xAxisMode: 'time', unit: 's',
+      records: [{ date, value: 1300 }, { date, value: 1200 }, { date: null, value: 0 }] });
+    expect(config.data.datasets[0].data).toEqual([{ x: date, y: 1300 }, { x: date, y: 1200 }]);
+    expect(config.data.datasets[0].showLine).toBe(false);
+  });
+});
+
+describe('F080 T034 independent duration-profile sources', () => {
+  it('keeps undated values and their titles visible without constructing a calendar chart', () => {
+    const runtime = createDownloadRuntime();
+    const data = reviewPbData(runtime, [
+      { value: 1200, date: null, record: { name: 'Undated workout', effortSource: 'full-activity' } },
+      { value: 1100, date: null, record: { name: 'Another undated workout', effortSource: 'full-activity' } }
+    ]);
+    runtime.context.window.Chart = jest.fn(() => { throw new Error('Undated records must not create a time chart'); });
+    runtime.context.undatedPbSnapshot = { targetKey: 'personalBests', familyData: data };
+    runtime.context.undatedPbPlan = runtime.context.window.exportUtils.planExportPages(runtime.context.undatedPbSnapshot, { format: 'story' });
+    vm.runInContext("renderPbExportPage({ context: document.createElement('canvas').getContext('2d'), snapshot: undatedPbSnapshot, page: undatedPbPlan.pages[0] })", runtime.context);
+    expect(runtime.context.window.Chart).not.toHaveBeenCalled();
+    expect(runtime.canvasCalls.text.join(' ')).toContain('Date unavailable');
+    expect(runtime.canvasCalls.text.join(' ')).toContain('Undated workout');
+    expect(runtime.canvasCalls.text.join(' ')).not.toContain('1970');
+  });
+
+  it('does not describe same-day values as a chronological improvement story', () => {
+    const runtime = createDownloadRuntime();
+    const date = new Date('2025-01-01');
+    const model = reviewPbData(runtime, [{ value: 1300, date, title: 'First effort' }, { value: 1200, date, title: 'Second effort' }]);
+    expect(runtime.context.__socialPresentation('pb-tile', model, { humorEnabled: false }).summary).toBeNull();
+  });
+
+  it('retains the duration axis and individual workout sources without implying chronological improvement', () => {
+    const runtime = createDownloadRuntime();
+    const model = reviewPbData(runtime, [
+      { value: 400, date: new Date('2025-01-02'), durationSeconds: 60, durationLabel: '1m', record: { name: 'Short effort', effortSource: 'fit-rolling' } },
+      { value: 250, date: new Date('2024-05-01'), durationSeconds: 300, durationLabel: '5m', record: { name: 'Long effort', effortSource: 'fit-rolling' } }
+    ], { xAxisMode: 'duration-category', axisLabel: 'Power (W)', sport: 'Bike' });
+    expect(model.records.map(record => record.source.workoutTitle)).toEqual(['Short effort', 'Long effort']);
+    expect(model.milestones).toEqual([]);
+    expect(model.firstRecord).toBeNull();
+    expect(model.best).toBeNull();
+    const config = capturePbChart(runtime, model);
+    expect(config.options.scales.x.type).toBe('category');
+    expect(config.data.labels).toEqual(['1m', '5m']);
+    expect(config.data.datasets[0].data).toEqual([400, 250]);
+  });
+});
+
+describe('F080 T042 quantitative family evidence projections', () => {
+  it('does not present normalized equipment pace bars as actual pace or speed units', () => {
+    const runtime = createDownloadRuntime();
+    runtime.context.projectionSnapshot = { targetKey: 'equipment', familyData: { metric: 'pace', unit: null,
+      equipmentFilter: 'All', items: [{ name: 'Shoes', value: 1 }, { name: 'Bike', value: 0.8 }] } };
+    const fact = vm.runInContext('projectExportPunchlineEvidence(projectionSnapshot)', runtime.context).evidence[0];
+    expect(fact).toMatchObject({ metric: 'Relative pace/speed ranking', unit: 'relative score', value: 1 });
+    expect(fact.qualifiers.join(' ')).toMatch(/relative|normalized/i);
+    expect(fact.qualifiers.join(' ')).toMatch(/equipment type|cross-sport/i);
+  });
+
+  it('uses a readable Pie measure rather than the internal count mode name', () => {
+    const runtime = createDownloadRuntime();
+    runtime.context.projectionSnapshot = { targetKey: 'pieCharts', familyData: { metric: 'count', unit: 'activities',
+      slices: [{ label: 'Run', value: 2 }, { label: 'Bike', value: 1 }] } };
+    expect(vm.runInContext('projectExportPunchlineEvidence(projectionSnapshot)', runtime.context).evidence[0].metric).toBe('Activities');
+  });
+
+  test.each([
+    ['totalDistance', { metricLabel: 'Distance', unit: 'km', periodLabels: ['2024', '2025'],
+      series: [{ values: [10, 20] }], incompleteYear: 2025 }, { value: 20, unit: 'km', labels: ['2025'] }],
+    ['equipment', { metricLabel: 'Duration', unit: 'h', items: [{ name: 'Shoes A', value: 12 }, { name: 'Shoes B', value: 12 }] },
+      { value: 12, unit: 'h', labels: ['Shoes A', 'Shoes B'], isTie: true }],
+    ['distributions', { metricLabel: 'Length', unit: 'km', bins: [{ label: '0-5', count: 7 }, { label: '5-10', count: 3 }] },
+      { value: 7, unit: 'activities', labels: ['0-5'] }],
+    ['wordcloud', { words: [{ text: 'recovery', count: 7 }, { text: 'steady', count: 5 }] },
+      { value: 7, labels: ['recovery'] }],
+    ['pieCharts', { metric: 'distance', unit: 'km', slices: [{ label: 'Run', value: 20 }, { label: 'Bike', value: 10 }] },
+      { value: 20, unit: 'km', labels: ['Run'] }],
+    ['personalBests', { metricLabel: 'Time', unit: 's', best: { value: 1200, source: { estimated: true } } },
+      { value: 1200, unit: 's', kind: 'record-value' }],
+    ['lifetimeStatistics', { summary: { workoutCount: 12, distance: { value: 100, status: 'partial' } } },
+      { value: 12, unit: 'activities', metric: 'Workouts' }]
+  ])('uses only existing typed values for %s', (targetKey, familyData, expected) => {
+    const runtime = createDownloadRuntime();
+    runtime.context.projectionSnapshot = { selectionId: 'selection-projection', targetKey, familyData };
+    const before = JSON.stringify(familyData);
+    const result = vm.runInContext('projectExportPunchlineEvidence(projectionSnapshot)', runtime.context);
+    expect(result.evidence[0]).toMatchObject(expected);
+    expect(JSON.stringify(familyData)).toBe(before);
+    if (targetKey === 'personalBests') expect(result.evidence[0].qualifiers.join(' ')).toMatch(/estimated/i);
+    if (targetKey === 'totalDistance') expect(result.evidence[0].qualifiers.join(' ')).toMatch(/partial|incomplete/i);
+  });
+
+  it('does not infer a sole leader when a category value is missing', () => {
+    const runtime = createDownloadRuntime();
+    runtime.context.projectionSnapshot = { targetKey: 'equipment', familyData: {
+      items: [{ name: 'Known', value: 12 }, { name: 'Unknown', value: null }] } };
+    const result = vm.runInContext('projectExportPunchlineEvidence(projectionSnapshot)', runtime.context);
+    expect(result.evidence).toEqual([]);
+    expect(result.neutralReason).toBeTruthy();
+  });
+});
+
+describe('F080 T043 contextual family evidence boundaries', () => {
+  test.each([
+    ['paceMetrics', { points: [{ x: 5, y: 140 }, { x: 6, y: 130 }] }, 2, 'observations'],
+    ['equipmentTimeline', { items: [{ name: 'Shoes A', firstDate: 1, lastDate: 100 }, { name: 'Shoes B' }] }, 2, 'equipment items'],
+    ['trainingCalendar', { years: [{ year: 2024, activityCount: 3 }, { year: 2025, activityCount: 2 }] }, 5, 'activities'],
+    ['mediaGallery', { displayedCount: 4, eligibleCount: 10, includeRoutes: false }, 4, 'media items'],
+    ['heatmap', { activityCount: 3, viewport: { width: 900, height: 600 } }, 3, 'activities']
+  ])('uses the existing explicit selection count for %s without inventing performance', (targetKey, familyData, value, unit) => {
+    const runtime = createDownloadRuntime();
+    runtime.context.contextProjectionSnapshot = { targetKey, familyData };
+    const result = vm.runInContext('projectExportPunchlineEvidence(contextProjectionSnapshot)', runtime.context);
+    expect(result.evidence[0]).toMatchObject({ kind: 'selected-total', value, unit });
+    expect(JSON.stringify(result)).not.toMatch(/fastest|improved|streak|healthy|PRIVATE|latitude|longitude/i);
+  });
+
+  it('does not turn map pixels or first/last usage dates into unsupported achievements', () => {
+    const runtime = createDownloadRuntime();
+    runtime.context.contextProjectionSnapshot = { targetKey: 'heatmap', familyData: {
+      viewport: { width: 900, height: 600 }, scale: { minCount: 1, maxCount: 10 },
+      latitude: 42, longitude: 7, activityTitle: 'PRIVATE' } };
+    const result = vm.runInContext('projectExportPunchlineEvidence(contextProjectionSnapshot)', runtime.context);
+    expect(result.evidence).toEqual([]);
+    expect(result.neutralReason).toMatch(/map|route|count/i);
+    expect(JSON.stringify(result)).not.toMatch(/PRIVATE|latitude|longitude|country/i);
+  });
+});
+
+describe('F080 T044 visible selection-bound suggestion evidence', () => {
+  it('shows valid/excluded starts and their measurement basis without changing it to distance', () => {
+    const runtime = createDownloadRuntime();
+    runtime.elements.exportPunchlineEvidence = { textContent: '', classList: { add: jest.fn(), toggle: jest.fn() } };
+    runtime.context.evidenceSnapshot = { selectionId: 'selection-evidence', targetKey: 'workoutTime', familyData: {
+      metric: 'distance', period: '2025 YTD', sport: 'Run', startTimeAnalysis: {
+        basis: 'activity-start-count', selectedCount: 12, validStartCount: 10, excludedStartCount: 2,
+        windows: [{ key: 'morning', count: 6 }, { key: 'afternoon', count: 4 }, { key: 'evening', count: 0 }, { key: 'night', count: 0 }]
+      } } };
+    vm.runInContext('beginExportSession(evidenceSnapshot)', runtime.context);
+    expect(vm.runInContext('exportPunchlineSelection.confirmedText', runtime.context)).toBe('Morning bird');
+    expect(runtime.elements.exportPunchlineEvidence.textContent).toMatch(/10 valid|6.*10/i);
+    expect(runtime.elements.exportPunchlineEvidence.textContent).toMatch(/2 excluded/i);
+    expect(runtime.elements.exportPunchlineEvidence.textContent).toMatch(/activity starts/i);
+    expect(runtime.elements.exportPunchlineEvidence.textContent).toContain('2025 YTD');
+    expect(runtime.elements.exportPunchlineEvidence.textContent).toContain('Run');
+  });
+
+  it('explains unavailable local-time coverage without a fabricated habit label', () => {
+    const runtime = createDownloadRuntime();
+    runtime.elements.exportPunchlineEvidence = { textContent: '', classList: { add: jest.fn(), toggle: jest.fn() } };
+    runtime.context.evidenceSnapshot = { selectionId: 'selection-insufficient', targetKey: 'workoutTime', familyData: {
+      startTimeAnalysis: { basis: 'activity-start-count', selectedCount: 9, validStartCount: 9, excludedStartCount: 0,
+        status: 'insufficient-data', windows: [{ key: 'morning', count: 9 }, { key: 'afternoon', count: 0 },
+          { key: 'evening', count: 0 }, { key: 'night', count: 0 }] } } };
+    vm.runInContext('beginExportSession(evidenceSnapshot)', runtime.context);
+    expect(runtime.elements.exportPunchlineEvidence.textContent).toMatch(/9 valid|at least 10/i);
+    expect(vm.runInContext('exportPunchlineSelection.confirmedText', runtime.context)).not.toMatch(/Morning bird|Night owl/);
+  });
+});
+
+describe('F080 T045 frozen suggestion selection', () => {
+  it('does not rescan mutated activities or replace a confirmed custom text during presentation updates', async () => {
+    const runtime = createDownloadRuntime();
+    runtime.context.frozenEvidenceTarget = { key: 'workoutTime', hasData: true };
+    const analysis = { basis: 'activity-start-count', selectedCount: 10, validStartCount: 10, excludedStartCount: 0,
+      windows: [{ key: 'morning', count: 6 }, { key: 'afternoon', count: 4 }, { key: 'evening', count: 0 }, { key: 'night', count: 0 }] };
+    runtime.context.frozenEvidenceData = { startTimeAnalysis: analysis, sport: 'Run', period: '2025' };
+    vm.runInContext('this.frozenEvidenceSnapshot = captureExportSelection(frozenEvidenceTarget, frozenEvidenceData); beginExportSession(frozenEvidenceSnapshot)', runtime.context);
+    analysis.windows[0].count = 0;
+    analysis.windows[3].count = 10;
+    expect(vm.runInContext('exportPunchlineSelection.suggestions[0].text', runtime.context)).toBe('Morning bird');
+    vm.runInContext("setExportPunchlineDraft('My own statement')", runtime.context);
+    await vm.runInContext('applyExportPunchline()', runtime.context);
+    await runtime.context.__setExportFormat('portrait');
+    vm.runInContext('updateExportPunchlineControls()', runtime.context);
+    expect(vm.runInContext('exportPunchlineSelection.source', runtime.context)).toBe('custom');
+    expect(vm.runInContext('exportPunchlineSelection.confirmedText', runtime.context)).toBe('My own statement');
+    expect(vm.runInContext('frozenEvidenceSnapshot.familyData.startTimeAnalysis.windows[0].count', runtime.context)).toBe(6);
+  });
+});
+
+describe('F080 T051 final scatter tick readability', () => {
+  it.each(['paceMetrics', 'distributions', 'workoutTime'])('limits long %s export ticks without mutating chart data or dashboard options', targetKey => {
+    const runtime = createDownloadRuntime();
+    const ticks = Object.freeze({ autoSkip: false, maxTicksLimit: 12 });
+    const chartInput = Object.freeze({ type: 'scatter', data: Object.freeze({ datasets: [] }),
+      options: Object.freeze({ scales: Object.freeze({ x: Object.freeze({ type: 'linear', ticks }) }) }) });
+    const snapshotCapture = jest.fn(() => ({ canvas: { width: 984, height: 400 } }));
+    runtime.context.finalScatterResources = { chartInput, chartAdapter: { snapshotCapture } };
+    runtime.context.finalChartTargetKey = targetKey;
+    vm.runInContext("renderChartExportPage({ context: document.createElement('canvas').getContext('2d'), snapshot: {targetKey:finalChartTargetKey}, page: {visualization:{x:48,y:300,width:984,height:400}}, resources:finalScatterResources })", runtime.context);
+    const prepared = snapshotCapture.mock.calls[0][0].chartInput;
+    expect(prepared.options.scales.x.ticks.autoSkip).toBe(true);
+    expect(prepared.options.scales.x.ticks.maxTicksLimit).toBeLessThanOrEqual(4);
+    expect(prepared.data).toBe(chartInput.data);
+    expect(chartInput.options.scales.x.ticks.maxTicksLimit).toBe(12);
+    expect(chartInput.options.scales.x.ticks.autoSkip).toBe(false);
+  });
+});
+
 describe('full social export renderer coverage', () => {
   it('samples dense date ticks by measured label width without dropping plotted periods', () => {
     const runtime = createDownloadRuntime();
@@ -1059,7 +1711,7 @@ describe('full social export renderer coverage', () => {
     }
   });
 
-  it('keeps power-profile duration axes and FIT attribution without inventing record milestones or private titles', () => {
+  it('keeps power-profile duration axes, FIT attribution and individually associated titles without inventing milestones', () => {
     const runtime = createDownloadRuntime();
     runtime.openPb({ title: 'All-time bike power profile', exportKey: 'Bike-power-all-time-profile',
       axisLabel: 'Power (W)', sport: 'Bike', direction: 'up', xAxisMode: 'duration',
@@ -1072,7 +1724,8 @@ describe('full social export renderer coverage', () => {
     expect(model.records.map(record => [record.durationSeconds, record.durationLabel])).toEqual([[5, '5s'], [3600, '60m']]);
     expect(model.sourceAttribution).toMatch(/fit/i);
     expect(model.milestones).toEqual([]);
-    expect(JSON.stringify(model)).not.toContain('PRIVATE TITLE');
+    expect(model.records.map(record => record.source.workoutTitle)).toEqual(['PRIVATE TITLE ONE', 'PRIVATE TITLE TWO']);
+    expect(model.records.every(record => !record.record && !record.rawActivity && !record.activity && !record.name && !record.title)).toBe(true);
   });
 
   it('registers a deliberate renderer for every export target instead of a generic story screenshot fallback', () => {
@@ -1216,7 +1869,6 @@ describe('dashboard export download destination', () => {
     runtime.elements.captureTarget = {};
     context.html2canvas = jest.fn().mockResolvedValue({ width: 960, height: 500 });
     vm.runInContext("loadExportAssets = () => Promise.resolve({ logo: { naturalWidth: 100, naturalHeight: 50 } });", context);
-    await context.__setExportFormat('portrait');
     const target = {
       kind: 'tab',
       key: 'paceMetrics',
@@ -1227,6 +1879,7 @@ describe('dashboard export download destination', () => {
     };
 
     await runtime.capture(target);
+  await context.__setExportFormat('portrait');
 
     const previewDataUrl = runtime.elements.exportPreviewImage.src;
     expect(runtime.canvasCalls.canvases.at(-1)).toMatchObject({ width: 1080, height: 1350 });
@@ -1313,7 +1966,7 @@ describe('dashboard export download destination', () => {
 
     await context.__capture(target);
     const initialCapture = context.formatDraws[0].captured;
-    expect(context.formatDraws[0].format).toBe('square');
+    expect(context.formatDraws[0].format).toBe('story');
     await context.__setExportFormat('portrait');
 
     expect(context.formatDraws[1]).toEqual({ captured: initialCapture, format: 'portrait' });
@@ -1349,13 +2002,18 @@ describe('dashboard export download destination', () => {
 
     await context.__capture(target);
     const originalCapture = context.humorDraws[0].captured;
-    expect(context.humorDraws[0].line).toBeNull();
-    await context.__setExportHumorEnabled(true);
+    const originalLine = context.humorDraws[0].line;
+    expect(originalLine).toBeTruthy();
+    await context.__setExportHumorEnabled(false);
 
     expect(context.humorDraws[1].captured).toBe(originalCapture);
     expect(context.humorDraws[1].headline).toBe(context.humorDraws[0].headline);
-    expect(context.humorDraws[1].line).toBe("Apparently, I don't sit still.");
+    expect(context.humorDraws[1].line).toBeNull();
+    await context.__setExportHumorEnabled(true);
+    expect(context.humorDraws[2].captured).toBe(originalCapture);
+    expect(context.humorDraws[2].line).toBe(originalLine);
     expect(runtime.elements.exportHumorEnabled.checked).toBe(true);
+    expect(context.html2canvas).toHaveBeenCalledTimes(1);
   });
 
   it('preserves all selected yearly periods and marks an incomplete current year', () => {
@@ -2080,6 +2738,7 @@ describe('dashboard export download destination', () => {
     };
 
     await runtime.capture(target);
+    await context.__setExportFormat('square');
 
     expect(context.console.error).not.toHaveBeenCalled();
     const squarePages = context.calendarCompositionPages.slice();
@@ -2487,6 +3146,7 @@ describe('owned export surface lifecycle', () => {
     runtime.context.assetsForTest = { logo: { naturalWidth: 120, naturalHeight: 60 }, qrCode: {} };
     vm.runInContext('loadExportAssets = () => Promise.resolve(assetsForTest);', runtime.context);
     await runtime.capture({ kind: 'tab', key, title: 'View', targetElementId: 'captureTarget', hasData: true });
+    if (key === 'trainingCalendar') await runtime.context.__setExportFormat('square');
     expect(runtime.context.console.error).not.toHaveBeenCalled();
     const captureCount = key === 'trainingCalendar' ? 2 : 1;
     expect(resolveExportAnchor).not.toHaveBeenCalled();
@@ -2496,13 +3156,15 @@ describe('owned export surface lifecycle', () => {
     expect(runtime.context.html2canvas).toHaveBeenCalledTimes(captureCount);
     expect(runtime.getImage().target.pinnedSelection).toBeNull();
     const renderedCount = runtime.canvasCalls.images.length;
+    const preparedCanvasCount = key === 'trainingCalendar' ? 2 : 1;
+    expect(runtime.canvasCalls.canvases).toHaveLength(preparedCanvasCount);
     const originalImage = runtime.getImage();
     const previewData = runtime.elements.exportPreviewImage.src;
     await runtime.download();
     expect(runtime.downloadLinks[0].href).toBe(previewData);
     expect(runtime.downloadLinks[0].href).toBe(originalImage.dataUrl);
     expect(runtime.canvasCalls.images).toHaveLength(renderedCount);
-    expect(runtime.canvasCalls.canvases).toHaveLength(1);
+    expect(runtime.canvasCalls.canvases).toHaveLength(preparedCanvasCount);
     expect(runtime.context.html2canvas).toHaveBeenCalledTimes(captureCount);
     expect(runtime.canvasCalls.paths.filter(step => step[0] === 'fill')).toHaveLength(0);
   });

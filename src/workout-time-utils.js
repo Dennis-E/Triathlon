@@ -203,12 +203,69 @@ function buildWorkoutTimeDataset(activities, filters = {}) {
   };
 }
 
+function analyzeWorkoutTimeStarts(activities, filters = {}) {
+  const windows = ['morning', 'afternoon', 'evening', 'night'].map(key => ({ key, count: 0 }));
+  const reasons = { 'missing-local-time': 0, 'invalid-local-time': 0, 'inconsistent-local-time': 0 };
+  let selectedCount = 0;
+  let validStartCount = 0;
+  const minDate = isValidDate(filters.minDate) ? startOfDay(filters.minDate) : null;
+  const maxDate = isValidDate(filters.maxDate) ? endOfDay(filters.maxDate) : null;
+  const sport = filters.sport || 'All';
+  for (const activity of Array.isArray(activities) ? activities : []) {
+    if (!activity || !isValidDate(activity.date) || (sport !== 'All' && activity.sport !== sport)
+        || (minDate && activity.date < minDate) || (maxDate && activity.date > maxDate)) continue;
+    selectedCount++;
+    let hour = null;
+    let reason = 'missing-local-time';
+    if (activity.sourceLocalStart !== null && activity.sourceLocalStart !== undefined) {
+      const local = activity.sourceLocalStart;
+      if (isValidSourceLocalStart(local, activity.startTime)) hour = local.hour;
+      else {
+        const expected = new Date(Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second)
+          - local.offsetMinutes * 60000);
+        reason = isValidSourceLocalStart(local, expected) ? 'inconsistent-local-time' : 'invalid-local-time';
+      }
+    } else if (activity.calendarDate !== undefined || activity.localStartTime !== undefined) {
+      const calendar = typeof activity.calendarDate === 'string' && activity.calendarDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      const time = typeof activity.localStartTime === 'string' && activity.localStartTime.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
+      reason = 'invalid-local-time';
+      if (calendar && time) {
+        const year = Number(calendar[1]);
+        const month = Number(calendar[2]);
+        const day = Number(calendar[3]);
+        const date = new Date(Date.UTC(year, month - 1, day));
+        const candidateHour = Number(time[1]);
+        if (year >= 100 && date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+            && candidateHour < 24 && Number(time[2]) < 60 && Number(time[3] || 0) < 60) hour = candidateHour;
+      }
+    }
+    if (hour === null) {
+      reasons[reason]++;
+      continue;
+    }
+    validStartCount++;
+    const index = hour >= 5 && hour < 12 ? 0 : hour >= 12 && hour < 18 ? 1 : hour >= 18 && hour < 22 ? 2 : 3;
+    windows[index].count++;
+  }
+  const dominant = validStartCount >= 10
+    ? windows.find(window => window.count * 100 >= validStartCount * 60) : null;
+  return {
+    basis: 'activity-start-count', selectedCount, validStartCount, excludedStartCount: selectedCount - validStartCount,
+    exclusions: Object.entries(reasons).filter(([_reason, count]) => count > 0).map(([reason, count]) => ({ reason, count })),
+    windows, dominantWindow: dominant?.key || null,
+    status: !validStartCount ? 'no-valid-starts' : validStartCount < 10 ? 'insufficient-data'
+      : dominant ? 'supported' : 'no-dominance',
+    scope: { sport, minDate: cloneDateOrNull(filters.minDate), maxDate: cloneDateOrNull(filters.maxDate) }
+  };
+}
+
 const workoutTimeUtils = {
   GRANULARITIES,
   MEASURES: WORKOUT_TIME_MEASURES,
   getMeasureDefinition,
   formatWorkoutTimeValue,
   buildWorkoutTimeDataset,
+  analyzeWorkoutTimeStarts,
   getGroupDefinitions,
   matchesFilters
 };

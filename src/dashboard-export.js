@@ -5,8 +5,9 @@
     let lastExportedImage = null; // { dataUrl, target }
     let lastExportImages = [];
     let currentExportSeriesIndex = 0;
-    let selectedExportFormat = 'square';
+    let selectedExportFormat = 'story';
     let selectedExportHumorEnabled = false;
+    let exportPunchlineSelection = null;
     let exportCompositionPending = false;
     let lastExportCaptureState = null;
     let exportAssetsPromise = null;
@@ -69,13 +70,33 @@
         'includeRoutes', 'eligibleCount', 'displayedCount', 'legend', 'groups', 'words', 'weightDomain',
         'periodStart', 'periodEnd', 'totalCount', 'scaleStart', 'scaleEnd', 'granularity',
         'rawUnit', 'valueDivisor', 'status', 'activityCount', 'excludedCount', 'denominator',
-        'countrySummary', 'preparationVersion', 'definitionKey'
+        'countrySummary', 'preparationVersion', 'definitionKey', 'punchlineEvidence', 'startTimeAnalysis'
       ]);
-      const forbidden = new Set(['rawActivities', 'rawActivity', 'activity', 'activityName', 'activityTitle',
+      const forbidden = new Set(['rawActivities', 'rawActivity', 'activity', 'activityName', 'activityTitle', 'workoutTitle',
         'sourceElement', 'element', 'canvas', 'chart', 'document', 'filename', '__proto__', 'constructor', 'prototype']);
       const locationFields = new Set(['lat', 'lon', 'latitude', 'longitude', 'coordinates']);
       const ancestors = new Set();
-      const copy = (value, depth = 0) => {
+      const pbSourcePath = path => targetKey === 'personalBests'
+        && /^(?:groups\.\d+\.)?(?:records\.\d+|best|firstRecord|currentRecord|milestones\.\d+)\.source$/.test(path.join('.'));
+      const copyPbSource = value => {
+        if (value === null) return null;
+        if (!value || Object.prototype.toString.call(value) !== '[object Object]') throw new TypeError('Invalid PB source schema');
+        const title = value.workoutTitle ?? null;
+        const kind = value.kind ?? 'unknown';
+        const estimated = value.estimated ?? false;
+        if ((title !== null && typeof title !== 'string') || !['modeled', 'full-activity', 'fit-rolling', 'unknown'].includes(kind)
+            || typeof estimated !== 'boolean') throw new TypeError('Invalid PB source title or schema');
+        const date = value.activityDate === null || value.activityDate === undefined ? null
+          : Object.prototype.toString.call(value.activityDate) === '[object Date]' ? value.activityDate.getTime() : value.activityDate;
+        if (date !== null && (typeof date !== 'number' || !Number.isFinite(date))) throw new TypeError('Invalid PB source date');
+        const result = { workoutTitle: title, activityDate: date, kind, estimated };
+        if (value.sourceDistanceKm !== undefined) {
+          if (!Number.isFinite(value.sourceDistanceKm) || value.sourceDistanceKm <= 0) throw new TypeError('Invalid PB source distance');
+          result.sourceDistanceKm = value.sourceDistanceKm;
+        }
+        return Object.freeze(result);
+      };
+      const copy = (value, depth = 0, path = []) => {
         if (value === null || value === undefined || typeof value === 'string' || typeof value === 'boolean') return value;
         if (typeof value === 'number') {
           if (!Number.isFinite(value)) throw new TypeError('Invalid numeric export content');
@@ -92,23 +113,29 @@
         ancestors.add(value);
         let result;
         if (Array.isArray(value)) {
-          result = value.map(item => copy(item, depth + 1));
+          result = value.map((item, index) => copy(item, depth + 1, [...path, String(index)]));
         } else {
           result = {};
           for (const [key, entry] of Object.entries(value)) {
+            const entryPath = [...path, key];
+            if (key === 'source' && pbSourcePath(entryPath)) {
+              result.source = copyPbSource(entry);
+              continue;
+            }
             if (forbidden.has(key) || (locationFields.has(key) && !locationAllowed)
                 || (key === 'name' && !equipmentNames)
                 || (key === 'title' && depth > 0 && !(targetKey === 'personalBests' && typeof value.definitionKey === 'string'))
                 || (key === 'activities' && targetKey !== 'equipmentTimeline')) continue;
             if (key === 'activities' && Array.isArray(entry) && entry.some(item => item && typeof item === 'object'
                 && Object.prototype.toString.call(item) !== '[object Date]')) throw new TypeError('Timeline export content requires activity dates, not activity objects');
-            result[key] = copy(entry, depth + 1);
+            result[key] = copy(entry, depth + 1, entryPath);
           }
         }
         ancestors.delete(value);
         return Object.freeze(result);
       };
-      const familyData = copy(Object.fromEntries(Object.entries(data).filter(([key]) => fields.has(key))));
+      const familyData = copy(Object.fromEntries(Object.entries(data).filter(([key]) => fields.has(key)
+        && (key !== 'startTimeAnalysis' || targetKey === 'workoutTime'))));
       return Object.freeze({
         selectionId: `selection-${++exportSelectionSequence}`,
         datasetIdentity, targetKey, targetKind: target.kind || 'tab',
@@ -436,6 +463,7 @@
       addContext('X axis', data.xAxisTitle);
       addContext('Y axis', data.yAxisTitle);
       addContext('Point size', data.pointSizeMeaning);
+      if (tabName === 'trainingCalendar') addContext('Intensity', 'Yearly scale; empty = no record');
       if (tabName === 'heatmap' && data.scale?.hasRange) {
         addContext('Route frequency', `${data.scale.minCount}-${data.scale.maxCount} traversals per segment; logarithmic colour`);
       }
@@ -457,13 +485,25 @@
         const firstRecord = data.firstRecord || data.milestones?.find(record => record.kind === 'first');
         const currentRecord = data.currentRecord || [...(data.milestones || [])].reverse().find(record => record.kind === 'current') || data.best;
         const recordCount = Number(data.recordCount) || data.records?.length || 0;
-        if (recordCount > 1 && firstRecord?.displayValue && currentRecord?.displayValue) {
+        const datedRecords = data.records?.length ? data.records : [firstRecord, currentRecord].filter(Boolean);
+        const observedDays = new Set(datedRecords.flatMap(record => {
+          const value = record.date ?? record.source?.activityDate;
+          if (value === null || value === undefined || value === '') return [];
+          const date = new Date(value);
+          return Number.isFinite(date.getTime()) ? [date.toDateString()] : [];
+        }));
+        if (data.xAxisMode !== 'duration' && recordCount > 1 && (observedDays.size > 1 || !data.records?.length)
+          && firstRecord?.displayValue && currentRecord?.displayValue) {
           const firstDate = firstRecord.date ? new Date(firstRecord.date) : null;
           const firstYear = Number.isInteger(data.firstRecordYear) ? data.firstRecordYear
             : firstDate && Number.isFinite(firstDate.getTime()) ? firstDate.getFullYear() : null;
           summary = `From ${firstRecord.displayValue} to ${currentRecord.displayValue}${firstYear ? ` since ${firstYear}` : ''}`;
         }
         sourceAttribution = data.sourceAttribution || data.best?.sourceType || currentRecord?.sourceType || null;
+        if (typeof sourceAttribution === 'string') {
+          sourceAttribution = sourceAttribution.split(/,\s*/).map(source => ['modeled', 'full-activity', 'fit-rolling'].includes(source)
+            ? window.exportUtils.getPbExportSourceLabel({ sourceType: source }) : source).join(', ');
+        }
       }
       if (tabName === 'heatmap' && data.scale?.hasRange) {
         summary = `${data.scale.minCount}-${data.scale.maxCount} traversals per segment; logarithmic colour scale`;
@@ -472,8 +512,39 @@
         summary = `${data.displayedCount || 0} of ${data.eligibleCount || 0} readable media items`;
       }
 
+      const compactParts = [];
+      const compactValue = value => String(value ?? '').trim().replace(/\b(\d{4})\s*[-–]\s*(\d{4})\b/g,
+        (_match, firstYear, lastYear) => firstYear === lastYear ? firstYear : `${firstYear}–${lastYear}`);
+      const semanticValue = value => String(value || '').toLowerCase().replace(/^average\s+/, '').replace(/^daily\s+/, '')
+        .replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+      const semanticHeadline = semanticValue(headline);
+      const visibleSummary = tabName === 'paceMetrics' ? '' : compactValue(summary);
+      const addCompactPart = value => {
+        const text = compactValue(value);
+        if (text && !compactParts.some(part => part.toLowerCase() === text.toLowerCase())) compactParts.push(text);
+      };
+      if (visibleSummary) addCompactPart(visibleSummary);
+      for (const item of context) {
+        const value = compactValue(item.value);
+        if ((item.label === 'Sport' && /^(all|all sports)$/i.test(value))
+            || (item.label === 'Resolution' && /blocks/i.test(value))
+            || ['X axis', 'Y axis'].includes(item.label)
+            || (item.label === 'Media selection' && visibleSummary)
+            || (['Sport', 'Metric', 'Period'].includes(item.label) && semanticHeadline.includes(semanticValue(value)))
+            || (visibleSummary && visibleSummary.toLowerCase().includes(value.toLowerCase()))
+            || (item.label === 'Unit' && [...compactParts, data.xAxisTitle, data.yAxisTitle]
+              .some(axis => String(axis || '').includes(`(${value})`)))) continue;
+        addCompactPart(item.label === 'Point size' ? `Size = ${value}` : value);
+      }
+      const axes = [data.xAxisTitle, data.yAxisTitle].filter(Boolean)
+        .map(axis => String(axis).replace(/\s*\([^)]*\)\s*$/, '').trim());
+      if (axes.length && !axes.every(axis => semanticHeadline.includes(semanticValue(axis)))) addCompactPart(axes.join(' vs '));
+
       return {
         ...window.exportUtils.createSocialExportMetadata({ headline, context, secondaryLine }),
+        ...(options.humorEnabled && typeof options.punchlineText === 'string'
+          ? { secondaryLine: options.punchlineText } : {}),
+        contextText: compactParts.join(' · '),
         summary,
         sourceAttribution,
         centralValue,
@@ -603,6 +674,10 @@
           scaleEnd
         }
       }));
+    }
+
+    function projectExportPunchlineEvidence(snapshot) {
+      return window.exportPunchlineUtils.projectExportPunchlineEvidence(snapshot);
     }
 
     function getStructuredExportData(tabName, kind = 'tab') {
@@ -1143,7 +1218,9 @@
           const span = maximum - minimum;
           const label = span >= 2 * 365 * 86400000 ? String(date.getFullYear())
             : date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-          context.fillText(label, x, bounds.y + 50);
+          const halfLabelWidth = context.measureText(label).width / 2;
+          const labelX = Math.max(bounds.x + halfLabelWidth, Math.min(bounds.x + bounds.width - halfLabelWidth, x));
+          context.fillText(label, labelX, bounds.y + 50);
         }
       }
       let y = bounds.y + (timeline ? page.axisHeight : 0)
@@ -1206,8 +1283,29 @@
     function renderChartExportPage({ context, snapshot, page, resources }) {
       if (!resources?.chartAdapter || !resources.chartInput) throw new Error('Chart export renderer input is not ready');
       const bounds = page.visualization;
+      const originalFont = context.font;
+      const scales = Object.fromEntries(Object.entries(resources.chartInput.options?.scales || {}).map(([key, originalScale]) => {
+        let scale = originalScale;
+        const vertical = scale.axis === 'y' || key.startsWith('y');
+        if (['paceMetrics', 'distributions', 'workoutTime'].includes(snapshot.targetKey) && !vertical) {
+          const capacity = Math.max(2, Math.floor((bounds.width - 160) / 200));
+          scale = { ...scale, ticks: { ...scale.ticks, autoSkip: true,
+            maxTicksLimit: Math.min(Number(scale.ticks?.maxTicksLimit) || capacity, capacity) } };
+        }
+        if (!scale.title?.text || scale.title.display === false) return [key, scale];
+        const titleSize = Math.max(36, Number(scale.title.font?.size) || 0);
+        context.font = `${scale.title.font?.weight || 500} ${titleSize}px ${scale.title.font?.family || 'system-ui, sans-serif'}`;
+        const title = Array.isArray(scale.title.text) ? scale.title.text.join(' ') : String(scale.title.text);
+        const lines = window.exportUtils.wrapExportText(title, Math.max(72, (vertical ? bounds.height : bounds.width) - 160),
+          value => context.measureText(value).width, Infinity);
+        return [key, { ...scale, title: { ...scale.title, text: lines.length > 1 ? lines : title } }];
+      }));
+      context.font = originalFont;
+      const chartInput = resources.chartInput.options?.scales
+        ? { ...resources.chartInput, options: { ...resources.chartInput.options, scales } }
+        : resources.chartInput;
       const captured = resources.chartAdapter.snapshotCapture({
-        chartInput: resources.chartInput, width: Math.floor(bounds.width), height: Math.floor(bounds.height),
+        chartInput, width: Math.floor(bounds.width), height: Math.floor(bounds.height),
         minFontSize: 36, axisTextColor: '#f8fafc', includeInspection: false
       });
       if (!captured?.canvas || !(captured.canvas.width > 0) || !(captured.canvas.height > 0)) throw new Error('Chart export renderer produced no content');
@@ -1218,22 +1316,44 @@
       const ChartType = window.Chart || (typeof Chart !== 'undefined' ? Chart : null);
       if (!ChartType || !data.records?.length) throw new Error('PB export chart renderer is not ready');
       const profile = data.xAxisMode === 'duration';
-      const values = data.records.map(record => ({ x: Number(record.date), y: record.value }));
+      const values = data.records.flatMap(record => {
+        const sourceDate = record.date ?? record.source?.activityDate;
+        if (sourceDate === null || sourceDate === undefined || sourceDate === '' || typeof sourceDate === 'boolean') return [];
+        const date = new Date(sourceDate).getTime();
+        return Number.isFinite(date) ? [{ x: date, y: record.value }] : [];
+      });
       const dates = values.map(point => point.x).filter(Number.isFinite);
-      const minDate = Number.isFinite(data.periodStart) ? data.periodStart : dates.length ? Math.min(...dates) : 0;
-      const maxDate = Number.isFinite(data.periodEnd) ? data.periodEnd : dates.length ? Math.max(...dates) : 0;
+      if (!profile && !dates.length) return null;
+      const uniqueDates = [...new Set(dates)].sort((first, second) => first - second);
+      const minDate = dates.length ? Math.min(...dates) : null;
+      const maxDate = dates.length ? Math.max(...dates) : null;
       const labels = data.records.map(record => record.durationLabel || String(record.durationSeconds));
       const canvas = document.createElement('canvas');
       canvas.width = Math.floor(bounds.width); canvas.height = Math.floor(bounds.height);
       const axisFont = { size: 36, family: 'system-ui, sans-serif' };
+      const dateLabel = value => new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      const measurement = canvas.getContext('2d');
+      measurement.font = '500 36px system-ui, sans-serif';
+      const labelWidth = Math.max(1, ...uniqueDates.map(date => measurement.measureText(dateLabel(date)).width));
+      const plotWidth = Math.max(1, bounds.width - 300);
+      const timeSpan = Math.max(1, maxDate - minDate);
+      const tickDates = [];
+      for (const date of uniqueDates) {
+        if (!tickDates.length || (date - tickDates[tickDates.length - 1]) / timeSpan * plotWidth >= labelWidth + 32) tickDates.push(date);
+      }
+      if (uniqueDates.length > 1 && tickDates[tickDates.length - 1] !== maxDate) {
+        while (tickDates.length > 1 && (maxDate - tickDates[tickDates.length - 1]) / timeSpan * plotWidth < labelWidth + 32) tickDates.pop();
+        tickDates.push(maxDate);
+      }
+      const tickCount = Math.max(2, tickDates.length);
       const xScale = profile
         ? { type: 'category', title: { display: true, text: 'Effort duration', color: '#f8fafc', font: axisFont },
           ticks: { color: '#f8fafc', font: axisFont, maxRotation: 0, autoSkip: true } }
         : { type: 'linear', min: minDate === maxDate ? minDate - 43200000 : minDate,
           max: minDate === maxDate ? maxDate + 43200000 : maxDate,
-          ticks: { color: '#f8fafc', font: axisFont, maxTicksLimit: 4, maxRotation: 0,
-            callback: value => maxDate - minDate > 366 * 86400000 ? String(new Date(value).getFullYear())
-              : new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' }) } };
+          afterBuildTicks: axis => { axis.ticks = tickDates.map(value => ({ value })); },
+          ticks: { color: '#f8fafc', font: axisFont, maxTicksLimit: tickCount, maxRotation: 0,
+            callback: dateLabel } };
       const copy = document.createElement('canvas');
       copy.width = canvas.width; copy.height = canvas.height;
       let chart;
@@ -1243,12 +1363,12 @@
             data: profile ? data.records.map(record => record.value) : values,
             borderColor: '#20c9b2', backgroundColor: '#20c9b2', borderWidth: 4,
             pointRadius: data.records.length > 30 ? 3 : 6, pointHoverRadius: 0,
-            tension: 0, fill: false, showLine: data.records.length > 1
+            tension: 0, fill: false, showLine: profile ? data.records.length > 1 : uniqueDates.length > 1
           }] },
           options: { responsive: false, animation: false, devicePixelRatio: 1, maintainAspectRatio: false,
             plugins: { legend: { display: false }, tooltip: { enabled: false } },
             scales: { x: xScale,
-              y: { beginAtZero: true, title: { display: true, text: data.unit === 's' ? 'Time (h:m:s)' : data.metricLabel || data.unit, color: '#f8fafc', font: axisFont },
+              y: { beginAtZero: true, title: { display: true, text: data.unit === 's' ? ['Time', '(h:m:s)'] : data.unit || data.metricLabel, color: '#f8fafc', font: axisFont },
                 ticks: { color: '#f8fafc', font: axisFont, maxTicksLimit: 4,
                   callback: value => data.unit === 's' && typeof formatDurationHms === 'function'
                     ? formatDurationHms(value) : Number(value).toLocaleString('en-US', { maximumFractionDigits: 1 }) } }
@@ -1264,7 +1384,7 @@
     function renderPbExportPage({ context, snapshot, page }) {
       const data = snapshot.familyData;
       const bounds = page.visualization;
-      if (page.overview) {
+      if (page.overview && !page.recordIndexes) {
         let y = bounds.y;
         for (const [rowIndex, index] of page.itemIndexes.entries()) {
           const group = data.groups[index];
@@ -1279,25 +1399,39 @@
           }
           const chartBounds = { x: bounds.x, y: y + 104, width: bounds.width, height: rowHeight - 116 };
           const image = createPbExportChart(group, chartBounds);
-          context.drawImage(image, chartBounds.x, chartBounds.y, chartBounds.width, chartBounds.height);
+          if (image) context.drawImage(image, chartBounds.x, chartBounds.y, chartBounds.width, chartBounds.height);
           y += rowHeight;
         }
         return;
       }
-      const chartBounds = { ...bounds, height: page.chartHeight };
-      const image = createPbExportChart(data, chartBounds);
-      context.drawImage(image, chartBounds.x, chartBounds.y, chartBounds.width, chartBounds.height);
+      const group = page.overview ? data.groups[page.itemIndexes[0]] : data;
+      let y = bounds.y;
+      context.textAlign = 'left'; context.textBaseline = 'top';
+      if (page.overview) {
+        context.fillStyle = '#f8fafc'; context.font = '600 36px system-ui, sans-serif';
+        page.headerLines.forEach((line, index) => context.fillText(line, bounds.x, y + index * 44));
+        if (group.best?.displayValue) {
+          context.fillStyle = '#20c9b2'; context.font = '700 48px system-ui, sans-serif';
+          const value = group.best.displayValue;
+          const unit = group.unit && !(group.unit === 's' && value.includes(':')) && !value.includes(group.unit) ? ` ${group.unit}` : '';
+          context.fillText(value + unit, bounds.x, y + page.headerLines.length * 44);
+        }
+        y += page.headerHeight;
+      }
+      if (page.chartHeight > 0) {
+        const chartBounds = { ...bounds, y, height: page.chartHeight };
+        const image = createPbExportChart(group, chartBounds);
+        if (image) context.drawImage(image, chartBounds.x, chartBounds.y, chartBounds.width, chartBounds.height);
+        y += page.chartHeight + 24;
+      }
       context.font = '500 36px system-ui, sans-serif'; context.fillStyle = '#f8fafc';
       context.textAlign = 'left'; context.textBaseline = 'top';
-      page.itemIndexes.forEach((index, rowIndex) => {
-        const record = data.records[index];
-        const prefix = data.xAxisMode === 'duration' ? record.durationLabel || `${record.durationSeconds}s`
-          : record.date !== null ? new Date(record.date).toLocaleDateString('en-GB') : 'Date unavailable';
-        const value = record.displayValue || String(record.value);
-        const unit = data.unit && !(data.unit === 's' && value.includes(':')) && !value.includes(data.unit) ? data.unit : '';
-        const line = [prefix, [value, unit].filter(Boolean).join(' '), record.sourceType].filter(Boolean).join(' · ');
-        if (context.measureText(line).width > bounds.width) throw new RangeError('PB record row needs additional readable space');
-        context.fillText(line, bounds.x, bounds.y + page.chartHeight + 24 + rowIndex * page.recordHeight);
+      (page.recordIndexes || page.itemIndexes).forEach((index, rowIndex) => {
+        const record = group.records[index];
+        const lines = page.recordTextLines?.[rowIndex] || window.exportUtils.getPbExportRecordLines(record, group)
+          .flatMap(text => window.exportUtils.wrapExportText(text, bounds.width, value => context.measureText(value).width, Infinity));
+        lines.forEach((line, lineIndex) => context.fillText(line, bounds.x, y + lineIndex * 44));
+        y += page.recordRowHeights?.[rowIndex] || lines.length * 44 + 12;
       });
     }
 
@@ -1393,7 +1527,7 @@
       context.fillRect(plan.contentBounds.x, plan.contentBounds.y, 72, 5);
       context.textAlign = 'left'; context.textBaseline = 'top';
       for (const block of plan.textBlocks) {
-        context.fillStyle = block.role === 'headline' ? style.colors.headline
+        context.fillStyle = ['headline', 'caption'].includes(block.role) ? style.colors.headline
           : ['provenance', 'centralValue'].includes(block.role) ? style.colors.accent : style.colors.secondary;
         context.font = `${block.weight} ${block.fontSize}px system-ui, sans-serif`;
         block.lines.forEach((line, index) => context.fillText(line, block.x, block.y + index * block.lineHeight));
@@ -1409,10 +1543,12 @@
         }
       }
       let brandX = plan.footer.x;
+      const storyBranding = plan.format === 'story';
       if (assets.logo?.naturalWidth > 0) {
-        const fit = window.exportUtils.computeContainFit(assets.logo.naturalWidth, assets.logo.naturalHeight, 88, 40);
+        const fit = window.exportUtils.computeContainFit(assets.logo.naturalWidth, assets.logo.naturalHeight,
+          storyBranding ? 132 : 88, storyBranding ? 60 : 40);
         context.drawImage(assets.logo, brandX + fit.offsetX, plan.footer.y + fit.offsetY + 4, fit.drawWidth, fit.drawHeight);
-        brandX += 104;
+        brandX += storyBranding ? 148 : 104;
       }
       context.fillStyle = style.colors.secondary;
       context.font = '700 36px system-ui, sans-serif';
@@ -1421,7 +1557,7 @@
       if (context.measureText(EXPORT_DOMAIN).width > plan.footer.width) {
         throw new RangeError('Export branding cannot fit at readable size');
       }
-      context.fillText(EXPORT_DOMAIN, plan.footer.x, plan.footer.y + 52);
+      context.fillText(EXPORT_DOMAIN, plan.footer.x, plan.footer.y + (storyBranding ? 80 : 52));
       return { canvas, context };
     }
 
@@ -1513,10 +1649,55 @@
 
     function updateExportDownloadButton() {
       const button = document.getElementById('exportPreviewDownloadBtn');
-      if (button) button.disabled = !!exportDownloadAttempt || exportCompositionPending || !lastExportedImage?.blob?.size;
+      if (button) button.disabled = !!exportDownloadAttempt || exportCompositionPending || !lastExportedImage?.blob?.size
+        || isExportPunchlineDownloadBlocked();
     }
 
-    function beginExportSession() {
+    function isExportPunchlineDownloadBlocked() {
+      const state = exportPunchlineSelection;
+      if (!state) return false;
+      if (state.enabled && (state.blockedAfterApply || state.validationStatus !== 'valid')) return true;
+      if (lastExportCaptureState && !isCurrentExportCapture(lastExportCaptureState)) return true;
+      return !!lastExportedImage && lastExportedImage.target?.punchlineRevision !== state.presentationRevision;
+    }
+
+    function markExportPunchlineFitError(error) {
+      if (!exportPunchlineSelection?.enabled || !/punchline/i.test(error?.message || '')) return;
+      exportPunchlineSelection.validationStatus = 'does-not-fit';
+      exportPunchlineSelection.error = error.message;
+      exportPunchlineSelection.blockedAfterApply = true;
+      updateExportPunchlineControls();
+      updateExportDownloadButton();
+    }
+
+    function clearExportPunchlineFitError() {
+      if (!exportPunchlineSelection?.enabled || exportPunchlineSelection.validationStatus !== 'does-not-fit') return;
+      exportPunchlineSelection.validationStatus = 'valid';
+      exportPunchlineSelection.error = null;
+      exportPunchlineSelection.blockedAfterApply = false;
+      updateExportPunchlineControls();
+    }
+
+    function beginExportSession(snapshot = null) {
+      selectedExportFormat = 'story';
+      updateExportFormatButtons();
+      const suggestions = snapshot && Object.prototype.hasOwnProperty.call(EXPORT_CAPTURE_TARGET_IDS, snapshot.targetKey)
+        ? window.exportPunchlineUtils.buildPunchlineSuggestions(snapshot) : [];
+      exportPunchlineSelection = {
+        enabled: true, source: 'default', selectionId: snapshot?.selectionId || null,
+        suggestionId: suggestions[0]?.id || null, suggestions,
+        confirmedText: suggestions[0]?.text || 'My training story.', draftText: '',
+        validationStatus: 'valid', error: null, blockedAfterApply: false, hasUnconfirmedDraft: false,
+        presentationRevision: 0, previousSelection: null,
+        startTimeAnalysis: snapshot?.familyData?.startTimeAnalysis || null,
+        neutralReason: snapshot ? projectExportPunchlineEvidence(snapshot).neutralReason : null
+      };
+      selectedExportHumorEnabled = true;
+      const checkbox = document.getElementById('exportHumorEnabled');
+      if (checkbox) checkbox.checked = true;
+      const customPanel = document.getElementById('exportPunchlineCustomPanel');
+      if (customPanel) customPanel.open = false;
+      updateExportPunchlineControls(true);
       exportRequestState = 'capturing';
       exportCompositionPending = true;
       lastExportedImage = null;
@@ -1561,6 +1742,134 @@
       });
     }
 
+    function updateExportPunchlineControls(syncDraft = false) {
+      const state = exportPunchlineSelection;
+      if (!state) return;
+      const controls = document.getElementById('exportPunchlineControls');
+      if (controls) controls.classList.toggle('hidden', !state.enabled);
+      const select = document.getElementById('exportPunchlineSuggestion');
+      if (select) {
+        const placeholder = document.createElement('option');
+        placeholder.value = ''; placeholder.textContent = state.source === 'custom' ? 'Own text' : 'Suggested punchline';
+        const options = state.suggestions.map(suggestion => {
+          const option = document.createElement('option');
+          option.value = suggestion.id; option.textContent = suggestion.text;
+          return option;
+        });
+        select.replaceChildren(placeholder, ...options);
+        select.value = state.source === 'custom' ? '' : state.suggestionId || '';
+      }
+      const input = document.getElementById('exportPunchlineText');
+      if (input) {
+        if (syncDraft) input.value = state.draftText;
+        input.setAttribute('aria-invalid', String(state.enabled && !!state.error));
+      }
+      const count = document.getElementById('exportPunchlineLength');
+      if (count) count.textContent = `${Array.from(state.draftText.trim()).length} / 120`;
+      const source = document.getElementById('exportPunchlineSource');
+      if (source) source.textContent = state.source === 'custom' ? 'Own text' : 'Suggested';
+      const error = document.getElementById('exportPunchlineError');
+      if (error) {
+        error.textContent = state.enabled ? state.error || '' : '';
+        error.classList.toggle('hidden', !state.enabled || !state.error);
+      }
+      const evidence = document.getElementById('exportPunchlineEvidence');
+      if (evidence) {
+        const selected = state.source === 'custom' ? null : state.suggestions.find(item => item.id === state.suggestionId);
+        const basis = selected?.basis;
+        const parts = [];
+        if (basis) {
+          parts.push(`${basis.metric}: ${basis.value.toLocaleString('en-US', { maximumFractionDigits: 2 })}${basis.denominator
+            ? ` / ${basis.denominator.toLocaleString('en-US')}` : ''}${basis.unit ? ` ${basis.unit}` : ''}`);
+          if (Number.isInteger(basis.excludedCount)) parts.push(`${basis.excludedCount} excluded`);
+          if (basis.labels?.length) parts.push(basis.labels.join(', '));
+          if (basis.sport && !/^all(?: sports)?$/i.test(basis.sport)) parts.push(basis.sport);
+          if (basis.period) parts.push(basis.period);
+          if (basis.qualifiers?.length) parts.push(basis.qualifiers.join('; '));
+        } else if (state.source !== 'custom') {
+          if (state.startTimeAnalysis) {
+            const analysis = state.startTimeAnalysis;
+            parts.push(`${analysis.validStartCount} valid local starts; ${analysis.excludedStartCount} excluded`);
+            parts.push(analysis.validStartCount < 10 ? 'At least 10 valid starts are required for a habit label'
+              : 'No start-time window reaches 60% of valid starts');
+          }
+          if (state.neutralReason) parts.push(state.neutralReason);
+        }
+        evidence.textContent = parts.join(' · ');
+        evidence.classList.toggle('hidden', !state.enabled || !parts.length);
+      }
+    }
+
+    function getConfirmedExportPunchline() {
+      const state = exportPunchlineSelection;
+      if (!state || !state.enabled) return null;
+      const resolved = window.exportPunchlineUtils.resolvePunchline(state, state.suggestions);
+      if (!resolved.valid) throw new RangeError(resolved.error);
+      return resolved.text;
+    }
+
+    function setExportPunchlineDraft(value) {
+      if (!exportPunchlineSelection) return;
+      exportPunchlineSelection.draftText = typeof value === 'string' ? value : '';
+      exportPunchlineSelection.hasUnconfirmedDraft = exportPunchlineSelection.draftText.trim()
+        !== exportPunchlineSelection.confirmedText;
+      updateExportPunchlineControls();
+    }
+
+    async function applyExportPunchline() {
+      const state = exportPunchlineSelection;
+      if (!state) return false;
+      const checked = window.exportPunchlineUtils.validateCustomPunchline(state.draftText);
+      if (!checked.valid) {
+        state.validationStatus = checked.length ? 'too-long' : 'empty';
+        state.error = checked.error; state.blockedAfterApply = true;
+        state.presentationRevision++;
+        exportCompositionPending = false;
+        updateExportPunchlineControls(); updateExportDownloadButton();
+        return false;
+      }
+      state.previousSelection = { source: state.source, suggestionId: state.suggestionId, confirmedText: state.confirmedText };
+      state.source = 'custom'; state.confirmedText = checked.text; state.draftText = checked.text;
+      state.validationStatus = 'valid'; state.error = null; state.blockedAfterApply = false;
+      state.hasUnconfirmedDraft = false; state.presentationRevision++;
+      updateExportPunchlineControls(true);
+      return lastExportCaptureState ? composeCurrentExportImages(lastExportCaptureState) : false;
+    }
+
+    async function setExportPunchlineSuggestion(id) {
+      const state = exportPunchlineSelection;
+      if (!state) return false;
+      const suggestion = state.suggestions.find(item => item.id === id && item.selectionId === state.selectionId);
+      if (!suggestion) {
+        state.error = 'Choose a suggestion from this export.'; state.blockedAfterApply = true;
+        state.presentationRevision++;
+        exportCompositionPending = false;
+        updateExportPunchlineControls(); updateExportDownloadButton();
+        return false;
+      }
+      state.previousSelection = { source: state.source, suggestionId: state.suggestionId, confirmedText: state.confirmedText };
+      state.source = 'suggestion'; state.suggestionId = suggestion.id; state.confirmedText = suggestion.text;
+      state.validationStatus = 'valid'; state.error = null; state.blockedAfterApply = false;
+      state.hasUnconfirmedDraft = false; state.presentationRevision++;
+      updateExportPunchlineControls();
+      return lastExportCaptureState ? composeCurrentExportImages(lastExportCaptureState) : false;
+    }
+
+    async function restoreExportPunchline() {
+      const state = exportPunchlineSelection;
+      if (!state) return false;
+        if (((!state.hasUnconfirmedDraft && !state.blockedAfterApply) || state.validationStatus === 'does-not-fit')
+          && state.previousSelection) {
+        Object.assign(state, state.previousSelection);
+        state.previousSelection = null;
+      }
+      state.draftText = state.source === 'custom' ? state.confirmedText : '';
+      state.validationStatus = 'valid'; state.error = null; state.blockedAfterApply = false;
+      state.hasUnconfirmedDraft = false; state.presentationRevision++;
+      updateExportPunchlineControls(true);
+      return lastExportCaptureState ? composeCurrentExportImages(lastExportCaptureState) : false;
+    }
+
     function createStructuredExportResources(target) {
       const key = target.selectionSnapshot.targetKey;
       const resources = {};
@@ -1597,8 +1906,11 @@
       const revision = ++state.revision;
       const format = selectedExportFormat;
       const humorEnabled = selectedExportHumorEnabled;
+      const punchlineText = getConfirmedExportPunchline();
+      const punchlineRevision = exportPunchlineSelection?.presentationRevision ?? 0;
       const current = () => lastExportCaptureState === state && !state.released
-        && state.sessionId === exportSessionSequence && state.revision === revision && isCurrentExportCapture(state);
+        && state.sessionId === exportSessionSequence && state.revision === revision && isCurrentExportCapture(state)
+        && (exportPunchlineSelection?.presentationRevision ?? 0) === punchlineRevision;
       state.active++;
       if (current()) {
         lastExportedImage = null; lastExportImages = []; currentExportSeriesIndex = 0;
@@ -1613,9 +1925,8 @@
         if (!current()) return false;
         const data = state.snapshot.familyData;
         const presentation = getSocialExportPresentation(state.snapshot.targetKind === 'pb-tile' ? 'pb-tile' : state.snapshot.targetKey,
-          data, { humorEnabled });
+          data, { humorEnabled, punchlineText });
         if (state.snapshot.targetKey === 'mediaGallery') presentation.context.push({ label: 'Selection', value: `${data.displayedCount} of ${data.eligibleCount} media items` });
-        if (state.snapshot.targetKey === 'trainingCalendar') presentation.context.push({ label: 'Intensity', value: 'Scaled within each year; empty means no recorded activity' });
         const measureCanvas = document.createElement('canvas');
         const measureContext = measureCanvas.getContext('2d');
         const plan = window.exportUtils.planExportPages(state.snapshot, { format, humorEnabled, presentation }, {
@@ -1652,7 +1963,7 @@
           }
           if (!current()) return false;
           const pageTarget = { ...state.target, format, seriesPage: pageIndex + 1, seriesCount: plan.pages.length,
-            presentation, selectionSnapshot: state.snapshot, sessionId: state.sessionId, compositionRevision: revision };
+            presentation, selectionSnapshot: state.snapshot, sessionId: state.sessionId, compositionRevision: revision, punchlineRevision };
           const image = await prepareExportImage(frame.canvas.toDataURL('image/png'), pageTarget, state.pbOpening);
           if (!current()) return false;
           prepared.push(image); pageIndex++;
@@ -1662,12 +1973,14 @@
         exportRequestState = 'previewing';
         exportCompositionPending = false;
         state.error = null;
+        clearExportPunchlineFitError();
         showExportPreviewModal(lastExportedImage.dataUrl);
         return true;
       } catch (error) {
         if (current()) {
           state.error = error; exportRequestState = 'capture-failed';
           exportCompositionPending = false;
+          markExportPunchlineFitError(error);
           const message = document.getElementById('exportPreviewError');
           if (message) { message.textContent = error.message; message.classList.remove('hidden'); }
           showExportToast(error.message || 'Could not export this visualization.');
@@ -1682,7 +1995,7 @@
       const sessionId = ++exportSessionSequence;
       const previous = lastExportCaptureState;
       if (previous?.structured) { previous.released = true; releaseStructuredExportState(previous); }
-      beginExportSession();
+      beginExportSession(target.selectionSnapshot);
       let resources;
       try { resources = createStructuredExportResources(target); }
       catch (error) {
@@ -1710,9 +2023,12 @@
       captureState.compositionRevision = revision;
       const format = selectedExportFormat;
       const humorEnabled = selectedExportHumorEnabled;
+      const punchlineText = getConfirmedExportPunchline();
+      const punchlineRevision = exportPunchlineSelection?.presentationRevision ?? 0;
       const current = () => lastExportCaptureState === captureState
         && captureState.sessionId === exportSessionSequence && captureState.compositionRevision === revision
-        && isCurrentExportCapture(captureState);
+        && isCurrentExportCapture(captureState)
+        && (exportPunchlineSelection?.presentationRevision ?? 0) === punchlineRevision;
       const pageTargets = getExportTargetPages({ ...target, format });
       const formatCaptures = captureState.calendarCapturesByFormat?.[format];
       const preparedImages = [];
@@ -1728,13 +2044,13 @@
       try {
         for (const [pageIndex, sourceTarget] of pageTargets.entries()) {
           if (!current()) return false;
-          const pageTarget = { ...sourceTarget, format, sessionId: captureState.sessionId, compositionRevision: revision };
+          const pageTarget = { ...sourceTarget, format, sessionId: captureState.sessionId, compositionRevision: revision, punchlineRevision };
           const presentationKey = pageTarget.kind === 'pb-tile' ? 'pb-tile' : pageTarget.key;
           pageTarget.presentation = getSocialExportPresentation(presentationKey, {
             ...(pageTarget.exportData || {}),
             title: pageTarget.exportData?.title || pageTarget.title,
             metricLabel: pageTarget.exportData?.metricLabel || pageTarget.metricLabel
-          }, { humorEnabled });
+          }, { humorEnabled, punchlineText });
           const dataUrl = drawExportComposition(formatCaptures?.[pageIndex] || captured, pageTarget, assets);
           const image = await prepareExportImage(dataUrl, pageTarget, pbOpening);
           if (!current()) return false;
@@ -1746,6 +2062,7 @@
         lastExportedImage = preparedImages[0] || null;
         captureState.state = 'ready';
         exportCompositionPending = false;
+        clearExportPunchlineFitError();
         if (lastExportedImage) {
           exportRequestState = 'previewing';
           showExportPreviewModal(lastExportedImage.dataUrl);
@@ -1756,6 +2073,7 @@
         captureState.state = 'failed';
         exportRequestState = 'idle';
         exportCompositionPending = false;
+        markExportPunchlineFitError(error);
         const errorElement = document.getElementById('exportPreviewError');
         if (errorElement) { errorElement.textContent = error.message; errorElement.classList.remove('hidden'); }
         showExportToast(error.message || 'Could not export this visualization.');
@@ -1768,12 +2086,18 @@
       if (!formatConfig) throw new RangeError(`Unsupported export format: ${format}`);
       selectedExportFormat = formatConfig.key;
       updateExportFormatButtons();
+      if (exportPunchlineSelection) exportPunchlineSelection.presentationRevision++;
       if (!lastExportCaptureState) return;
       await composeCurrentExportImages(lastExportCaptureState);
     }
 
     async function setExportHumorEnabled(enabled) {
       selectedExportHumorEnabled = enabled === true;
+      if (exportPunchlineSelection) {
+        exportPunchlineSelection.enabled = selectedExportHumorEnabled;
+        exportPunchlineSelection.presentationRevision++;
+        updateExportPunchlineControls();
+      }
       const checkbox = document.getElementById('exportHumorEnabled');
       if (checkbox) checkbox.checked = selectedExportHumorEnabled;
       if (!lastExportCaptureState) return;
@@ -1794,6 +2118,7 @@
     function closeExportPreviewModal() {
       exportSessionSequence += 1;
       exportCompositionPending = false;
+      exportPunchlineSelection = null;
       if (lastExportCaptureState?.structured) {
         lastExportCaptureState.released = true;
         releaseStructuredExportState(lastExportCaptureState);
@@ -1868,7 +2193,8 @@
 
     async function downloadExportedImage() {
       const image = lastExportedImage;
-      if (exportDownloadAttempt || !image || !image.blob || !image.blob.size) return;
+      if (exportDownloadAttempt || exportCompositionPending || isExportPunchlineDownloadBlocked()
+          || !image || !image.blob || !image.blob.size) return;
       const attempt = { image, outcome: null };
       exportDownloadAttempt = attempt;
       updateExportDownloadButton();
@@ -1986,7 +2312,9 @@
         dashboardDataRevision: getExportDashboardDataRevision()
       };
       const currentSession = () => exportSessionSequence === sessionId && isCurrentExportCapture(captureState);
-      beginExportSession();
+      beginExportSession({ selectionId: `legacy-selection-${sessionId}`,
+        targetKey: target.kind === 'pb-tile' ? 'personalBests' : target.key,
+        variantKey: target.detailKey || target.key, familyData: {} });
 
       if (exportToastTimeoutId) clearTimeout(exportToastTimeoutId);
       exportToastTimeoutId = null;

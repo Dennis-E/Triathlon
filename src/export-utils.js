@@ -273,6 +273,60 @@ function computeSocialExportLayout(format = 'square', options = {}) {
   };
 }
 
+function getPbExportSourceLabel(record = {}) {
+  const source = record.source || {};
+  const kind = source.kind || record.sourceType;
+  const labels = { modeled: 'Estimated from activity average', 'full-activity': 'Whole activity',
+    'fit-rolling': 'Measured activity segment (FIT)' };
+  const label = labels[kind] || (source.estimated ? 'Estimated value' : 'Activity record');
+  return Number.isFinite(source.sourceDistanceKm)
+    ? `${label}; ${source.sourceDistanceKm.toLocaleString('en-US', { maximumFractionDigits: 2 })} km activity` : label;
+}
+
+function getPbExportRecordLines(record, data = {}) {
+  const timestamp = record.date ?? record.source?.activityDate;
+  const date = timestamp === null || timestamp === undefined || timestamp === '' ? null : new Date(timestamp);
+  const prefix = data.xAxisMode === 'duration' ? record.durationLabel || `${record.durationSeconds}s`
+    : date && Number.isFinite(date.getTime())
+      ? date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Date unavailable';
+  const value = record.displayValue || String(record.value);
+  const unit = data.unit && !(data.unit === 's' && value.includes(':')) && !value.includes(data.unit) ? data.unit : '';
+  const source = getPbExportSourceLabel(record);
+  return [[prefix, [value, unit].filter(Boolean).join(' ')].join(' · '), record.source?.workoutTitle || 'Workout',
+    source === 'Activity record' ? null : source].filter(Boolean);
+}
+
+function wrapExportPunchlineText(input, maxWidth, measureText) {
+  const text = typeof input === 'string' ? input.trim() : '';
+  if (!text || Array.from(text).length > 120) throw new RangeError('A punchline must contain 1 to 120 characters.');
+  const lines = [];
+  const addLine = line => {
+    lines.push(line);
+    if (lines.length > 2) throw new RangeError('This punchline does not fit in two readable lines. Shorten it or choose another format.');
+  };
+  for (const paragraph of text.split(/\r\n|\r|\n/)) {
+    let line = '';
+    for (const character of Array.from(paragraph)) {
+      if (measureText(line + character) <= maxWidth) {
+        line += character;
+        continue;
+      }
+      if (!line) throw new RangeError('This punchline does not fit at readable size.');
+      const breakAt = line.lastIndexOf(' ');
+      if (breakAt > 0) {
+        addLine(line.slice(0, breakAt + 1));
+        line = line.slice(breakAt + 1) + character;
+      } else {
+        addLine(line);
+        line = character;
+      }
+      if (measureText(line) > maxWidth) throw new RangeError('This punchline does not fit at readable size.');
+    }
+    addLine(line);
+  }
+  return lines;
+}
+
 function planExportPages(snapshot, options = {}, measurements = {}) {
   const format = getExportFormatConfig(options.format || 'square');
   if (!format) throw new RangeError('Unsupported export format');
@@ -290,8 +344,8 @@ function planExportPages(snapshot, options = {}, measurements = {}) {
     value => measure(value, size), maxLines);
   const presentation = options.presentation || {};
   const headline = options.headline || presentation.headline || data.title || 'My training';
-  const context = options.contextText ?? presentation.summary ?? (presentation.context?.length
-    ? presentation.context.map(item => `${item.label}: ${item.value}`).join(' · ')
+  const context = options.contextText ?? presentation.contextText ?? presentation.summary ?? (presentation.context?.length
+    ? [...new Set(presentation.context.map(item => item.value).filter(Boolean))].join(' · ')
     : [snapshot.period || data.period, snapshot.metric || data.metricLabel, snapshot.units || data.unit].filter(Boolean).join(' · '));
   const textBlocks = [];
   let cursor = bounds.y + 16;
@@ -306,21 +360,26 @@ function planExportPages(snapshot, options = {}, measurements = {}) {
     addText('centralValue', presentation.centralDisplayValue || [presentation.centralValue.toLocaleString('en-US', { maximumFractionDigits: 1 }),
       presentation.unit || data.unit].filter(Boolean).join(' '), 88, 100, 700);
   }
-  addText('context', context, 36, 44);
-  if (snapshot.provenance?.synthetic) addText('provenance', 'Synthetic sample training data', 36, 44);
-  const attribution = Array.isArray(snapshot.attribution) ? snapshot.attribution.join(' · ') : snapshot.attribution;
-  addText('attribution', attribution, 36, 44);
-  if (options.reservePageIndicator) addText('page', 'Page 999999 of 999999', 36, 44);
   let captionHeight = 0;
   if (options.humorEnabled) {
     const caption = options.caption || presentation.secondaryLine;
     if (!caption) throw new Error('Enabled export humour requires one relevant caption');
-    const lines = linesFor(caption, bounds.width, 36, 1);
-    captionHeight = 56;
-    textBlocks.push({ role: 'caption', lines, x: bounds.x, y: cursor, fontSize: 36, lineHeight: 44, weight: 500 });
+    const lines = wrapExportPunchlineText(caption, bounds.width, value => measure(value, 45));
+    captionHeight = lines.length * 54 + 12;
+    textBlocks.push({ role: 'caption', lines, x: bounds.x, y: cursor, fontSize: 45, lineHeight: 54, weight: 700 });
     cursor += captionHeight;
   }
-  const footer = { x: bounds.x, y: bounds.y + bounds.height - 104, width: bounds.width, height: 104 };
+  addText('context', context, 36, 44);
+  if (snapshot.provenance?.synthetic) addText('provenance', 'Synthetic sample training data', 36, 44);
+  const attribution = Array.isArray(snapshot.attribution) ? snapshot.attribution.join(' · ') : snapshot.attribution;
+  addText('attribution', attribution, 36, 44);
+  if (options.reservePageIndicator && layoutKind !== 'records') addText('page', 'Page 999999 of 999999', 36, 44);
+  const footerHeight = format.key === 'story' ? 128 : 104;
+  const footer = { x: bounds.x, y: bounds.y + bounds.height - footerHeight, width: bounds.width, height: footerHeight };
+  if (options.reservePageIndicator && layoutKind === 'records') {
+    textBlocks.push({ role: 'page', lines: ['Page 999999 of 999999'], x: footer.x + footer.width - measure('Page 999999 of 999999', 36),
+      y: footer.y + 4, fontSize: 36, lineHeight: 44, weight: 500 });
+  }
   const legendItems = layoutKind === 'pie' ? [] : options.legendItems || data.legend?.items || data.series || snapshot.legend?.items || [];
   const legendRows = [];
   let row = [];
@@ -475,15 +534,47 @@ function planExportPages(snapshot, options = {}, measurements = {}) {
     }
     if (chosen.length) addPage(chosen, { weightDomain: domain });
   } else if (layoutKind === 'records') {
-    if (data.groups?.length) {
-      pack(indexesOf(data.groups), () => Math.min(360, visualization.height), { overview: true });
-    } else if (data.records?.length) {
-      const chartHeight = Math.min(480, visualization.height * 0.55);
-      const recordHeight = 52;
-      const capacity = Math.floor((visualization.height - chartHeight - 24) / recordHeight);
-      if (capacity < 1) throw new RangeError('Record chart and values cannot fit at readable size');
-      for (let start = 0; start < data.records.length; start += capacity) addPage(indexesOf(data.records).slice(start, start + capacity), { chartHeight, recordHeight, repeatFullChart: true });
-    } else throw new Error('No record data to export');
+    const addRecordPages = (group, groupIndex = null) => {
+      if (!group.records?.length) return;
+      const overview = groupIndex !== null;
+      const headerLines = overview ? linesFor(group.title || group.definitionKey, bounds.width) : [];
+      const headerHeight = overview ? headerLines.length * 44 + (group.best?.displayValue ? 64 : 0) + 12 : 0;
+      const recordTextLines = group.records.map(record => getPbExportRecordLines(record, group)
+        .flatMap(text => linesFor(text, bounds.width)));
+      const rowHeights = recordTextLines.map(lines => lines.length * 44 + 12);
+      const hasChart = group.xAxisMode === 'duration' || group.records.some(record => {
+        const date = record.date ?? record.source?.activityDate;
+        return date !== null && date !== undefined && date !== '' && Number.isFinite(new Date(date).getTime());
+      });
+      const largestRow = Math.max(...rowHeights);
+      let chartHeight = hasChart ? Math.max(180, Math.min(360, (visualization.height - headerHeight) * 0.45)) : 0;
+      const chartGap = hasChart ? 24 : 0;
+      if (hasChart && headerHeight + chartHeight + chartGap + largestRow > visualization.height) {
+        chartHeight = Math.max(180, visualization.height - headerHeight - chartGap - largestRow);
+      }
+      const available = visualization.height - headerHeight - chartHeight - chartGap;
+      if (largestRow > available) throw new RangeError('Record source and chart cannot fit at readable size');
+      let selected = [];
+      let used = 0;
+      const finish = () => {
+        if (!selected.length) return;
+        const selectedHeights = selected.map(index => rowHeights[index]);
+        addPage(overview ? [groupIndex] : selected, { overview, headerLines, headerHeight, chartHeight,
+          recordIndexes: selected, recordRowHeights: selectedHeights,
+          recordTextLines: selected.map(index => recordTextLines[index]),
+          rowHeights: overview ? [headerHeight + chartHeight + chartGap + used] : selectedHeights,
+          repeatFullChart: true });
+        selected = []; used = 0;
+      };
+      for (const index of indexesOf(group.records)) {
+        if (selected.length && used + rowHeights[index] > available) finish();
+        selected.push(index); used += rowHeights[index];
+      }
+      finish();
+    };
+    if (data.groups?.length) data.groups.forEach((group, index) => addRecordPages(group, index));
+    else if (data.records?.length) addRecordPages(data);
+    else throw new Error('No record data to export');
   } else {
     const items = data.points || data.bins || data.groups || data.chartInput?.data?.datasets?.flatMap(dataset => dataset.data || []) || [];
     if (layoutKind !== 'map' && !items.length) throw new Error('No chart data to export');
@@ -940,6 +1031,8 @@ if (typeof module !== 'undefined' && module.exports) {
     wrapExportText,
     computeSocialExportLayout,
     planExportPages,
+    getPbExportSourceLabel,
+    getPbExportRecordLines,
     createSocialExportMetadata,
     computeSquareFit,
     computeContainFit,
@@ -973,6 +1066,8 @@ if (typeof window !== 'undefined') {
     wrapExportText,
     computeSocialExportLayout,
     planExportPages,
+    getPbExportSourceLabel,
+    getPbExportRecordLines,
     createSocialExportMetadata,
     computeSquareFit,
     computeContainFit,

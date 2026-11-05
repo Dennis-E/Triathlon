@@ -29,6 +29,79 @@ const {
   planExportPages
 } = require('../src/export-utils');
 
+describe('F080 T011 prominent export punchline layout', () => {
+  const snapshot = { targetKey: 'equipment', selectionId: 'selection-layout',
+    familyData: { items: [{ name: 'Training shoes', value: 12 }] } };
+
+  test.each([['story', 1920], ['square', 1080], ['portrait', 1350]])(
+    'puts a readable punchline before compact context in %s', (format, height) => {
+      const presentation = { headline: 'My training', context: [{ label: 'Period', value: '2024-2025' },
+        { label: 'Unit', value: 'km' }], secondaryLine: 'One session, then another. This is my training story.' };
+      const measure = { measureText: (text, size) => String(text).length * size * 0.48 };
+      const plan = planExportPages(snapshot, { format, presentation, humorEnabled: true }, measure);
+      const plain = planExportPages(snapshot, { format, presentation, humorEnabled: false }, measure);
+      const caption = plan.textBlocks.find(block => block.role === 'caption');
+      const context = plan.textBlocks.find(block => block.role === 'context');
+      expect(plan.width).toBe(1080);
+      expect(plan.height).toBe(height);
+      expect(caption.fontSize).toBeGreaterThanOrEqual(context.fontSize * 1.25);
+      expect(caption.fontSize).toBeGreaterThanOrEqual(36);
+      expect(caption.lines.length).toBeLessThanOrEqual(2);
+      expect(caption.y).toBeLessThan(context.y);
+      expect(context.lines.join(' ')).not.toMatch(/Period:|Unit:/);
+      expect(plain.captionHeight).toBe(0);
+      expect(plain.pages[0].visualization.height).toBeGreaterThan(plan.pages[0].visualization.height);
+      expect(plain.textBlocks.filter(block => block.role === 'caption')).toHaveLength(0);
+    }
+  );
+});
+
+describe('F080 T019 lossless caption fitting', () => {
+  const snapshot = { targetKey: 'equipment', familyData: { items: [{ name: 'Shoes', value: 1 }] } };
+
+  it('does not normalize inner whitespace or silently cut long custom text', () => {
+    const text = 'One  two   <b>three</b> four five six seven eight nine ten eleven twelve';
+    const plan = planExportPages(snapshot, { format: 'story', humorEnabled: true, caption: text },
+      { measureText: text => String(text).length * 12 });
+    expect(plan.textBlocks.find(block => block.role === 'caption').lines.join('')).toBe(text);
+  });
+
+  it('keeps explicit internal line breaks and rejects a third caption line', () => {
+    const plan = planExportPages(snapshot, { format: 'square', humorEnabled: true, caption: 'First line\nSecond line' });
+    expect(plan.textBlocks.find(block => block.role === 'caption').lines).toEqual(['First line', 'Second line']);
+    expect(() => planExportPages(snapshot, { format: 'square', humorEnabled: true, caption: 'First\nSecond\nThird' }))
+      .toThrow(/two|2|line|fit/i);
+  });
+
+  it('separately validates character length and format-dependent fit without shrinking or truncation', () => {
+    const text = 'W'.repeat(42);
+    const measurements = { measureText: value => Array.from(value).reduce((sum, character) => sum + (character === 'W' ? 45 : 12), 0) };
+    const square = planExportPages(snapshot, { format: 'square', humorEnabled: true, caption: text }, measurements);
+    expect(square.textBlocks.find(block => block.role === 'caption').lines.join('')).toBe(text);
+    expect(() => planExportPages(snapshot, { format: 'story', humorEnabled: true, caption: text }, measurements))
+      .toThrow(/two|2|line|fit/i);
+  });
+});
+
+describe('F080 T033 measured PB source pagination', () => {
+  test.each(['square', 'portrait', 'story'])('preserves long attributed records on measured continuation pages in %s', format => {
+    const records = Array.from({ length: 8 }, (_, index) => ({ value: 1200 - index, displayValue: '20:00',
+      date: Date.UTC(2018 + index, 0, 1), source: { workoutTitle: `Synthetic long workout title ${index} with distinguishing training details and a deliberately extended name`,
+        kind: 'full-activity', estimated: false, activityDate: Date.UTC(2018 + index, 0, 1) } }));
+    const selected = { targetKey: 'personalBests', familyData: { records, xAxisMode: 'time', unit: 's', title: 'Run 5 km' } };
+    const before = JSON.stringify(selected);
+    const plan = planExportPages(selected, { format }, { measureText: text => String(text).length * 18 });
+    expect(plan.pages.flatMap(page => page.itemIndexes)).toEqual(records.map((_record, index) => index));
+    expect(plan.pages.length).toBeGreaterThan(1);
+    for (const page of plan.pages) {
+      expect(page.rowHeights).toHaveLength(page.itemIndexes.length);
+      expect(page.rowHeights.every(height => height > 52)).toBe(true);
+      expect(page.repeatFullChart).toBe(true);
+    }
+    expect(JSON.stringify(selected)).toBe(before);
+  });
+});
+
 describe('export-utils', () => {
   describe('family export page planning', () => {
     const options = { format: 'story', humorEnabled: false };

@@ -44,6 +44,25 @@ function pieHarness() {
 }
 
 describe('Pie Charts dashboard contract', () => {
+  it('F080 T051 avoids colliding optional inner percentages without changing slices or readable type', () => {
+    const h = pieHarness();
+    const context = { save: jest.fn(), restore: jest.fn(), drawImage: jest.fn(), fillText: jest.fn(),
+      measureText: text => ({ width: text.length * 20 }) };
+    h.owner.document.createElement = () => ({ getContext: () => context });
+    h.owner.window.exportUtils = require('../src/export-utils');
+    const data = { slices: [14, 15, 17].map(percentage => ({ label: String(percentage),
+      percentage, value: percentage, color: '#ffffff' })) };
+    const before = JSON.stringify(data);
+    h.owner.window.pieChartsDashboard.createExportCanvas(data, 320);
+    const plugin = h.charts.at(-1).config.plugins[0];
+    plugin.afterDatasetsDraw({ ctx: context, getDatasetMeta: () => ({ data: [100, 150, 250]
+      .map(horizontal => ({ tooltipPosition: () => ({ x: horizontal, y: 100 }) })) }) });
+    expect(context.fillText.mock.calls.map(call => call[0])).toEqual(['14%', '17%']);
+    expect(context.font).toContain('36px');
+    expect(JSON.stringify(data)).toBe(before);
+    expect(h.charts.at(-1).data.datasets[0].data).toEqual([14, 15, 17]);
+  });
+
   it('exports selected slices with their unchanged denominator and independent numeric values', () => {
     const h = pieHarness();
     h.owner.setPieMeasure('distance');

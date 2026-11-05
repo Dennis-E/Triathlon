@@ -15,6 +15,78 @@ function activity({ date, startTime, sport, ...measurements }) {
   };
 }
 
+function localStartActivity(hour, extra = {}) {
+  return { date: new Date(2025, 0, 1), startTime: new Date(Date.UTC(2025, 0, 1, hour)), sport: 'Run',
+    duration: 3600, distance: 10,
+    sourceLocalStart: { year: 2025, month: 1, day: 1, hour, minute: 0, second: 0, offsetMinutes: 0 }, ...extra };
+}
+
+describe('F080 T039 trustworthy local start analysis', () => {
+  const analyze = (...args) => require('../src/workout-time-utils').analyzeWorkoutTimeStarts(...args);
+
+  test.each([[9, 9, null, 'insufficient-data'], [10, 6, 'morning', 'supported'],
+    [100, 59, null, 'no-dominance'], [100, 60, 'morning', 'supported']])(
+    'uses exact minimum and dominance thresholds for %i starts and %i mornings', (count, mornings, dominantWindow, status) => {
+      const activities = Array.from({ length: count }, (_unused, index) => localStartActivity(index < mornings ? 8 : 19));
+      expect(analyze(activities)).toMatchObject({ basis: 'activity-start-count', selectedCount: count,
+        validStartCount: count, excludedStartCount: 0, dominantWindow, status });
+    }
+  );
+
+  it('assigns exact four-window boundaries including real midnight once per start', () => {
+    const result = analyze([5, 12, 18, 22, 0].map(hour => localStartActivity(hour)));
+    expect(result.windows).toEqual([{ key: 'morning', count: 1 }, { key: 'afternoon', count: 1 },
+      { key: 'evening', count: 1 }, { key: 'night', count: 2 }]);
+  });
+
+  it('counts missing or inconsistent local evidence after sport/date selection and never guesses midnight', () => {
+    const result = analyze([localStartActivity(8), localStartActivity(8, { sourceLocalStart: undefined }),
+      localStartActivity(8, { sourceLocalStart: { year: 2025, month: 13 } }),
+      localStartActivity(8, { startTime: new Date(Date.UTC(2025, 0, 1, 10)) }),
+      localStartActivity(8, { sport: 'Bike' }), localStartActivity(8, { date: new Date(2026, 0, 1) })],
+    { sport: 'Run', minDate: new Date(2025, 0, 1), maxDate: new Date(2025, 11, 31) });
+    expect(result).toMatchObject({ selectedCount: 4, validStartCount: 1, excludedStartCount: 3 });
+    expect(result.exclusions.reduce((total, item) => total + item.count, 0)).toBe(3);
+    expect(analyze([localStartActivity(0, { sourceLocalStart: undefined })]).status).toBe('no-valid-starts');
+  });
+
+  it('accepts explicit synthetic local fields but rejects impossible calendar/time values', () => {
+    const result = analyze([
+      localStartActivity(0, { sourceLocalStart: undefined, calendarDate: '2025-01-01', localStartTime: '08:30:00' }),
+      localStartActivity(0, { sourceLocalStart: undefined, calendarDate: '2025-02-30', localStartTime: '08:30:00' }),
+      localStartActivity(0, { sourceLocalStart: undefined, calendarDate: '2025-01-01', localStartTime: '25:30:00' })
+    ]);
+    expect(result).toMatchObject({ selectedCount: 3, validStartCount: 1, excludedStartCount: 2 });
+    expect(result.windows[0].count).toBe(1);
+  });
+
+  it('is independent of chart measure/granularity and does not retain or mutate activities', () => {
+    const activities = Array.from({ length: 10 }, (_unused, index) => localStartActivity(index < 6 ? 23 : 8));
+    const before = JSON.stringify(activities);
+    const expected = analyze(activities);
+    for (const measure of ['count', 'duration', 'distance']) for (const granularity of ['day', 'week', 'month', 'year']) {
+      expect(analyze(activities, { measure, granularity })).toEqual(expected);
+    }
+    expect(JSON.stringify(activities)).toBe(before);
+    expect(JSON.stringify(expected)).not.toMatch(/startTime|sourceLocalStart|durationSeconds|distanceKm/);
+  });
+
+  it('keeps source-local results the same in UTC and Europe/Berlin', () => {
+    const originalTimezone = process.env.TZ;
+    try {
+      const results = ['UTC', 'Europe/Berlin'].map(timezone => {
+        process.env.TZ = timezone;
+        return analyze(Array.from({ length: 10 }, () => localStartActivity(0)));
+      });
+      expect(results[0]).toEqual(results[1]);
+      expect(results[0].dominantWindow).toBe('night');
+    } finally {
+      if (originalTimezone === undefined) delete process.env.TZ;
+      else process.env.TZ = originalTimezone;
+    }
+  });
+});
+
 describe('buildWorkoutTimeDataset - Day granularity', () => {
   const activities = [
     activity({ date: '2026-07-01', startTime: '2026-07-01T00:00:00', sport: 'Run' }),

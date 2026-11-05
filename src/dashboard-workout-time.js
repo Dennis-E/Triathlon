@@ -276,6 +276,9 @@
         period: bounds.minDate && bounds.maxDate ? `${formatDateIso(bounds.minDate)} - ${formatDateIso(bounds.maxDate)}` : null,
         periodStart: bounds.minDate?.getTime() ?? null, periodEnd: bounds.maxDate?.getTime() ?? null,
         status: dataset.status, activityCount: dataset.activityCount,
+        startTimeAnalysis: window.workoutTimeUtils.analyzeWorkoutTimeStarts(processedActivities, {
+          sport: selectedWorkoutTimeSport, ...bounds
+        }),
         groups: dataset.groups.map(group => ({ key: group.key, label: group.label, value: group.value,
           count: group.count, status: group.status, availableCount: group.availableCount,
           durationSeconds: group.durationSeconds, distanceKm: group.distanceKm,
@@ -299,8 +302,8 @@
       const data = JSON.parse(JSON.stringify(workoutTimeExportData));
       const labels = data.chartInput.data.labels.slice();
       const granularity = data.granularity;
-      data.xAxisTitle = { day: 'Start hour (2-hour blocks)', week: 'Weekday', month: 'Day of month', year: 'Month' }[granularity];
-      if (granularity === 'day') data.periodMeaning = 'Two-hour start-time blocks';
+      data.xAxisTitle = { day: 'Start time', week: 'Weekday', month: 'Day of month', year: 'Month' }[granularity];
+      if (granularity === 'day') data.periodMeaning = 'Activity start time';
       data.chartInput.options.scales.x.title.text = data.xAxisTitle;
       data.chartInput.options.scales.x.ticks = { color: '#f8fafc', autoSkip: true,
         maxRotation: 0, minRotation: 0, maxTicksLimit: 12,

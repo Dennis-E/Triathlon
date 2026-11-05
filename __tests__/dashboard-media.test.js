@@ -54,6 +54,19 @@ function loadDashboardMedia() {
 }
 
 describe('dashboard media gallery', () => {
+  it('F080 T046 reserves bottom glyph space inside the planned media export surface without removing captions', () => {
+    const runtime = loadDashboardMedia();
+    const document = { createElement: tagName => ({ tagName, style: {}, children: [],
+      appendChild(child) { this.children.push(child); } }) };
+    const surface = runtime.window.mediaGalleryDashboard.createExportPage({ mediaKind: 'annual', includeRoutes: false,
+      items: [{ assetKey: 'synthetic.jpg', src: 'data:image/png;base64,synthetic', mediaType: 'photo',
+        date: Date.UTC(2025, 0, 1), caption: 'Synthetic caption retained' }] },
+    { visualization: { width: 888 }, columns: 1, imageHeight: 700, itemIndexes: [0] }, document);
+    expect(surface.element.style).toMatchObject({ paddingBottom: '24px', boxSizing: 'border-box' });
+    expect(surface.element.children[0].innerHTML).toContain('Synthetic caption retained');
+    expect(surface.element.children[0].innerHTML).toContain('01/01/2025');
+  });
+
   it('prepares successive page subsets from the same frozen media selection and rejects unknown images', async () => {
     const runtime = loadDashboardMedia();
     const fixture = createMediaZipFixture({

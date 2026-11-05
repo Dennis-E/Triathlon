@@ -647,19 +647,45 @@
           : /distance/i.test(model.axisLabel) ? 'km'
             : /100m/i.test(model.axisLabel) ? 'min/100m'
               : /pace|\/km/i.test(model.axisLabel) ? 'min/km' : 's';
-      const records = model.records.map((record, index) => ({
+      const validRecordDate = value => {
+        if (value === null || value === undefined || value === '') return null;
+        const date = new Date(value);
+        return Number.isFinite(date.getTime()) ? date : null;
+      };
+      const sourceLabels = { modeled: 'Estimated from activity average', 'full-activity': 'Whole activity',
+        'fit-rolling': 'Measured activity segment (FIT)' };
+      const records = model.records.map((record, index) => {
+        const original = record.record || record;
+        const sourceType = record.sourceType || record.effortSource || original.sourceType
+          || original.effortSource || (typeof original.source === 'string' ? original.source : null)
+          || (record.source?.kind !== 'unknown' ? record.source?.kind : null) || null;
+        const kind = Object.prototype.hasOwnProperty.call(sourceLabels, sourceType) ? sourceType : 'unknown';
+        const date = validRecordDate(record.date) || validRecordDate(original.date) || validRecordDate(record.source?.activityDate);
+        const title = [original.name, record.source?.workoutTitle, record.title]
+          .find(value => typeof value === 'string' && value.trim());
+        const distance = record.source?.sourceDistanceKm ?? original.sourceDistance;
+        const source = {
+          workoutTitle: title ? title.trim() : null,
+          activityDate: date ? date.getTime() : null,
+          kind,
+          estimated: kind === 'modeled' || original.isInterimEstimated === true || record.source?.estimated === true,
+          ...(Number.isFinite(distance) && distance > 0 && (distance !== original.distance || record.source?.sourceDistanceKm !== undefined)
+            ? { sourceDistanceKm: distance } : {})
+        };
+        return {
         index,
         value: Number.isFinite(record.value) ? record.value
           : Number.isFinite(record.watts) ? record.watts
             : Number.isFinite(record.duration) ? record.duration : null,
-        date: record.date ? new Date(record.date) : null,
+        date,
         durationSeconds: record.durationSeconds ?? record.targetSeconds ?? record.record?.targetSeconds ?? null,
         durationLabel: record.durationLabel ?? null,
         displayValue: typeof model.formatValue === 'function' && Number.isFinite(record.value)
           ? model.formatValue(record.value) : String(record.value ?? record.watts ?? record.duration ?? ''),
-        sourceType: record.sourceType || record.effortSource || record.record?.sourceType
-          || record.record?.effortSource || record.record?.source || null
-      })).filter(record => Number.isFinite(record.value));
+        sourceType,
+        source
+        };
+      }).filter(record => Number.isFinite(record.value));
       if (records.length === 0) return null;
 
       const best = records.reduce((current, record) => direction === 'up'
@@ -692,22 +718,25 @@
         value: record.value,
           displayValue: record.displayValue,
         date: record.date,
-        sourceType: record.sourceType
+        sourceType: record.sourceType,
+        source: record.source
       }));
       const exportRecords = records.map(record => ({
         value: record.value,
         displayValue: record.displayValue,
         date: record.date,
         sourceType: record.sourceType,
+        source: record.source,
         ...(profile ? { durationSeconds: record.durationSeconds, durationLabel: record.durationLabel } : {})
       }));
       const summarizeRecord = record => ({
         value: record.value,
         displayValue: record.displayValue,
         date: record.date,
-        sourceType: record.sourceType
+        sourceType: record.sourceType,
+        source: record.source
       });
-      const sourceDates = (typeof processedActivities !== 'undefined' ? processedActivities : records)
+      const sourceDates = records
         .map(item => item.date ? new Date(item.date).getTime() : null).filter(Number.isFinite);
 
       return {
@@ -717,7 +746,7 @@
         period: sourceDates.length ? `${new Date(Math.min(...sourceDates)).getFullYear()}-${new Date(Math.max(...sourceDates)).getFullYear()}` : null,
         periodStart: sourceDates.length ? Math.min(...sourceDates) : null,
         periodEnd: sourceDates.length ? Math.max(...sourceDates) : null,
-        sourceAttribution: Array.from(new Set(records.map(record => record.sourceType).filter(Boolean))).join(', ') || null,
+        sourceAttribution: Array.from(new Set(records.map(record => sourceLabels[record.sourceType] || record.sourceType).filter(Boolean))).join(', ') || null,
         metricLabel: model.axisLabel,
         direction,
         recordCount: records.length,
@@ -728,7 +757,8 @@
           value: best.value,
           displayValue: best.displayValue,
           date: best.date,
-          sourceType: best.sourceType
+          sourceType: best.sourceType,
+          source: best.source
         },
         milestones
       };

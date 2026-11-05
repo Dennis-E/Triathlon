@@ -279,13 +279,21 @@
           const context = chart.ctx;
           context.save(); context.font = '700 36px system-ui, sans-serif';
           context.textAlign = 'center'; context.textBaseline = 'middle';
+          const labelBounds = [];
           chart.getDatasetMeta(0).data.forEach((arc, index) => {
             const slice = slices[index];
             if (!slice || slice.percentage < 8) return;
             const point = arc.tooltipPosition();
+            const text = `${Math.round(slice.percentage)}%`;
+            const halfWidth = context.measureText(text).width / 2;
+            const bounds = { left: point.x - halfWidth, right: point.x + halfWidth,
+              top: point.y - 22, bottom: point.y + 22 };
+            if (labelBounds.some(previous => bounds.left < previous.right + 8 && bounds.right + 8 > previous.left
+              && bounds.top < previous.bottom && bounds.bottom > previous.top)) return;
+            labelBounds.push(bounds);
             const ratio = window.exportUtils?.getContrastRatio('#ffffff', slice.color);
             context.fillStyle = ratio === undefined ? getPieLabelTextColor(slice.color) : ratio >= 4.5 ? '#ffffff' : '#000000';
-            context.fillText(`${Math.round(slice.percentage)}%`, point.x, point.y);
+            context.fillText(text, point.x, point.y);
           });
           context.restore();
         }

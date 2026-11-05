@@ -349,7 +349,8 @@
     if (!root || !['sparse', 'dense'].includes(reviewCase.density)) throw new Error('Review requires a browser and known synthetic fixture');
     root.closeExportPreviewModal();
     root.__reelImageEvidence?.clear();
-    if (root.__reelFixtureDensity !== reviewCase.density) {
+    if (root.__reelFixtureDensity !== reviewCase.density
+      || (root.__reelStartScenario || null) !== (reviewCase.startScenario || null)) {
       const name = `training-${reviewCase.density}.zip`;
       const response = await root.fetch(`/__tests__/fixtures/reel-story-exports/${name}`);
       if (!response.ok) throw new Error('Synthetic review archive is unavailable');
@@ -361,12 +362,29 @@
         onDatasetPrepared: value => { value.sourceType = 'sample'; value.sampleProvenance = { synthetic: true, label: 'Synthetic sample training data' }; }
       });
       root.__reelFixtureDensity = reviewCase.density;
+      root.__reelStartScenario = reviewCase.startScenario || null;
+      if (reviewCase.startScenario) {
+        const scenario = reviewCase.startScenario;
+        const count = /^threshold/.test(scenario) ? 100 : scenario === 'insufficient' ? 9 : scenario === 'excluded' ? 12 : 10;
+        processedActivities = Array.from({ length: count }, (_unused, index) => {
+          const targetHour = { morning: 8, afternoon: 13, evening: 19, night: 23, excluded: 8,
+            threshold59: 8, threshold60: 8 }[scenario] ?? 8;
+          const leadingCount = scenario === 'threshold59' ? 59 : scenario === 'threshold60' ? 60 : 6;
+          const hour = ['mixed', 'boundary'].includes(scenario) ? [0, 5, 12, 18, 22][index % 5]
+            : scenario === 'insufficient' || scenario === 'unknown' ? 8
+              : index < leadingCount ? targetHour : targetHour === 8 ? 19 : 8;
+          const sourceLocalStart = { year: 2025, month: 1, day: 1, hour, minute: 0, second: 0, offsetMinutes: 0 };
+          return { id: `synthetic-start-${index}`, name: `Synthetic start reference ${index + 1}`, sport: 'Run',
+            date: new Date(2025, 0, 1), monday: new Date(2024, 11, 30), startTime: new Date(Date.UTC(2025, 0, 1, hour)),
+            duration: 1800 + index * 10, distance: 5 + index / 100,
+            ...(scenario === 'unknown' || scenario === 'excluded' && index >= 10 ? {} : { sourceLocalStart }) };
+        });
+        if (typeof root.advanceDashboardRevision === 'function') root.advanceDashboardRevision(true);
+      }
     }
     const key = reviewCase.target;
     const filters = reviewCase.filters;
     root.setVisualizationTab(key);
-    await root.setExportFormat(reviewCase.format);
-    await root.setExportHumorEnabled(reviewCase.humor);
     if (key === 'totalDistance') {
       selectedTimeframeByAggregation[filters.aggregation] = 'all';
       root.setAggregationLevel(filters.aggregation); root.setSportFilter(filters.sport);
@@ -389,7 +407,11 @@
     } else if (key === 'mediaGallery') {
       const year = root.document.getElementById('mediaGalleryYearFilter');
       year.value = '2025'; year.dispatchEvent(new root.Event('change'));
-      root.mediaGalleryDashboard.setIncludeRoutes(filters.includeRoutes);
+      if (typeof root.mediaGalleryDashboard.setIncludeRoutes === 'function') {
+        root.mediaGalleryDashboard.setIncludeRoutes(filters.includeRoutes);
+      } else if (filters.includeRoutes) {
+        throw new Error('Review option unavailable: route inclusion is not offered by this gallery');
+      }
       if (filters.explicitVideoSelection) {
         const key = importedDataset.mediaLibrary.assets.find(asset => asset.mediaType === 'video')?.key;
         const checkbox = Array.from(root.document.querySelectorAll('[data-media-select-key]')).find(input => input.dataset.mediaSelectKey === key);
@@ -400,20 +422,60 @@
     }
     if (key === 'personalBests' && filters.definition !== 'overview') {
       const groups = root.personalBestsDashboard.getOverviewExportData().groups;
-      const definitionKey = filters.definition === 'power-profile' ? 'Bike-power-all-time-profile' : `${filters.sport}-${filters.definition}`;
+      const definitionKey = filters.definitionKey || (filters.definition === 'power-profile'
+        ? 'Bike-power-all-time-profile' : `${filters.sport}-${filters.definition}`);
       const group = groups.find(item => item.definitionKey === definitionKey
         || filters.definition === 'longest' && item.sport === filters.sport && /^Longest /i.test(item.title)
         || filters.definition === 'elevation' && item.sport === filters.sport && /^Most elevation/i.test(item.title));
       if (!group) throw new Error(`Synthetic PB definition unavailable: ${definitionKey}`);
-      root.openPbDetail({ title: group.title, exportKey: group.definitionKey, sport: group.sport,
+      let records = group.records.map(record => ({ ...record,
+        source: record.source ? { ...record.source } : null,
+        date: record.date === null || record.date === undefined ? null : new Date(record.date) }));
+      if (filters.recordScenario) {
+        const seed = records[0];
+        records = [0, 1].map(index => {
+          const date = filters.recordScenario === 'missing-source' ? null
+            : new Date(Date.UTC(filters.recordScenario === 'year-change' && index === 0 ? 2024 : 2025,
+              filters.recordScenario === 'year-change' && index === 0 ? 11 : 0,
+              filters.recordScenario === 'year-change' && index === 0 ? 31 : 1));
+          const value = seed.value + (group.direction === 'up' ? index : -index);
+          const title = filters.recordScenario === 'missing-source' ? null
+            : `Synthetic ${filters.recordScenario} effort ${index + 1}${filters.recordScenario === 'long-title'
+              ? ' with deliberately extended distinguishing training details and a very long workout title' : ''}`;
+          return { ...seed, value, displayValue: String(value), date,
+            sourceType: filters.recordScenario === 'missing-source' ? null : seed.sourceType,
+            source: { ...(seed.source || {}), workoutTitle: title, activityDate: date ? date.getTime() : null,
+              kind: filters.recordScenario === 'missing-source' ? 'unknown' : seed.source?.kind || 'unknown',
+              estimated: filters.recordScenario === 'missing-source' ? false : seed.source?.estimated === true } };
+        });
+      }
+      const detailModel = { title: group.title, exportKey: group.definitionKey, sport: group.sport,
         xAxisMode: group.xAxisMode === 'duration' ? 'duration-category' : 'time', axisLabel: group.metricLabel,
         direction: group.direction, color: '#20c9b2',
         formatValue: value => group.records.find(record => record.value === value)?.displayValue || String(value),
-        records: group.records.map(record => ({ ...record, date: record.date ? new Date(record.date) : null }))
-      }, root.document.getElementById('vizTabPersonalBests'));
+        records
+      };
+      root.openPbDetail(filters.recordScenario === 'missing-source'
+        ? { ...detailModel, records: group.records.map(record => ({ ...record, date: new Date(record.date) })) }
+        : detailModel, root.document.getElementById('vizTabPersonalBests'));
+      if (filters.recordScenario === 'missing-source') activePbDetailModel = detailModel;
       await root.exportActivePbDetail();
     } else if (key !== 'mediaGallery') {
       await root.exportVisualizationTab(key);
+    }
+    await root.setExportFormat(reviewCase.format);
+    await root.setExportHumorEnabled(reviewCase.humor);
+    if (typeof reviewCase.punchlineText === 'string') {
+      root.setExportPunchlineDraft(reviewCase.punchlineText);
+      await root.applyExportPunchline();
+    }
+    if (reviewCase.expectedFitError) {
+      if (exportPunchlineSelection.validationStatus !== 'does-not-fit'
+          || !root.document.getElementById('exportPreviewDownloadBtn').disabled || lastExportedImage) {
+        throw new Error('Expected punchline fit error did not block the export');
+      }
+      return { caseId: reviewCase.id, expectedFitError: true, text: exportPunchlineSelection.confirmedText,
+        error: exportPunchlineSelection.error, pages: 0 };
     }
     if (!lastExportedImage) throw new Error(lastExportCaptureState?.error?.message || root.document.getElementById('exportToast').textContent || 'Review export produced no image');
     return { caseId: reviewCase.id, pages: lastExportImages.length, width: lastExportedImage.width,
@@ -421,7 +483,55 @@
       actualFilters: lastExportCaptureState.snapshot.filters, period: lastExportCaptureState.snapshot.period };
   }
 
+  function createPersonalizationReviewCases() {
+    const variants = [
+      { scenario: 'default', target: 'totalDistance', density: 'sparse', humor: true,
+        filters: { sport: 'All', aggregation: 'yearly' } },
+      { scenario: 'custom', target: 'totalDistance', density: 'sparse', humor: true,
+        punchlineText: 'One  two <b>three</b> four five six seven eight nine ten eleven twelve',
+        filters: { sport: 'All', aggregation: 'yearly' } },
+      { scenario: 'two-lines', target: 'paceMetrics', density: 'sparse', humor: true,
+        punchlineText: 'My own training story.\nOne session at a time.', filters: { sport: 'Run', metric: 'heartRate' } },
+      { scenario: 'off-series', target: 'equipmentTimeline', density: 'dense', humor: false,
+        punchlineText: 'My gear, my story.', filters: { mode: 'activities', equipment: 'All' } },
+      { scenario: 'wide-text', target: 'totalDistance', density: 'sparse', humor: true,
+        punchlineText: 'W'.repeat(42), filters: { sport: 'All', aggregation: 'yearly' } }
+    ];
+    return ['Chrome', 'Edge'].flatMap(browser => ['square', 'portrait', 'story'].flatMap(format => variants.map(variant => ({
+      ...variant, browser, format, id: `f080-${browser}-${variant.scenario}-${format}`,
+      expectedFitError: variant.scenario === 'wide-text' && format === 'story'
+    }))));
+  }
+
+  function createPersonalBestReviewCases(groups = []) {
+    const variants = [{ definition: 'overview' }, ...groups.map(group => ({ sport: group.sport, definitionKey: group.definitionKey }))];
+    const chronological = groups.find(group => group.xAxisMode !== 'duration' && group.records?.length);
+    if (chronological) {
+      for (const recordScenario of ['missing-source', 'same-day', 'year-change', 'long-title']) {
+        variants.push({ sport: chronological.sport, definitionKey: chronological.definitionKey, recordScenario });
+      }
+    }
+    return ['Chrome', 'Edge'].flatMap(browser => ['square', 'portrait', 'story'].flatMap(format => variants.map((filters, index) => ({
+      id: `f080-${browser}-pb-${index + 1}-${format}`, target: 'personalBests', density: 'sparse', browser, format,
+      humor: true, filters
+    }))));
+  }
+
+  function createWorkoutTimeReviewCases() {
+    const scenarios = ['morning', 'afternoon', 'evening', 'night', 'insufficient', 'mixed',
+      'excluded', 'unknown', 'boundary', 'threshold59', 'threshold60'];
+    const captions = { morning: 'Morning bird', afternoon: 'Afternoon athlete', evening: 'Evening energy',
+      night: 'Night owl', excluded: 'Morning bird', threshold60: 'Morning bird' };
+    return ['Chrome', 'Edge'].flatMap(browser => ['square', 'portrait', 'story'].flatMap((format, formatIndex) => scenarios.map((startScenario, index) => ({
+      id: `f080-${browser}-starts-${startScenario}-${format}`, target: 'workoutTime', density: 'sparse', browser, format,
+      humor: true, startScenario, expectedPunchline: captions[startScenario] || null,
+      filters: { sport: 'Run', measure: ['count', 'duration', 'distance'][(index + formatIndex) % 3],
+        granularity: ['day', 'week', 'month', 'year'][(index + formatIndex) % 4] }
+    }))));
+  }
+
   const api = { createRecipe, makeFit, makeGpx, createMedia, buildArchive, createReviewCases,
+    createPersonalizationReviewCases, createPersonalBestReviewCases, createWorkoutTimeReviewCases,
     installImageEvidence, inspectApprovedImage, prepareReviewCase };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (root) root.reelStoryFixtures = api;

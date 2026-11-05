@@ -157,6 +157,78 @@ function loadAdditionalChart(moduleName, canvasId) {
   return runtime;
 }
 
+describe('F080 T040 workout-time export start analysis', () => {
+  it('exports compact start-count evidence independently of the rendered measure', () => {
+    const { dashboard, elements } = loadAdditionalChart('dashboard-workout-time', 'workoutTimeChart');
+    elements.set('workoutTimeDateStart', {});
+    elements.set('workoutTimeDateEnd', {});
+    dashboard.__localStarts = Array.from({ length: 10 }, (_unused, index) => {
+      const hour = index < 6 ? 8 : 19;
+      return { sport: 'Run', date: new Date(2025, 0, 1), startTime: new Date(Date.UTC(2025, 0, 1, hour)),
+        sourceLocalStart: { year: 2025, month: 1, day: 1, hour, minute: 0, second: 0, offsetMinutes: 0 },
+        duration: 3600, distance: 10 };
+    });
+    vm.runInContext('processedActivities = __localStarts', dashboard);
+    dashboard.renderWorkoutTimeChart();
+    let firstAnalysis;
+    for (const measure of ['count', 'duration', 'distance']) {
+      dashboard.setWorkoutTimeMeasure(measure);
+      const model = dashboard.window.workoutTimeDashboard.getExportData();
+      expect(model.startTimeAnalysis).toMatchObject({ basis: 'activity-start-count', selectedCount: 10,
+        validStartCount: 10, excludedStartCount: 0, dominantWindow: 'morning' });
+      expect(JSON.stringify(model)).not.toMatch(/2-hour|two-hour/i);
+      if (firstAnalysis) expect(model.startTimeAnalysis).toEqual(firstAnalysis);
+      firstAnalysis = model.startTimeAnalysis;
+    }
+    const snapshot = dashboard.window.workoutTimeDashboard.getExportData();
+    dashboard.__localStarts[0].sourceLocalStart.hour = 22;
+    expect(snapshot.startTimeAnalysis.windows[0].count).toBe(6);
+  });
+
+  it('refreshes evidence on dataset/sport changes while retaining exclusions in the selected date range', () => {
+    const { dashboard, elements } = loadAdditionalChart('dashboard-workout-time', 'workoutTimeChart');
+    elements.set('workoutTimeDateStart', {});
+    elements.set('workoutTimeDateEnd', {});
+    dashboard.renderWorkoutTimeChart();
+    dashboard.__replacement = [{ sport: 'Run', date: new Date(2030, 0, 1), startTime: new Date(2030, 0, 1, 8), duration: 100, distance: 1 },
+      { sport: 'Run', date: new Date(2030, 0, 1), startTime: null, duration: 100, distance: 1 },
+      { sport: 'Bike', date: new Date(2030, 0, 1), startTime: new Date(2030, 0, 1, 8), duration: 100, distance: 1 }];
+    vm.runInContext('processedActivities = __replacement', dashboard);
+    dashboard.setWorkoutTimeSportFilter('Run');
+    const model = dashboard.window.workoutTimeDashboard.getExportData();
+    expect(model.startTimeAnalysis).toMatchObject({ selectedCount: 2, validStartCount: 0, excludedStartCount: 2, status: 'no-valid-starts' });
+    expect(model.activityCount).toBe(1);
+    expect(model.period).toContain('2030');
+  });
+});
+
+describe('F080 T045 start evidence selection integration', () => {
+  it('keeps start-count evidence faithful across every chart granularity and measure including missing starts', () => {
+    const { dashboard, elements } = loadAdditionalChart('dashboard-workout-time', 'workoutTimeChart');
+    elements.set('workoutTimeDateStart', {});
+    elements.set('workoutTimeDateEnd', {});
+    dashboard.__evidenceActivities = Array.from({ length: 10 }, (_unused, index) => {
+      const hour = index < 6 ? 8 : 23;
+      return { sport: 'Run', date: new Date(2025, 0, 1), startTime: new Date(Date.UTC(2025, 0, 1, hour)),
+        sourceLocalStart: { year: 2025, month: 1, day: 1, hour, minute: 0, second: 0, offsetMinutes: 0 },
+        duration: 3600, distance: 10 };
+    });
+    dashboard.__evidenceActivities.push({ sport: 'Run', date: new Date(2025, 0, 1), startTime: null });
+    vm.runInContext('processedActivities = __evidenceActivities', dashboard);
+    dashboard.setWorkoutTimeSportFilter('Run');
+    for (const granularity of ['day', 'week', 'month', 'year']) for (const measure of ['count', 'duration', 'distance']) {
+      dashboard.setWorkoutTimeGranularity(granularity);
+      dashboard.setWorkoutTimeMeasure(measure);
+      const model = dashboard.window.workoutTimeDashboard.getExportData();
+      expect(model.startTimeAnalysis).toMatchObject({ basis: 'activity-start-count', selectedCount: 11,
+        validStartCount: 10, excludedStartCount: 1, dominantWindow: 'morning' });
+      expect(model.chartInput.data.datasets[0].data.reduce((sum, value) => sum + value, 0)).toBe(measure === 'distance' ? 100 : 10);
+      expect(model.metric).toBe(measure);
+      expect(model.granularity).toBe(granularity);
+    }
+  });
+});
+
 describe('distribution and workout time chart adapters', () => {
   it('exports selected distribution bins and chart values independently of later live chart edits', () => {
     const { dashboard, elements } = loadAdditionalChart('dashboard-distributions', 'distributionsChart');
@@ -188,7 +260,7 @@ describe('distribution and workout time chart adapters', () => {
     expect(model.groups.length).toBeGreaterThan(0);
     expect(model.chartInput.options.scales.x.ticks.callback(0)).toBe('00');
     expect(model.chartInput.options.scales.x.ticks.maxRotation).toBe(0);
-    expect(model.xAxisTitle).toBe('Start hour (2-hour blocks)');
+    expect(model.xAxisTitle).toBe('Start time');
     const bounds = dashboard.getWorkoutTimeDateBounds();
     expect(model.period).toBe(`${dashboard.formatDateIso(bounds.minDate)} - ${dashboard.formatDateIso(bounds.maxDate)}`);
     const before = JSON.stringify(model);

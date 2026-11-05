@@ -18,6 +18,150 @@ const path = require('path');
 const vm = require('vm');
 const importExperienceCatalog = require('../src/import-experience-catalog');
 
+describe('F080 T005 punchline script integration', () => {
+  it('loads the pure punchline utility after export utilities and before dashboard orchestration', () => {
+    const markup = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+    const scripts = Array.from(markup.matchAll(/<script\b[^>]*src="([^"]+)"/g), match => match[1]);
+    const helperIndex = scripts.indexOf('./src/export-punchline-utils.js');
+    expect(helperIndex).toBe(scripts.indexOf('./src/export-utils.js') + 1);
+    expect(helperIndex).toBeLessThan(scripts.indexOf('./src/dashboard-state.js'));
+    expect(scripts.filter(source => source === './src/export-punchline-utils.js')).toHaveLength(1);
+  });
+});
+
+describe('F080 T014 export review fixture lifecycle', () => {
+  it('chooses reference format and caption only after the new export session starts', async () => {
+    const calls = [];
+    const root = {
+      __reelFixtureDensity: 'sparse', closeExportPreviewModal() {},
+      setVisualizationTab() {}, setAggregationLevel() {}, setSportFilter() {},
+      async setExportFormat(format) { calls.push(`format:${format}`); },
+      async setExportHumorEnabled(enabled) { calls.push(`caption:${enabled}`); },
+      async exportVisualizationTab() { calls.push('export'); }
+    };
+    const context = vm.createContext({ window: root, selectedTimeframeByAggregation: {},
+      lastExportedImage: { width: 1080, height: 1080 }, lastExportImages: [{}],
+      lastExportCaptureState: { snapshot: { selectionId: 'selection-review', filters: [], period: '2025' } } });
+    vm.runInContext(fs.readFileSync(path.join(__dirname, 'fixtures/reel-story-exports/generate.js'), 'utf8'), context);
+    await root.reelStoryFixtures.prepareReviewCase({ id: 'distance-square', target: 'totalDistance', density: 'sparse',
+      format: 'square', humor: false, filters: { aggregation: 'yearly', sport: 'All' } });
+    expect(calls).toEqual(['export', 'format:square', 'caption:false']);
+  });
+});
+
+describe('F080 T021 punchline dialog controls', () => {
+  it('labels default-on controls and provides safe own-text apply and restore commands', () => {
+    const markup = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+    expect(markup).toContain('Add a punchline');
+    expect(markup.match(/<input[^>]*id="exportHumorEnabled"[^>]*>/)[0]).toMatch(/\bchecked\b/);
+    expect(markup).toContain('id="exportPunchlineSuggestion"');
+    expect(markup).toContain('for="exportPunchlineText"');
+    expect(markup).toContain('id="exportPunchlineText"');
+    expect(markup).toContain('oninput="setExportPunchlineDraft(this.value)"');
+    expect(markup).toContain('onclick="applyExportPunchline()"');
+    expect(markup).toContain('onclick="restoreExportPunchline()"');
+    expect(markup).toContain('id="exportPunchlineError"');
+    expect(markup).toContain('aria-label="Apply punchline"');
+    expect(markup).toContain('aria-label="Restore confirmed punchline"');
+  });
+});
+
+describe('F080 T024 personalization review cases', () => {
+  it('covers both browsers, all layouts, custom and two-line text, caption-off series and fit errors', () => {
+    const fixtures = require('./fixtures/reel-story-exports/generate');
+    const cases = fixtures.createPersonalizationReviewCases();
+    expect(new Set(cases.map(item => item.browser))).toEqual(new Set(['Chrome', 'Edge']));
+    expect(new Set(cases.map(item => item.format))).toEqual(new Set(['square', 'portrait', 'story']));
+    expect(cases.some(item => item.expectedFitError && item.format === 'story')).toBe(true);
+    expect(cases.some(item => item.punchlineText?.includes('\n'))).toBe(true);
+    expect(cases.some(item => item.target === 'equipmentTimeline' && item.humor === false)).toBe(true);
+    expect(cases.every(item => !item.punchlineText || Array.from(item.punchlineText).length <= 120)).toBe(true);
+    expect(new Set(cases.map(item => item.id)).size).toBe(cases.length);
+  });
+});
+
+describe('F080 T035 personal-best review inventory', () => {
+  it('opens the unchanged dated dashboard shell but exports the undated synthetic edge model', async () => {
+    let context;
+    let exported;
+    const root = { __reelFixtureDensity: 'sparse', closeExportPreviewModal() {}, setVisualizationTab() {},
+      async setExportFormat() {}, async setExportHumorEnabled() {}, document: { getElementById: () => ({}) },
+      personalBestsDashboard: { getOverviewExportData: () => ({ groups: [{ definitionKey: 'Run-5km', sport: 'Run',
+        title: 'Run 5 km', unit: 's', metricLabel: 'Time', direction: 'down', records: [{ value: 1200,
+          displayValue: '20:00', date: new Date('2025-01-01'), source: { workoutTitle: 'Synthetic source',
+            kind: 'full-activity', estimated: false, activityDate: Date.UTC(2025, 0, 1) } }] }] }) },
+      openPbDetail(model) {
+        if (model.records.some(record => !record.date || !Number.isFinite(record.date.getTime()))) {
+          throw new Error('The unchanged dashboard shell requires dated records');
+        }
+        context.activePbDetailModel = model;
+      },
+      async exportActivePbDetail() { exported = context.activePbDetailModel; }
+    };
+    context = vm.createContext({ window: root, activePbDetailModel: null,
+      lastExportedImage: { width: 1080, height: 1080 }, lastExportImages: [{}],
+      lastExportCaptureState: { snapshot: { selectionId: 'selection-undated', filters: [], period: null } } });
+    vm.runInContext(fs.readFileSync(path.join(__dirname, 'fixtures/reel-story-exports/generate.js'), 'utf8'), context);
+    await root.reelStoryFixtures.prepareReviewCase({ id: 'undated', target: 'personalBests', density: 'sparse',
+      format: 'square', humor: true, filters: { definitionKey: 'Run-5km', recordScenario: 'missing-source' } });
+    expect(exported.records.every(record => record.date === null && record.source.activityDate === null)).toBe(true);
+    expect(exported.records).toHaveLength(2);
+  });
+
+  it('covers overview, every supplied definition and the source/date/title edge scenarios', () => {
+    const fixtures = require('./fixtures/reel-story-exports/generate');
+    const groups = [{ sport: 'Run', definitionKey: 'Run-5 km', records: [{ value: 1200 }] },
+      { sport: 'Bike', definitionKey: 'Bike-power-all-time-profile', xAxisMode: 'duration', records: [{ value: 300 }] }];
+    const cases = fixtures.createPersonalBestReviewCases(groups);
+    expect(new Set(cases.map(item => item.browser))).toEqual(new Set(['Chrome', 'Edge']));
+    expect(new Set(cases.map(item => item.format))).toEqual(new Set(['square', 'portrait', 'story']));
+    for (const group of groups) expect(cases.some(item => item.filters.definitionKey === group.definitionKey)).toBe(true);
+    for (const edge of ['missing-source', 'same-day', 'year-change', 'long-title']) {
+      expect(cases.some(item => item.filters.recordScenario === edge)).toBe(true);
+    }
+    expect(cases.some(item => item.filters.definition === 'overview')).toBe(true);
+    expect(new Set(cases.map(item => item.id)).size).toBe(cases.length);
+  });
+});
+
+describe('F080 T046 local-start browser reference inventory', () => {
+  it('uses the offered gallery export without inventing a removed route control', async () => {
+    const calls = [];
+    const root = { __reelFixtureDensity: 'sparse', closeExportPreviewModal() {}, setVisualizationTab() {},
+      async setExportFormat() {}, async setExportHumorEnabled() {}, Event: class {},
+      document: { getElementById: () => ({ dispatchEvent() {} }) },
+      mediaGalleryDashboard: { async createAnnualRecap() { calls.push('annual'); } } };
+    const context = vm.createContext({ window: root, lastExportedImage: { width: 1080, height: 1920 }, lastExportImages: [{}],
+      lastExportCaptureState: { snapshot: { selectionId: 'selection-media', filters: [], period: '2025' } } });
+    vm.runInContext(fs.readFileSync(path.join(__dirname, 'fixtures/reel-story-exports/generate.js'), 'utf8'), context);
+    const test = { id: 'media-off', target: 'mediaGallery', density: 'sparse', format: 'story', humor: true,
+      filters: { kind: 'annual', includeRoutes: false } };
+    await expect(root.reelStoryFixtures.prepareReviewCase(test)).resolves.toMatchObject({ caseId: 'media-off' });
+    expect(calls).toEqual(['annual']);
+    await expect(root.reelStoryFixtures.prepareReviewCase({ ...test, filters: { ...test.filters, includeRoutes: true } }))
+      .rejects.toThrow(/unavailable|not offered/i);
+    expect(calls).toEqual(['annual']);
+  });
+
+  it('covers four windows, coverage, exact thresholds, chart measures and layouts with explicit expected captions', () => {
+    const fixtures = require('./fixtures/reel-story-exports/generate');
+    const cases = fixtures.createWorkoutTimeReviewCases();
+    expect(new Set(cases.map(item => item.browser))).toEqual(new Set(['Chrome', 'Edge']));
+    expect(new Set(cases.map(item => item.format))).toEqual(new Set(['square', 'portrait', 'story']));
+    expect(new Set(cases.map(item => item.filters.measure))).toEqual(new Set(['count', 'duration', 'distance']));
+    expect(new Set(cases.map(item => item.filters.granularity))).toEqual(new Set(['day', 'week', 'month', 'year']));
+    for (const scenario of ['morning', 'afternoon', 'evening', 'night', 'insufficient', 'mixed',
+      'excluded', 'unknown', 'boundary', 'threshold59', 'threshold60']) {
+      expect(cases.some(item => item.startScenario === scenario)).toBe(true);
+    }
+    expect(cases.find(item => item.startScenario === 'morning').expectedPunchline).toBe('Morning bird');
+    expect(cases.find(item => item.startScenario === 'night').expectedPunchline).toBe('Night owl');
+    expect(cases.find(item => item.startScenario === 'threshold59').expectedPunchline).toBeNull();
+    expect(cases.find(item => item.startScenario === 'threshold60').expectedPunchline).toBe('Morning bird');
+    expect(new Set(cases.map(item => item.id)).size).toBe(cases.length);
+  });
+});
+
 describe('dashboard render revisions', () => {
   function stateContext() {
     const context = vm.createContext({ Map });
@@ -1084,7 +1228,8 @@ describe('index.html inline script syntax', () => {
 
   it('offers accessible Square and Portrait choices in the export preview', () => {
     expect(html).toContain('id="exportFormatSelector" role="group" aria-label="Export image format"');
-    expect(html).toContain('id="exportFormatSquare" aria-pressed="true" onclick="setExportFormat(\'square\')"');
+    expect(html).toContain('id="exportFormatStory" aria-pressed="true" onclick="setExportFormat(\'story\')"');
+    expect(html).toContain('id="exportFormatSquare" aria-pressed="false" onclick="setExportFormat(\'square\')"');
     expect(html).toContain('id="exportFormatPortrait" aria-pressed="false" onclick="setExportFormat(\'portrait\')"');
     expect(html).toContain('id="exportHumorEnabled" onchange="setExportHumorEnabled(this.checked)"');
     expect(html).toContain('for="exportHumorEnabled"');

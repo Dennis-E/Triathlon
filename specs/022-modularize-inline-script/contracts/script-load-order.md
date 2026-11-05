@@ -19,6 +19,7 @@ werden, sonst schlagen `ReferenceError`s zur Laufzeit fehl.
 <script src="./src/equipment-utils.js"></script>
 <script src="./src/tooltip-selection-utils.js"></script>
 <script src="./src/export-utils.js"></script>
+<script src="./src/export-punchline-utils.js"></script>
 <script src="./src/power-pb-utils.js"></script>
 <script src="./src/media-utils.js"></script>
 <script src="./src/zip-importer.js"></script>

@@ -335,6 +335,7 @@ function createMediaExportPage(data, page, ownerDocument = document) {
   const columns = page.columns || (data.mediaKind === 'annual' ? 1 : 2);
   Object.assign(element.style, { width: `${page.visualization.width}px`, display: 'grid',
     gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: '24px',
+    paddingBottom: '24px', boxSizing: 'border-box',
     fontFamily: 'system-ui, sans-serif', color: '#f8fafc', background: 'transparent' });
   for (const index of page.itemIndexes) {
     const item = data.items[index];

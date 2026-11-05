@@ -36,6 +36,27 @@ describe('export-utils', () => {
     const snapshot = (targetKey, familyData) => ({ targetKey, selectionId: 'selection-test',
       filters: [], familyData, period: '2013-2025', metric: 'Distance', units: 'km' });
 
+    it.each(['square', 'portrait', 'story'])('plans every heart-rate observation with distinct point legends in %s', format => {
+      const points = [{ x: 1000, y: 75 }, { x: 1000, y: 180 }, { x: 1000, y: 180 }];
+      const legend = { items: [{ label: 'Minimum', color: '#34d399', pointStyle: 'circle' }, { label: 'Maximum', color: '#fb7185', pointStyle: 'triangle' }] };
+      const plan = planExportPages(snapshot('heartRate', { points, legend }), { format, headline: 'Heart rate' });
+      expect(plan.layoutKind).toBe('scatter');
+      expect(plan.pages[0].itemIndexes).toEqual([0, 1, 2]);
+      expect(plan.legendRows.flatMap(row => row.entries).map(entry => entry.pointStyle)).toEqual(['circle', 'triangle']);
+      expect(getTabDisplayTitle('heartRate')).toBe('Heart rate');
+      expect(getExportTargetSlug({ kind: 'tab', key: 'heartRate' })).toBe('heart-rate');
+    });
+
+    it.each(['square', 'portrait', 'story'])('keeps calendar extrema and copied period context intact when planning %s', format => {
+      const data = { aggregation:'weekly',periodCount:2,periodLabels:['2025-12-29 - 2026-01-04','2026-01-05 - 2026-01-11'],
+        periodStart:1,periodEnd:10,points:[{x:3,y:75},{x:3,y:190},{x:8,y:65},{x:8,y:165}] };
+      const before=JSON.stringify(data);
+      const plan=planExportPages(snapshot('heartRate',data),{format,headline:'Weekly heart-rate minimum and maximum'});
+      expect(plan.layoutKind).toBe('scatter');
+      expect(plan.pages[0].itemIndexes).toEqual([0,1,2,3]);
+      expect(JSON.stringify(data)).toBe(before);
+    });
+
     it('paginates long equipment names without losing rows, changing rank scales or shrinking text', () => {
       const items = Array.from({ length: 20 }, (_, index) => ({ id: `item-${index}`, name: `Long equipment model ${index + 1} with meaningful distinguishing details`, value: 1000 - index * 10 }));
       const plan = planExportPages(snapshot('equipment', { items }), options, measurements);

@@ -150,7 +150,8 @@ describe('bundled Silicon Valley training history', () => {
     expect(payload.activities.length).toBeGreaterThanOrEqual(1500);
     const dataset = sampleDataUtils.hydrateSampleDataset(payload);
     const availability = require('../src/visualization-availability').getVisualizationAvailability(dataset.activities, dataset);
-    expect(Object.entries(availability).filter(([name]) => name !== 'mediaGallery').every(([, available]) => available)).toBe(true);
+    expect(Object.entries(availability).filter(([name]) => !['mediaGallery', 'heartRate'].includes(name)).every(([, available]) => available)).toBe(true);
+    expect(availability.heartRate).toBe(false);
     expect(availability.mediaGallery).toBe(false);
     const equipmentUtils = require('../src/equipment-utils');
     const shoeEquipment = equipmentUtils.aggregateEquipmentDistance(dataset.activities, 'Shoes');

@@ -6,7 +6,7 @@ This dashboard helps you explore training history from Strava, TrainingPeaks, or
 
 To explore immediately, choose **Use exemplary data** on the landing page. It loads
 1,600 fictional Run/Bike/Swim activities from 2021-2025, including 923 GPS tracks
-around Silicon Valley and nearby training destinations. All non-media analyses,
+around Silicon Valley and nearby training destinations. Supported non-media analyses,
 sport/year filters, and image exports are available. The dashboard and exported
 images identify this as synthetic sample training; photos/videos are not fabricated.
 See [sample-data/README.md](sample-data/README.md) for sources, licensing and regeneration.
@@ -45,6 +45,15 @@ The export preview and its originating Personal Bests detail close after browser
   - Compare effort and pace across sessions
   - Filter by sport: All, Run, Bike, Swim
   - Narrow the date range to review a specific period
+
+- Heart-rate minimum and maximum
+  - Compare separate minimum/maximum point series in bpm by training day, Monday-based week, calendar month or year
+  - A single valid minimum or maximum enables the view; averages and zeros never replace missing extrema. Missing TrainingPeaks summaries can use actual qualified FIT observations, identified in details
+  - Existing single-sport/timeframe filters run before aggregation; bounded axes show the requested window even when the trainings stay identical. Empty filter results keep the tab available but disable export
+  - Inspect all contributing trainings and tied extrema by pointer, touch, or keyboard
+  - Use the standard Export for Insta / Strava action for local square, portrait or story PNGs, with copied grouping, sport and requested date range, without inspection pins
+  - Filter changes cancel unfinished captures; a published preview retains its snapshot until closed, an empty selection, or a replacement import
+  - Sources without usable extrema do not expose this tab; average-only imports remain available to other supported views
 
 - Equipment mileage
   - See kilometers by shoe or bike

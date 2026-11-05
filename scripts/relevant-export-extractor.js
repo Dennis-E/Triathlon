@@ -172,9 +172,11 @@ function reduceActivitiesRows(rows) {
   });
 
   const elevationIndex = findHeaderIndex(headers, { type: 'predicateElevation' });
+  const extremeIndices = headers.map((header, index) => require('../src/heart-rate-utils').getCsvHeartRateKind(header) ? index : -1).filter(index => index !== -1);
 
   const reducedRows = [selectedColumns.map(column => column.outputHeader)];
   if (elevationIndex !== null) reducedRows[0].push('Höhenmeter');
+  reducedRows[0].push(...extremeIndices.map(index => headers[index]));
 
   for (let rowIndex = 1; rowIndex < rows.length; rowIndex++) {
     const row = rows[rowIndex];
@@ -183,6 +185,7 @@ function reduceActivitiesRows(rows) {
       return row[column.index];
     });
     if (elevationIndex !== null) reducedRow.push(elevationIndex >= row.length ? '' : row[elevationIndex]);
+    reducedRow.push(...extremeIndices.map(index => row[index] ?? ''));
     reducedRows.push(reducedRow);
   }
 

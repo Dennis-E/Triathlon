@@ -891,6 +891,173 @@ async function readAndParseFitData(zip, filename, fitDeps) {
   return doParse(FitParserCtor, bytes);
 }
 
+function inspectFitHeartRateSummaryPresence(content) {
+  const end = content.length - 2;
+  const view = new DataView(content.buffer, content.byteOffset, content.byteLength);
+  const definitions = new Map();
+  const summaries = [];
+  let offset = content[0];
+  while (offset < end) {
+    const header = content[offset];
+    if (header & 0x80) return null;
+    const localId = header & 0x0f;
+    if (header & 0x40) {
+      if (offset + 6 > end || ![0, 1].includes(content[offset + 2])) return null;
+      const fieldCount = content[offset + 5];
+      const fieldsEnd = offset + 6 + fieldCount * 3;
+      if (fieldsEnd > end) return null;
+      const fields = [];
+      for (let index = offset + 6; index < fieldsEnd; index += 3) {
+        fields.push({ number: content[index], size: content[index + 1], baseType: content[index + 2] });
+      }
+      let nextOffset = fieldsEnd;
+      if (header & 0x20) {
+        if (nextOffset >= end) return null;
+        const developerCount = content[nextOffset];
+        const developerEnd = nextOffset + 1 + developerCount * 3;
+        if (developerEnd > end) return null;
+        for (let index = nextOffset + 1; index < developerEnd; index += 3) {
+          fields.push({ number: null, size: content[index + 1], baseType: null });
+        }
+        nextOffset = developerEnd;
+      }
+      if (fields.some(field => field.size === 0)) return null;
+      definitions.set(localId, { globalId: view.getUint16(offset + 3, content[offset + 2] === 0), fields });
+      offset = nextOffset;
+    } else {
+      if (header & 0x30) return null;
+      const definition = definitions.get(localId);
+      if (!definition) return null;
+      const nextOffset = offset + 1 + definition.fields.reduce((size, field) => size + field.size, 0);
+      if (nextOffset > end) return null;
+      if (definition.globalId === 18) {
+        const summary = { minimum: 'missing', maximum: 'missing' };
+        let fieldOffset = offset + 1;
+        for (const field of definition.fields) {
+          const kind = field.number === 64 ? 'minimum' : field.number === 17 ? 'maximum' : null;
+          if (kind) {
+            if (field.size !== 1 || field.baseType !== 2 || summary[kind] !== 'missing') return null;
+            summary[kind] = content[fieldOffset] > 0 && content[fieldOffset] < 255 ? 'valid' : 'invalid';
+          }
+          fieldOffset += field.size;
+        }
+        summaries.push(summary);
+      }
+      offset = nextOffset;
+    }
+  }
+  return offset === end ? summaries : null;
+}
+
+async function readTrainingPeaksFitWithHeartRateEvidence(entry, dependencies = {}) {
+  const rawBytes = await entry.async('uint8array');
+  let bytes = rawBytes;
+  if (/\.gz$/i.test(dependencies.filename || entry.name || '')) {
+    try {
+      bytes = await (dependencies.gunzipUint8Array || gunzipUint8Array)(rawBytes);
+    } catch (error) {
+      throw new Error(`Could not decompress GZIP data: ${error.message}`);
+    }
+  }
+  const FitParserCtor = await (dependencies.ensureFitParserLoaded || ensureFitParserLoaded)();
+  const fitData = await (dependencies.parseFitData || parseFitData)(FitParserCtor, bytes);
+  const heartRateReadEvidence = { readStatus: 'unknown', lengthValidated: false, integrityValidated: false,
+    strictParseCompleted: false, recordsComplete: false, resourceLimited: false, unit: null, reason: 'read_unknown' };
+  const result = { fitData, heartRateReadEvidence };
+  const sessions = Array.isArray(fitData && fitData.sessions) ? fitData.sessions : [];
+  const missing = value => value === undefined || value === null || value === '';
+  if (!sessions.some(session => session && (missing(session.min_heart_rate) || missing(session.max_heart_rate)))) return result;
+  const content = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const headerLength = content[0];
+  if (content.length < 14 || ![12, 14].includes(headerLength) ||
+      String.fromCharCode(...content.subarray(8, 12)) !== '.FIT' ||
+      new DataView(content.buffer, content.byteOffset, content.byteLength).getUint32(4, true) + headerLength + 2 !== content.length) {
+    heartRateReadEvidence.readStatus = 'incomplete';
+    heartRateReadEvidence.reason = 'read_incomplete';
+    return result;
+  }
+  heartRateReadEvidence.lengthValidated = true;
+  let callbackCount = 0;
+  let strictError = null;
+  let strictData = null;
+  try {
+    const parser = new FitParserCtor({ force: false, speedUnit: 'm/s', lengthUnit: 'm', mode: 'list', elapsedRecordField: false });
+    parser.parse(content.buffer.slice(content.byteOffset, content.byteOffset + content.byteLength), (error, data) => {
+      callbackCount += 1;
+      strictError = error;
+      strictData = data;
+    });
+  } catch (error) {
+    heartRateReadEvidence.readStatus = 'incomplete';
+    heartRateReadEvidence.reason = 'read_incomplete';
+    return result;
+  }
+  if (callbackCount === 0) return result;
+  if (callbackCount !== 1 || strictError || !strictData) {
+    heartRateReadEvidence.readStatus = 'incomplete';
+    heartRateReadEvidence.reason = 'read_incomplete';
+    return result;
+  }
+  heartRateReadEvidence.strictParseCompleted = true;
+  heartRateReadEvidence.integrityValidated = true;
+  heartRateReadEvidence.recordsComplete = Array.isArray(fitData.records) && Array.isArray(strictData.records) &&
+    fitData.records.length === strictData.records.length;
+  const summaryFieldPresence = inspectFitHeartRateSummaryPresence(content);
+  if (!summaryFieldPresence || summaryFieldPresence.length !== sessions.length) {
+    heartRateReadEvidence.readStatus = 'unknown';
+    return result;
+  }
+  heartRateReadEvidence.summaryFieldPresence = summaryFieldPresence;
+  heartRateReadEvidence.readStatus = heartRateReadEvidence.recordsComplete ? 'complete' : 'incomplete';
+  heartRateReadEvidence.unit = heartRateReadEvidence.recordsComplete ? 'bpm' : null;
+  heartRateReadEvidence.reason = heartRateReadEvidence.recordsComplete ? null : 'read_incomplete';
+  return result;
+}
+
+function qualifyFitHeartRateSessions(rawSessions, records, readEvidence) {
+  const sessions = Array.isArray(rawSessions) ? rawSessions : [];
+  const read = readEvidence || {};
+  const blocked = reason => sessions.map((session, sessionIndex) => ({
+    sessionIndex, qualified: false, reason, records: [], readEvidence: read
+  }));
+  if (read.resourceLimited) return blocked('resource_limit');
+  if (!read.readStatus || read.readStatus === 'unknown') return blocked('read_unknown');
+  if (read.readStatus !== 'complete' || !read.lengthValidated || !read.integrityValidated ||
+      !read.strictParseCompleted || !read.recordsComplete) return blocked('read_incomplete');
+  if (read.unit !== 'bpm') return blocked('unknown_unit');
+  const validTime = value => value instanceof Date && Number.isFinite(value.getTime());
+  if (sessions.some(session => !session || !validTime(session.start_time) || !validTime(session.timestamp) ||
+      session.start_time.getTime() >= session.timestamp.getTime())) return blocked('invalid_boundary');
+  const qualified = sessions.map((session, sessionIndex) => ({
+    sessionIndex, startMs: session.start_time.getTime(), endMs: session.timestamp.getTime(),
+    qualified: true, reason: null, records: [], readEvidence: read
+  }));
+  for (let first = 0; first < qualified.length; first += 1) {
+    for (let second = first + 1; second < qualified.length; second += 1) {
+      if (qualified[first].startMs < qualified[second].endMs && qualified[second].startMs < qualified[first].endMs) {
+        for (const owner of [qualified[first], qualified[second]]) {
+          owner.qualified = false;
+          owner.reason = 'overlapping_sessions';
+        }
+      }
+    }
+  }
+  for (const record of Array.isArray(records) ? records : []) {
+    if (!record || !Number.isInteger(record.heart_rate) || record.heart_rate < 1 || record.heart_rate > 254) continue;
+    if (!validTime(record.timestamp)) return blocked('invalid_timestamp');
+    const time = record.timestamp.getTime();
+    const owners = qualified.filter(owner => time >= owner.startMs && time <= owner.endMs);
+    if (owners.length > 1) {
+      for (const owner of owners) {
+        owner.qualified = false;
+        if (!owner.reason) owner.reason = 'ambiguous_boundary_record';
+      }
+    } else if (owners.length === 1) owners[0].records.push(record);
+  }
+  for (const owner of qualified) if (!owner.qualified) owner.records = [];
+  return qualified;
+}
+
 function toValidDate(value) {
   if (value instanceof Date && Number.isFinite(value.getTime())) return new Date(value.getTime());
   if (value === null || value === undefined || value === '') return null;
@@ -917,7 +1084,7 @@ function hashTrainingPeaksIdentity(value) {
   return `${(first >>> 0).toString(16).padStart(8, '0')}${(second >>> 0).toString(16).padStart(8, '0')}`;
 }
 
-function normalizeTrainingPeaksSession(session, sourceEntry, sessionIndex) {
+function normalizeTrainingPeaksSession(session, sourceEntry, sessionIndex, summaryPresence) {
   const startTime = toValidDate(session && (session.start_time || session.startTime));
   const sportRaw = session && session.sport ? String(session.sport) : '';
   const sport = normalizeSportForFit(sportRaw);
@@ -943,6 +1110,16 @@ function normalizeTrainingPeaksSession(session, sourceEntry, sessionIndex) {
   const identity = completeFingerprint || sourceIdentity;
   const activityId = `tp-${hashTrainingPeaksIdentity(identity)}`;
   const optionalNumber = value => Number.isFinite(value) && value >= 0 ? value : null;
+  const summaryEvidence = (value, presence) => {
+    const missing = presence !== 'invalid' && (value === null || value === undefined || value === '');
+    const valid = presence !== 'invalid' && Number.isFinite(value) && value > 0 && value !== 255;
+    return { value: valid ? value : null, status: missing ? 'missing' : valid ? 'valid' : 'invalid',
+      source: missing ? null : 'summary', reason: missing ? 'missing' : valid ? null : 'invalid_value', sampleCount: null, readComplete: null };
+  };
+  const heartRateProvenance = {
+    minimum: summaryEvidence(session.min_heart_rate, summaryPresence && summaryPresence.minimum),
+    maximum: summaryEvidence(session.max_heart_rate, summaryPresence && summaryPresence.maximum)
+  };
 
   return {
     identity,
@@ -961,6 +1138,9 @@ function normalizeTrainingPeaksSession(session, sourceEntry, sessionIndex) {
       duration,
       durationAvailable,
       avgHeartRate: optionalNumber(session.avg_heart_rate),
+      minHeartRate: heartRateProvenance.minimum.value,
+      maxHeartRate: heartRateProvenance.maximum.value,
+      heartRateProvenance,
       avgWatts: sport === 'Bike' ? optionalNumber(session.avg_power) : null,
       avgCadence: optionalNumber(session.avg_cadence),
       totalSteps: null,
@@ -1035,6 +1215,8 @@ function uniquelyMatchGpxRouteToSession(points, sessions) {
  * @param {Object} [fitDeps] test overrides for ZIP, GZIP, and FIT parser dependencies
  */
 async function importTrainingPeaksZips(zipFiles, reportProgress, fitDeps) {
+  const heartRate = typeof module !== 'undefined' && module.exports
+    ? require('./heart-rate-utils') : window.heartRateUtils;
   const files = Array.from(zipFiles || []);
   if (files.length === 0) throw new Error('Select at least one TrainingPeaks ZIP archive.');
   const notify = typeof reportProgress === 'function' ? reportProgress : () => {};
@@ -1104,8 +1286,11 @@ async function importTrainingPeaksZips(zipFiles, reportProgress, fitDeps) {
 
     for (const entryName of entryNames.filter(isFitEntry)) {
       let fitData;
+      let heartRateReadEvidence;
       try {
-        fitData = await readAndParseFitData(zip, entryName, deps);
+        const parsed = await readTrainingPeaksFitWithHeartRateEvidence(zip.files[entryName], { ...deps, filename: entryName });
+        fitData = parsed.fitData;
+        heartRateReadEvidence = parsed.heartRateReadEvidence;
       } catch (error) {
         throw new Error(`Could not process ${file.name} entry ${entryName}: ${error.message}`);
       }
@@ -1113,8 +1298,19 @@ async function importTrainingPeaksZips(zipFiles, reportProgress, fitDeps) {
       if (fitSessions.length === 0) {
         throw new Error(`Could not process ${file.name} entry ${entryName}: no FIT sessions were found.`);
       }
+      const records = Array.isArray(fitData.records) ? fitData.records : [];
+      const qualifiedHeartRate = qualifyFitHeartRateSessions(fitSessions, records, heartRateReadEvidence);
       const normalized = fitSessions
-        .map((session, sessionIndex) => normalizeTrainingPeaksSession(session, entryName, sessionIndex))
+        .map((session, sessionIndex) => {
+          const presence = heartRateReadEvidence.summaryFieldPresence && heartRateReadEvidence.summaryFieldPresence[sessionIndex];
+          const item = normalizeTrainingPeaksSession(session, entryName, sessionIndex, presence);
+          if (item.activity) {
+            const qualification = qualifiedHeartRate[sessionIndex];
+            const observed = heartRate.deriveTimedHeartRateExtrema(qualification.records, qualification);
+            Object.assign(item.activity, heartRate.resolveHeartRateExtrema(item.activity.heartRateProvenance, observed));
+          }
+          return item;
+        })
         .sort((a, b) => {
           if (!a.startTime) return 1;
           if (!b.startTime) return -1;
@@ -1123,8 +1319,6 @@ async function importTrainingPeaksZips(zipFiles, reportProgress, fitDeps) {
       const validSessions = normalized.filter(item => item.activity);
       skippedUnsupportedSportCount += normalized.filter(item => item.skippedReason === 'unsupported-sport').length;
       skippedInvalidSessionCount += normalized.filter(item => item.skippedReason === 'invalid-start-time').length;
-      const records = Array.isArray(fitData.records) ? fitData.records : [];
-
       for (let sessionIndex = 0; sessionIndex < validSessions.length; sessionIndex += 1) {
         const item = validSessions[sessionIndex];
         const isDuplicate = seenIdentities.has(item.identity);
@@ -1193,7 +1387,8 @@ async function importTrainingPeaksZips(zipFiles, reportProgress, fitDeps) {
     fitBestEffortsByActivityId,
     skippedUnsupportedSportCount,
     skippedInvalidSessionCount,
-    skippedGpxRouteCount
+    skippedGpxRouteCount,
+    heartRateCoverage: heartRate.summarizeHeartRateCoverage(activities)
   };
 }
 
@@ -1323,6 +1518,8 @@ function extractRelevantColumns(csvText) {
   const rows = parseCsvBasic(csvText);
   if (!rows || rows.length === 0) return '';
   const headers = rows[0];
+  const extremaUtils = typeof module !== 'undefined' && module.exports ? require('./heart-rate-utils') : window.heartRateUtils;
+  const extremeIndices = headers.map((header, index) => extremaUtils.getCsvHeartRateKind(header) ? index : -1).filter(index => index !== -1);
 
   const findOneOf = (names) => {
     for (const n of names) {
@@ -1372,6 +1569,7 @@ function extractRelevantColumns(csvText) {
     'Distanz'
   ];
 
+  outHeaders.push(...extremeIndices.map(index => headers[index]));
   const outputRows = [outHeaders];
 
   for (let r = 1; r < rows.length; r++) {
@@ -1388,6 +1586,7 @@ function extractRelevantColumns(csvText) {
     outRow.push(avgPowerIdx !== -1 ? row[avgPowerIdx] : '');
     // For the last Distanz column, if we have two occurrences try to use the first occurrence if only one exists
     if (distIndices.length > 1) outRow.push(row[distIndices[1]]); else outRow.push(row[distIndices[0]] || '');
+    outRow.push(...extremeIndices.map(index => row[index] ?? ''));
     outputRows.push(outRow);
   }
 
@@ -1414,6 +1613,8 @@ if (typeof module !== 'undefined' && module.exports) {
     extractFitPowerEffortsFromZip,
     extractGpsAndPowerFromZip,
     readAndParseFitFile,
+    readTrainingPeaksFitWithHeartRateEvidence,
+    qualifyFitHeartRateSessions,
     importTrainingPeaksZips,
     extractGpxTrackpointsWithTimes
   };

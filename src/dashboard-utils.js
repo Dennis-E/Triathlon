@@ -297,6 +297,8 @@ function processData(rawCsvData) {
     const parsedCadence = avgCadenceIdx !== -1 ? parseLocalizedNumber(row[avgCadenceIdx]) : null;
     const parsedTotalSteps = totalStepsIdx !== -1 ? parseLocalizedNumber(row[totalStepsIdx]) : null;
     const elevationGain = elevationIdx !== -1 ? parseElevationNumber(row[elevationIdx]) : null;
+    const heartRateUtils = require('./heart-rate-utils');
+    const heartRateEvidence = heartRateUtils.inspectCsvHeartRateExtrema(headers, row);
 
     processedActivities.push({
       id: row[0],
@@ -311,6 +313,7 @@ function processData(rawCsvData) {
       duration: durationSeconds,
       durationAvailable,
       avgHeartRate,
+      ...heartRateUtils.resolveHeartRateExtrema(heartRateEvidence),
       avgWatts: sportCategory === 'Bike' ? avgWatts : null,
       avgCadence: Number.isFinite(parsedCadence) && parsedCadence > 0 ? parsedCadence : null,
       totalSteps: sportCategory === 'Run' && Number.isFinite(parsedTotalSteps) && parsedTotalSteps > 0 ? parsedTotalSteps : null,

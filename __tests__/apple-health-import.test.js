@@ -44,6 +44,92 @@ describe('Apple Health foundation', () => {
   });
 });
 
+describe('Apple runtime diagnostics', () => {
+  const browser = overrides => ({ location: { protocol: 'http:', hostname: '127.0.0.1', href: 'private-url' },
+    isSecureContext: true, Worker: function SyntheticWorker() {}, TextEncoder, TextDecoder,
+    ReadableStream, WritableStream, AbortController, crypto: require('crypto').webcrypto, ...overrides });
+
+  test.each([
+    ['http:', 'localhost', true, null], ['http:', '127.0.0.1', true, null], ['http:', '[::1]', true, null],
+    ['https:', 'example.invalid', true, null], ['file:', '', false, 'UNSUPPORTED_DEPLOYMENT'],
+    ['http:', 'example.invalid', false, 'INSECURE_CONTEXT'], ['https:', 'example.invalid', false, 'INSECURE_CONTEXT']
+  ])('checks actual deployment %s / %s without browser-name assumptions', (protocol, hostname, secure, code) => {
+    const result = utils.inspectRuntimeCapabilities(browser({ location: { protocol, hostname }, isSecureContext: secure }), 'window', 7);
+    if (code) expect(result).toMatchObject({ v: 1, code, generation: 7 });
+    else expect(result).toBeNull();
+  });
+
+  test('checks functions in their actual realm and identifies missing crypto without a fallback', () => {
+    expect(utils.inspectRuntimeCapabilities(browser({ Worker: undefined }), 'window', 2)).toMatchObject({
+      code: 'MISSING_CAPABILITY', missingCapabilities: ['Worker'], action: 'use-supported-environment'
+    });
+    expect(utils.inspectRuntimeCapabilities(browser({ crypto: undefined, TextDecoder: undefined }), 'worker', 2)).toMatchObject({
+      code: 'MISSING_CAPABILITY', missingCapabilities: expect.arrayContaining(['crypto.subtle.digest', 'TextDecoder']), environment: { realm: 'worker' }
+    });
+  });
+
+  test('creates only bounded safe enums and validates worker diagnostics strictly', () => {
+    const environment = utils.getRuntimeEnvironment(browser(), 'worker');
+    const diagnostic = utils.createRuntimeDiagnostic('HASH_FAILED', { generation: 7, phase: 'hashing', component: 'crypto', environment,
+      message: 'private-filename', stack: 'private-stack', url: 'private-url', missingCapabilities: ['TextEncoder', 'TextEncoder', 'private-value'] });
+    expect(diagnostic).toMatchObject({ v: 1, code: 'HASH_FAILED', generation: 7, phase: 'hashing', component: 'crypto',
+      missingCapabilities: ['TextEncoder'], environment: { scheme: 'http', hostClass: 'loopback', secureContext: true, realm: 'worker' } });
+    expect(JSON.stringify(diagnostic)).not.toMatch(/private|href|hostname|stack/);
+    expect(utils.validateRuntimeDiagnostic(diagnostic, 7)).toEqual(diagnostic);
+    for (const changes of [{ generation: -1 }, { generation: 8 }, { v: 2 }, { phase: 'private-value' },
+      { missingCapabilities: ['private-value'] }, { missingCapabilities: ['TextEncoder', 'TextEncoder'] },
+      { environment: { ...environment, href: 'private-url' } }, { action: 'private-value' }, { filename: 'private-filename' }]) {
+      expect(utils.validateRuntimeDiagnostic({ ...diagnostic, ...changes }, 7)).toBeNull();
+    }
+    expect(utils.failure('not-a-code').code).toBe('INVALID_ARCHIVE');
+  });
+
+  test.each([
+    [{ zip: null }, 'DEPENDENCY_LOAD_FAILED'], [{ zip: {} }, 'DEPENDENCY_INVALID'],
+    [{ sax: null }, 'DEPENDENCY_LOAD_FAILED'], [{ sax: {} }, 'DEPENDENCY_INVALID']
+  ])('distinguishes missing and invalid dependency exports %o', async (changes, code) => {
+    const file = await fixtures.archive({ 'apple_health_export/export.xml': fixtures.healthXml(fixtures.workout()) });
+    await expect(importer.importAppleHealthZip(file, undefined, { ...dependencies, ...changes })).rejects.toMatchObject({ code });
+  });
+
+  test('maps actual hash failure separately from archive errors without exposing raw exceptions', async () => {
+    const file = await fixtures.archive({ 'apple_health_export/export.xml': fixtures.healthXml(fixtures.workout()) });
+    const outcome = await importer.importAppleHealthZip(file, undefined, { ...dependencies, hash: async () => { throw new Error('private-filename'); } }).catch(error => error);
+    expect(outcome).toMatchObject({ code: 'HASH_FAILED' });
+    expect(outcome.message).not.toContain('private');
+  });
+
+  test.each([
+    [undefined, 'MISSING_CAPABILITY'], [{ subtle: { digest: async () => { throw new Error('private-message'); } } }, 'HASH_FAILED']
+  ])('maps native crypto errors without changing secure identity requirements', async (crypto, code) => {
+    const context = vm.createContext({ TextEncoder, crypto });
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/apple-health-utils.js'), 'utf8'), context);
+    const outcome = await context.appleHealthUtils.digest('synthetic').catch(error => error);
+    expect(outcome).toMatchObject({ code });
+    expect(outcome.message).not.toContain('private');
+  });
+
+  test.each(['TextDecoder', 'TextEncoder', 'WritableStream', 'ReadableStream'])(
+    'reports a truly missing %s in the import working context', async capability => {
+      const context = vm.createContext({ TextDecoder, TextEncoder, ReadableStream, WritableStream, setTimeout, [capability]: undefined });
+      for (const name of ['apple-health-utils.js', 'apple-health-importer.js']) {
+        vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', name), 'utf8'), context);
+      }
+      const file = await fixtures.archive({ 'apple_health_export/export.xml': fixtures.healthXml(fixtures.workout()) });
+      const outcome = await context.appleHealthImporter.importAppleHealthZip(file, undefined, dependencies).catch(error => error);
+      expect(outcome).toMatchObject({ code: 'MISSING_CAPABILITY', diagnostic: { missingCapabilities: [capability] } });
+    }
+  );
+
+  test('keeps invalid encoding separate from unexpected parser callback defects', async () => {
+    await expect(importer.parseHealthXml([new Uint8Array([0xc3, 0x28])], {}, { sax })).rejects.toMatchObject({ code: 'UNSUPPORTED_ENCODING' });
+    const content = new TextEncoder().encode(fixtures.healthXml(fixtures.workout()));
+    const outcome = await importer.parseHealthXml([content], { workout: () => { throw new TypeError('private-value'); } }, { sax }).catch(error => error);
+    expect(outcome).toMatchObject({ code: 'INTERNAL_ERROR' });
+    expect(outcome.message).not.toContain('private');
+  });
+});
+
 describe('Apple Health original archive import', () => {
   async function importContents(contents, entries = {}, options = {}) {
     const file = await fixtures.archive({ 'nested/apple_health_export/Export.xml': fixtures.healthXml(contents), ...entries });
@@ -62,6 +148,42 @@ describe('Apple Health original archive import', () => {
     expect(run.date).toBeInstanceOf(Date);
     expect(result.diagnostics.unsupportedBySport.HKWorkoutActivityTypeWalking).toBe(1);
     expect(result.mediaLibrary).toBeUndefined();
+  });
+
+  test.each([
+    [{ minimum: '75', maximum: '180' }, 'count/min', [75, 180]],
+    [{ maximum: '180' }, 'count/min', [null, 180]],
+    [{ minimum: '0', maximum: '180' }, 'count/min', [null, 180]],
+    [{ minimum: '75', maximum: '180' }, 'Hz', [null, null]],
+    [{ minimum: '75', maximum: '180', startDate: '2025-03-01 08:00:00 +0100', endDate: '2025-03-01 08:30:00 +0100' }, 'count/min', [75, 180]],
+    [{ minimum: '75', maximum: '180', startDate: '2025-03-01 08:10:00 +0100', endDate: '2025-03-01 08:30:00 +0100' }, 'count/min', [null, null]],
+    [{ minimum: '75', maximum: '180', startDate: '2025-03-01 08:00:00 +0100' }, 'count/min', [null, null]]
+  ])('imports only unambiguous workout heart-rate extrema %o', async (extra, unit, expected) => {
+    const contents = fixtures.workout({}, fixtures.statistic('HeartRate', undefined, unit, { average: '145', ...extra }));
+    const first = await importContents(contents);
+    const second = await importContents(contents);
+    expect([first.activities[0].minHeartRate, first.activities[0].maxHeartRate]).toEqual(expected);
+    expect(first.activities[0].id).toBe(second.activities[0].id);
+    expect(first.activities[0].avgHeartRate).toBe(unit === 'count/min' ? 145 : null);
+  });
+
+  test('adds only direct Apple summary provenance outside the identity fingerprint', async () => {
+    const result = await importContents(fixtures.workout({}, fixtures.statistic('HeartRate', undefined, 'count/min', { minimum: '75', maximum: '180' })));
+    expect(result.activities[0].heartRateProvenance).toMatchObject({
+      minimum: { value: 75, status: 'valid', source: 'summary', sampleCount: null, readComplete: null },
+      maximum: { value: 180, status: 'valid', source: 'summary' }
+    });
+    const absent = await importContents(fixtures.workout() + fixtures.record('HeartRate', '150'));
+    expect(absent.activities[0].heartRateProvenance).toMatchObject({ minimum: { status: 'missing', source: null }, maximum: { status: 'missing', source: null } });
+  });
+
+  test('does not combine conflicting workout heart-rate extrema or derive them from records', async () => {
+    const result = await importContents(fixtures.workout({},
+      fixtures.statistic('HeartRate', undefined, 'count/min', { minimum: '75', maximum: '180' }) +
+      fixtures.statistic('HeartRate', undefined, 'count/min', { minimum: '85', maximum: '180' })));
+    expect(result.activities[0]).toMatchObject({ minHeartRate: null, maxHeartRate: 180 });
+    const recordsOnly = await importContents(fixtures.workout() + fixtures.record('HeartRate', '150'));
+    expect(recordsOnly.activities[0]).toMatchObject({ minHeartRate: null, maxHeartRate: null });
   });
 
   test('does not duplicate complete identities but preserves missing-source candidates', async () => {

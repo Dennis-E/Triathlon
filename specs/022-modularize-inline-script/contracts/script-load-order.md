@@ -27,6 +27,8 @@ werden, sonst schlagen `ReferenceError`s zur Laufzeit fehl.
 <script src="./src/wordcloud-utils.js"></script>
 <script src="./src/analysis-counter.js"></script>
 <script src="./src/sample-data-utils.js"></script>
+<script src="./src/heart-rate-utils.js"></script>
+<script src="./src/visualization-availability.js"></script>
 
 <!-- NEU: Dashboard-Orchestrierung, in dieser exakten Reihenfolge -->
 <script src="./src/dashboard-state.js"></script>
@@ -38,6 +40,7 @@ werden, sonst schlagen `ReferenceError`s zur Laufzeit fehl.
 <script src="./src/dashboard-distributions.js"></script>
 <script src="./src/dashboard-workout-time.js"></script>
 <script src="./src/dashboard-scatter.js"></script>
+<script src="./src/dashboard-heart-rate.js"></script>
 <script src="./src/dashboard-heatmap.js"></script>
 <script src="./src/dashboard-training-calendar.js"></script>
 <script src="./src/dashboard-wordcloud.js"></script>

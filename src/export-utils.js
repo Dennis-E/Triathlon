@@ -4,6 +4,7 @@
 const TAB_DISPLAY_TITLES = {
   totalDistance: 'Distance',
   paceMetrics: 'Pace vs ...',
+  heartRate: 'Heart rate',
   equipment: 'Equipment mileage',
   equipmentTimeline: 'Equipment Timeline',
   personalBests: 'Personal Bests',
@@ -20,6 +21,7 @@ const TAB_DISPLAY_TITLES = {
 const TAB_FILENAME_SLUGS = {
   totalDistance: 'distance',
   paceMetrics: 'pace-metrics',
+  heartRate: 'heart-rate',
   equipment: 'equipment',
   equipmentTimeline: 'equipment-timeline',
   personalBests: 'personal-bests',
@@ -276,7 +278,7 @@ function computeSocialExportLayout(format = 'square', options = {}) {
 function planExportPages(snapshot, options = {}, measurements = {}) {
   const format = getExportFormatConfig(options.format || 'square');
   if (!format) throw new RangeError('Unsupported export format');
-  const families = { totalDistance: 'periods', paceMetrics: 'scatter', equipment: 'ranking',
+  const families = { totalDistance: 'periods', paceMetrics: 'scatter', heartRate: 'scatter', equipment: 'ranking',
     equipmentTimeline: 'timeline', personalBests: 'records', heatmap: 'map', distributions: 'distribution',
     workoutTime: 'pattern', trainingCalendar: 'calendar', wordcloud: 'words', pieCharts: 'pie',
     lifetimeStatistics: 'statistics', mediaGallery: 'media' };
@@ -334,7 +336,8 @@ function planExportPages(snapshot, options = {}, measurements = {}) {
     if (row.length && rowWidth + width > bounds.width) {
       legendRows.push({ entries: row, height: rowHeight }); row = []; rowWidth = 0; rowHeight = 0;
     }
-    row.push({ label, lines, color: item.color || item.borderColor || '#20c9b2', line: item.line === true, offsetX: rowWidth });
+    row.push({ label, lines, color: item.color || item.borderColor || '#20c9b2', line: item.line === true, offsetX: rowWidth,
+      ...(item.pointStyle ? { pointStyle: item.pointStyle } : {}) });
     rowWidth += width;
     rowHeight = Math.max(rowHeight, lines.length * 44);
   }

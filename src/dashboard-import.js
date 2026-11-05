@@ -147,6 +147,7 @@
         sourceLabel,
         rawCsvData: csvRows,
         activities,
+        heartRateCoverage: window.heartRateUtils?.summarizeHeartRateCoverage(activities) || null,
         importExperienceStatistics: window.importExperienceCatalog.finalizeStatistics(statisticsAccumulator),
         fitBestEffortsByActivityId: {},
         gpsTracksByActivityId: {}
@@ -165,6 +166,7 @@
         importedFileCount: sourceFileNames.length,
         importedSourceFiles: sourceFileNames.map(name => String(name)),
         activities,
+        heartRateCoverage: importResult.heartRateCoverage || window.heartRateUtils?.summarizeHeartRateCoverage(activities) || null,
         importExperienceStatistics: window.importExperienceCatalog.finalizeStatistics(statisticsAccumulator),
         fitBestEffortsByActivityId: importResult.fitBestEffortsByActivityId || {},
         gpsTracksByActivityId: importResult.gpsTracksByActivityId || {},
@@ -179,6 +181,7 @@
 
     let dashboardImportGeneration = 0;
     let appleWorkerImport = null;
+    let appleHealthRetryFile = null;
     let sampleImportOperation = null;
     let sampleImportPromise = null;
 
@@ -232,7 +235,14 @@
       return sampleImportPromise;
     }
 
+    function clearAppleHealthRetry() {
+      appleHealthRetryFile = null;
+      const button = typeof document !== 'undefined' ? document.getElementById('appleHealthRetryBtn') : null;
+      button?.classList.add('hidden');
+    }
+
     function beginImportOperation(sourceType) {
+      clearAppleHealthRetry();
       if (appleWorkerImport) appleWorkerImport.cancel();
       return { generation: ++dashboardImportGeneration, sourceType, committed: false,
         counted: false, failed: false, releasedMedia: new WeakSet() };
@@ -298,59 +308,106 @@
     function createAppleHealthImportedDataset(importResult, fileName) {
       const dataset = createTrainingPeaksImportedDataset(importResult, [fileName]);
       dataset.sourceLabel = 'Apple Health ZIP import';
-      dataset.diagnostics = importResult.diagnostics || {};
+      dataset.diagnostics = { ...(importResult.diagnostics || {}), heartRateCoverage: dataset.heartRateCoverage };
       return dataset;
     }
 
     function importAppleHealthInWorker(file, reportProgress, operation) {
       const utility = window.appleHealthUtils;
-      if (!utility || typeof Worker === 'undefined' || typeof WritableStream === 'undefined' ||
-          (typeof location !== 'undefined' && !/^https?:$/.test(location.protocol))) {
-        return Promise.reject(utility ? utility.failure('UNSUPPORTED_CAPABILITY') : new Error('Apple Health import requires HTTP or HTTPS.'));
+      if (!utility || typeof utility.inspectRuntimeCapabilities !== 'function' || typeof utility.runtimeFailure !== 'function') {
+        return Promise.reject(Object.assign(new Error('Apple Health import utilities could not load. Reload the app and retry.'),
+          { code: utility ? 'DEPENDENCY_INVALID' : 'DEPENDENCY_LOAD_FAILED' }));
       }
+      const preflight = utility.inspectRuntimeCapabilities(globalThis, 'window', operation.generation);
+      if (preflight) return Promise.reject(utility.runtimeFailure(preflight.code, preflight));
+      const failure = (code, phase = 'worker-start', component = 'worker') => utility.runtimeFailure(code,
+        { generation: operation.generation, phase, component, environment: utility.getRuntimeEnvironment(globalThis, 'window') });
       return new Promise((resolve, reject) => {
-        const worker = new Worker('./src/apple-health-worker.js');
+        let worker = null;
         let settled = false;
         let ready = false;
-        const heartbeat = setInterval(() => {
-          if (!ready && isCurrentImportOperation(operation)) reportProgress({ percent: 0, stage: 'Loading Apple Health importer...' });
-        }, 1000);
+        let heartbeat = null;
+        let watchdog = null;
         const finish = (error, result) => {
           if (settled) return;
           settled = true;
-          clearInterval(heartbeat);
-          worker.terminate();
+          if (heartbeat !== null) { clearInterval(heartbeat); heartbeat = null; }
+          if (watchdog !== null) { clearTimeout(watchdog); watchdog = null; }
+          if (worker) {
+            worker.onmessage = null;
+            worker.onerror = null;
+            worker.onmessageerror = null;
+            try { worker.terminate(); } catch (terminateError) { }
+          }
           if (appleWorkerImport && appleWorkerImport.worker === worker) appleWorkerImport = null;
           if (error) reject(error); else resolve(result);
         };
-        appleWorkerImport = { worker, cancel: () => finish(utility.failure('CANCELLED')) };
-        worker.onerror = () => finish(utility.failure('DEPENDENCY_LOAD_FAILED'));
+        const protocolFailure = () => failure('WORKER_PROTOCOL_ERROR', ready ? 'result' : 'worker-start', 'protocol');
+        const send = message => {
+          try { worker.postMessage(message); }
+          catch (transportError) { finish(protocolFailure()); }
+        };
+        const notify = progress => {
+          try { if (typeof reportProgress === 'function') reportProgress(progress); }
+          catch (progressError) { finish(failure('INTERNAL_ERROR', 'parsing', 'importer')); }
+        };
+        try { worker = new Worker('./src/apple-health-worker.js'); }
+        catch (startError) { finish(failure('WORKER_START_FAILED')); return; }
+        appleWorkerImport = { worker, cancel: () => finish(failure('CANCELLED')) };
+        worker.onerror = () => finish(failure('WORKER_RUNTIME_FAILED', ready ? 'parsing' : 'worker-start'));
+        worker.onmessageerror = () => finish(protocolFailure());
         worker.onmessage = event => {
-          const message = event.data || {};
-          if (message.generation !== operation.generation || !isCurrentImportOperation(operation)) {
-            if (!isCurrentImportOperation(operation)) finish(utility.failure('CANCELLED'));
+          if (settled) return;
+          if (!isCurrentImportOperation(operation)) { finish(failure('CANCELLED')); return; }
+          const message = event.data;
+          if (!message || typeof message !== 'object' || Array.isArray(message)) { finish(protocolFailure()); return; }
+          if (Number.isSafeInteger(message.generation) && message.generation >= 0 && message.generation !== operation.generation) return;
+          if (message.v !== 1 || message.generation !== operation.generation) { finish(protocolFailure()); return; }
+          if (message.type === 'ready') {
+            if (ready || Object.keys(message).some(key => !['v', 'type', 'generation'].includes(key))) { finish(protocolFailure()); return; }
+            ready = true;
+            if (watchdog !== null) { clearTimeout(watchdog); watchdog = null; }
+            if (heartbeat !== null) { clearInterval(heartbeat); heartbeat = null; }
+            send({ v: 1, type: 'start', generation: operation.generation, file });
             return;
           }
           if (message.type === 'progress') {
-            ready = true;
             const stages = { readingWorkouts: 'Reading Apple Health workouts...', normalizing: 'Preparing workouts...',
               enrichingMeasurements: 'Matching workout measurements...', readingRoutes: 'Reading workout routes...', finalizing: 'Preparing visualizations...' };
-            reportProgress({ ...message, stage: stages[message.phase] || 'Processing Apple Health export...' });
-          } else if (message.type === 'error') finish(utility.failure(message.code));
+            if (!ready || !Object.prototype.hasOwnProperty.call(stages, message.phase) || !Number.isFinite(message.percent) || message.percent < 0 || message.percent > 100) {
+              finish(protocolFailure()); return;
+            }
+            const progress = { phase: message.phase, percent: message.percent, stage: stages[message.phase] };
+            for (const [field, maximum] of [['processedBytes', 24 * 1024 ** 3], ['processedWorkouts', 100000]]) {
+              if (message[field] !== undefined) {
+                if (!Number.isSafeInteger(message[field]) || message[field] < 0 || message[field] > maximum) { finish(protocolFailure()); return; }
+                progress[field] = message[field];
+              }
+            }
+            notify(progress);
+          } else if (message.type === 'error') {
+            const diagnostic = utility.validateRuntimeDiagnostic(message.diagnostic, operation.generation);
+            if (!diagnostic || diagnostic.code !== message.code) { finish(protocolFailure()); return; }
+            finish(utility.runtimeFailure(diagnostic.code, diagnostic));
+          }
           else if (message.type === 'complete') {
-            worker.terminate();
             try {
+              if (!ready) throw protocolFailure();
               const result = message.result;
-              if (!result || !Array.isArray(result.activities) || result.activities.length > 100000) throw utility.failure('INVALID_ARCHIVE');
+              if (!result || !Array.isArray(result.activities) || !result.activities.length || result.activities.length > 100000) throw protocolFailure();
               result.activities = result.activities.map(activity => {
                 const startTime = new Date(activity.startTime);
-                if (!Number.isFinite(startTime.getTime()) || !['Run', 'Bike', 'Swim'].includes(activity.sport) || !activity.sourceLocalStart) throw utility.failure('INVALID_ARCHIVE');
-                return { ...activity, startTime, ...utility.calendarDates(activity.sourceLocalStart) };
+                if (!Number.isFinite(startTime.getTime()) || !['Run', 'Bike', 'Swim'].includes(activity.sport) || !activity.sourceLocalStart) throw protocolFailure();
+                const local = activity.sourceLocalStart;
+                if (![local.year, local.month, local.day].every(Number.isInteger)) throw protocolFailure();
+                const calendar = utility.calendarDates(local);
+                if (calendar.date.getFullYear() !== local.year || calendar.date.getMonth() + 1 !== local.month || calendar.date.getDate() !== local.day) throw protocolFailure();
+                return { ...activity, startTime, ...calendar };
               });
               const tracks = Object.create(null);
               let pointCount = 0;
               for (const [id, track] of Object.entries(result.gpsTracksByActivityId || {})) {
-                if (!(track.coordinates instanceof Float64Array) || !(track.offsets instanceof Uint32Array) || track.coordinates.length % 2) throw utility.failure('INVALID_ARCHIVE');
+                if (!(track.coordinates instanceof Float64Array) || !(track.offsets instanceof Uint32Array) || track.coordinates.length % 2 || track.offsets.length < 2) throw protocolFailure();
                 const size = track.coordinates.length / 2;
                 pointCount += size;
                 if (size > 500000 || pointCount > 2000000 || track.offsets[0] !== 0 || track.offsets[track.offsets.length - 1] !== size) throw utility.failure('RESOURCE_LIMIT');
@@ -358,12 +415,12 @@
                 for (let index = 0; index + 1 < track.offsets.length; index++) {
                   const start = track.offsets[index];
                   const end = track.offsets[index + 1];
-                  if (start > end || end > size) throw utility.failure('INVALID_ARCHIVE');
+                  if (start > end || end > size) throw protocolFailure();
                   const points = [];
                   for (let cursor = start; cursor < end; cursor++) {
                     const latitude = track.coordinates[cursor * 2];
                     const longitude = track.coordinates[cursor * 2 + 1];
-                    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) throw utility.failure('INVALID_ARCHIVE');
+                    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) throw protocolFailure();
                     points.push([latitude, longitude]);
                   }
                   segments.push(points);
@@ -372,10 +429,14 @@
               }
               result.gpsTracksByActivityId = tracks;
               finish(null, result);
-            } catch (error) { finish(utility.failure(error.code)); }
-          }
+            } catch (error) { finish(error && error.code === 'RESOURCE_LIMIT' ? failure('RESOURCE_LIMIT', 'result', 'importer') : protocolFailure()); }
+          } else finish(protocolFailure());
         };
-        worker.postMessage({ type: 'start', generation: operation.generation, file });
+        heartbeat = setInterval(() => {
+          if (!ready && isCurrentImportOperation(operation)) notify({ percent: 0, stage: 'Loading Apple Health importer...' });
+        }, 1000);
+        watchdog = setTimeout(() => { if (!ready) finish(failure('WORKER_INIT_TIMEOUT')); }, 30000);
+        send({ v: 1, type: 'init', generation: operation.generation });
       });
     }
 
@@ -407,6 +468,33 @@
       }
     }
 
+    function renderHeartRateImportNote(dataset) {
+      const note = document.getElementById('heartRateImportNote');
+      if (!note) return;
+      const coverage = dataset.sourceType !== 'sample' && dataset.heartRateCoverage;
+      let text = '';
+      if (coverage) {
+        const count = (kind, category) => Number.isSafeInteger(coverage[kind]?.[category]) && coverage[kind][category] >= 0 ? coverage[kind][category] : 0;
+        const direct = count('minimum', 'summary') + count('maximum', 'summary');
+        const observed = count('minimum', 'records') + count('maximum', 'records');
+        if (!direct && !observed) text = coverage.average > 0
+          ? 'Average heart rate available; no usable minimum/maximum values.' : 'No usable minimum/maximum heart-rate values in this import.';
+        else text = `Heart-rate extrema: ${direct} direct, ${observed} from recorded measurements.`;
+        const missingMinimum = count('minimum', 'missing');
+        const missingMaximum = count('maximum', 'missing');
+        const invalid = count('minimum', 'invalid') + count('maximum', 'invalid');
+        const conflicts = count('minimum', 'conflict') + count('maximum', 'conflict');
+        const unqualified = count('minimum', 'unqualified') + count('maximum', 'unqualified');
+        if (missingMinimum || missingMaximum) text += ` Missing minimum: ${missingMinimum}; missing maximum: ${missingMaximum}.`;
+        if (invalid) text += ` Invalid: ${invalid}.`;
+        if (conflicts) text += ` Conflicting: ${conflicts}.`;
+        if (unqualified) text += ` Unqualified: ${unqualified}.`;
+      }
+      note.textContent = text;
+      if (text) note.classList.remove('hidden');
+      else note.classList.add('hidden');
+    }
+
     function applyImportedDataset(dataset, options = {}) {
       if (options.operation && !isCurrentImportOperation(options.operation)) {
         releaseUncommittedImportMedia(options.operation, dataset);
@@ -421,6 +509,7 @@
       fitBestEffortsByActivityId = dataset.fitBestEffortsByActivityId || {};
       gpsTracksByActivityId = dataset.gpsTracksByActivityId || {};
       heatmapActivitySummaryIndex = nextSummaryIndex;
+      window.heartRateDashboard?.reset();
       if (options.operation) options.operation.committed = true;
       if (previousDataset && previousDataset !== dataset && typeof closeExportPreviewModal === 'function') {
         closeExportPreviewModal();
@@ -440,6 +529,7 @@
         : dataset.sourceLabel === 'Apple Health ZIP import' ? 'Imported Apple Health history'
         : dataset.sourceLabel === 'TrainingPeaks ZIP import' ? 'Imported TrainingPeaks history' : 'Imported Strava history';
       updateStatusBadge('success', importLabel);
+      renderHeartRateImportNote(dataset);
       if (dataset.sourceType !== 'sample') setSampleImportFeedback('');
 
       document.getElementById('previewCardsContainer').classList.remove('hidden');
@@ -462,6 +552,7 @@
       renderEquipmentChart();
       renderPbChart();
       renderTrainingCalendar();
+      if (typeof selectedVisualizationTab !== 'undefined' && selectedVisualizationTab === 'heartRate') window.heartRateDashboard?.render();
 
       if (options.openDashboard) {
         openDashboardTab(availableVisualizationTabs[0]);
@@ -493,6 +584,7 @@
     }
 
     function hideImportProgressModal() {
+      clearAppleHealthRetry();
       const modal = document.getElementById('importProgressModal');
       if (!modal) return;
       stopImportExperienceRotation();
@@ -799,6 +891,7 @@
           ? parseMetricNumber(row[elevationIdx])
           : null;
         const equipment = equipmentIdx !== -1 ? (row[equipmentIdx] || '').trim() : '';
+        const heartRateEvidence = window.heartRateUtils.inspectCsvHeartRateExtrema(headers, row);
 
         const processedActivity = {
           id: row[0],
@@ -813,6 +906,7 @@
           duration: durationSeconds,
           durationAvailable,
           avgHeartRate: avgHeartRate,
+          ...window.heartRateUtils.resolveHeartRateExtrema(heartRateEvidence),
           avgWatts: sportCategory === 'Bike' ? avgWatts : null,
           avgCadence: Number.isFinite(parsedCadence) && parsedCadence > 0 ? parsedCadence : null,
           totalSteps: sportCategory === 'Run' && Number.isFinite(parsedTotalSteps) && parsedTotalSteps > 0 ? parsedTotalSteps : null,
@@ -962,12 +1056,7 @@
       input.click();
     }
 
-    function handleAppleHealthIngest() {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.zip,application/zip';
-      input.onchange = async event => {
-        const file = event.target.files && event.target.files[0];
+    async function runAppleHealthFileImport(file) {
         if (!file) return;
         const operation = beginImportOperation('personal');
         const status = document.getElementById('appleHealthImportStatus');
@@ -988,10 +1077,35 @@
           hideImportProgressModal();
         } catch (error) {
           if (!isCurrentImportOperation(operation)) return;
+          const utility = window.appleHealthUtils;
+          const diagnostic = typeof utility?.validateRuntimeDiagnostic === 'function' ? utility.validateRuntimeDiagnostic(error?.diagnostic, operation.generation) : null;
+          const knownCode = typeof utility?.failure === 'function' && error?.code && utility.failure(error.code).code === error.code;
+          const safe = typeof utility?.runtimeFailure === 'function'
+            ? utility.runtimeFailure(knownCode ? error.code : 'INTERNAL_ERROR', diagnostic || { generation: operation.generation,
+              phase: 'parsing', component: 'importer', environment: utility.getRuntimeEnvironment(globalThis, 'window') })
+            : Object.assign(new Error('The Apple Health importer is unavailable. Reload the app and retry.'), { code: utility ? 'DEPENDENCY_INVALID' : 'DEPENDENCY_LOAD_FAILED' });
           updateImportProgress(null, operation.committed ? 'Could not display imported data' : 'Apple Health import failed', true);
           document.getElementById('importProgressError').classList.remove('hidden');
-          document.getElementById('importProgressDetail').textContent = error.message || 'Apple Health import failed. Please retry.';
+          document.getElementById('importProgressDetail').textContent = `${safe.message} Error code: ${safe.code}.`;
+          if (!operation.committed && (safe.diagnostic?.action === 'retry' || ['DEPENDENCY_LOAD_FAILED', 'DEPENDENCY_INVALID'].includes(safe.code))) {
+            appleHealthRetryFile = file;
+            document.getElementById('appleHealthRetryBtn')?.classList.remove('hidden');
+          }
         }
+    }
+
+    function retryAppleHealthImport() {
+      const file = appleHealthRetryFile;
+      if (file) return runAppleHealthFileImport(file);
+    }
+
+    function handleAppleHealthIngest() {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.zip,application/zip';
+      input.onchange = event => {
+        const file = event.target.files && event.target.files[0];
+        if (file) return runAppleHealthFileImport(file);
       };
       input.click();
     }

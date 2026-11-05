@@ -27,6 +27,39 @@ function createActivity(overrides = {}) {
 }
 
 describe('visualization availability', () => {
+  it('uses resolved field evidence without changing average-supported views or requiring pairs', () => {
+    const heartRate = require('../src/heart-rate-utils');
+    const missing = heartRate.inspectCsvHeartRateExtrema([], []);
+    const records = [{ timestamp: new Date('2026-07-19T10:00:00Z'), heart_rate: 80 }];
+    const readEvidence = { readStatus: 'complete', lengthValidated: true, integrityValidated: true, strictParseCompleted: true,
+      recordsComplete: true, resourceLimited: false, unit: 'bpm' };
+    const observed = heartRate.deriveTimedHeartRateExtrema(records, { qualified: true, readEvidence });
+    const unqualified = heartRate.deriveTimedHeartRateExtrema(records, { qualified: false, reason: 'overlapping_sessions', readEvidence });
+    const cases = [
+      [heartRate.resolveHeartRateExtrema(heartRate.inspectCsvHeartRateExtrema(['Max. Herzfrequenz'], ['180'])), true],
+      [heartRate.resolveHeartRateExtrema(heartRate.inspectCsvHeartRateExtrema(['Min Heart Rate'], ['75'])), true],
+      [heartRate.resolveHeartRateExtrema(missing, observed), true],
+      [heartRate.resolveHeartRateExtrema(missing), false],
+      [heartRate.resolveHeartRateExtrema(heartRate.inspectCsvHeartRateExtrema(['Max. Herzfrequenz', 'Max. Herzfrequenz'], ['180', '190'])), false],
+      [heartRate.resolveHeartRateExtrema(missing, unqualified), false]
+    ];
+    const { heartRate: oldEligibility, ...otherViews } = visualizationAvailability.getVisualizationAvailability([createActivity()]);
+    for (const [fields, expected] of cases) {
+      const { heartRate: eligibility, ...unchanged } = visualizationAvailability.getVisualizationAvailability([createActivity(fields)]);
+      expect(eligibility).toBe(expected);
+      expect(unchanged).toEqual(otherViews);
+    }
+  });
+
+  it('makes heartRate available for exactly one valid extremum independently of the source label', () => {
+    for (const sourceLabel of ['Strava ZIP import', 'TrainingPeaks ZIP import', 'Apple Health ZIP import']) {
+      expect(visualizationAvailability.getVisualizationAvailability([createActivity()], { sourceLabel }).heartRate).toBe(false);
+      expect(visualizationAvailability.getVisualizationAvailability([createActivity({ minHeartRate: 75 })], { sourceLabel }).heartRate).toBe(true);
+      expect(visualizationAvailability.getVisualizationAvailability([createActivity({ maxHeartRate: 180 })], { sourceLabel }).heartRate).toBe(true);
+      expect(visualizationAvailability.getVisualizationAvailability([createActivity({ minHeartRate: 180, maxHeartRate: 150 })], { sourceLabel }).heartRate).toBe(false);
+    }
+  });
+
   it('loads as a classic script beside utilities with shared global names', () => {
     const source = fs.readFileSync(path.join(__dirname, '../src/visualization-availability.js'), 'utf8');
     const browserWindow = {
@@ -45,6 +78,7 @@ describe('visualization availability', () => {
     expect(visualizationAvailability.getVisualizationAvailability([], {})).toEqual({
       totalDistance: false,
       paceMetrics: false,
+      heartRate: false,
       equipment: false,
       equipmentTimeline: false,
       personalBests: false,
@@ -73,6 +107,7 @@ describe('visualization availability', () => {
     expect(availability).toEqual({
       totalDistance: true,
       paceMetrics: true,
+      heartRate: false,
       equipment: false,
       equipmentTimeline: false,
       personalBests: true,
@@ -105,6 +140,7 @@ describe('visualization availability', () => {
     expect(availability).toEqual({
       totalDistance: false,
       paceMetrics: false,
+      heartRate: false,
       equipment: false,
       equipmentTimeline: false,
       personalBests: false,
@@ -135,6 +171,7 @@ describe('visualization availability', () => {
     expect(availability).toEqual({
       totalDistance: false,
       paceMetrics: false,
+      heartRate: false,
       equipment: false,
       equipmentTimeline: false,
       personalBests: false,
@@ -161,6 +198,7 @@ describe('visualization availability', () => {
     expect(availability).toEqual({
       totalDistance: true,
       paceMetrics: true,
+      heartRate: false,
       equipment: true,
       equipmentTimeline: true,
       personalBests: true,

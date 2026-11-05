@@ -90,6 +90,7 @@
       const factories = {
         totalDistance: () => getTotalDistanceKeyboardAdapter(),
         paceMetrics: () => getPaceMetricsKeyboardAdapter(),
+        heartRate: () => window.heartRateDashboard.getKeyboardAdapter(),
         equipment: () => getEquipmentKeyboardAdapter(),
         equipmentTimeline: () => getEquipmentTimelineKeyboardAdapter(),
         heatmap: () => getHeatmapKeyboardAdapter(),
@@ -329,6 +330,8 @@
         selectedVisualizationTab = nextTab;
         if (nextTab === 'paceMetrics') {
           renderPaceMetricsChart();
+        } else if (nextTab === 'heartRate') {
+          window.heartRateDashboard.render();
         } else if (nextTab === 'equipment') {
           renderEquipmentChart();
         } else if (nextTab === 'equipmentTimeline') {

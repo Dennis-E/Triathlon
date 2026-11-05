@@ -8,7 +8,7 @@ TriAnalytica supports Strava, TrainingPeaks and Apple Health exports through sep
 
 Choose **Use exemplary data** to open the regular dashboard without selecting files.
 The public `sample-data/silicon-valley-training.json` payload contains 1,600
-synthetic activities and 923 geographic tracks across 2021-2025. All non-media
+synthetic activities and 923 geographic tracks across 2021-2025. Supported non-media
 analyses use the normal filters, tooltips and image-preview/download flow;
 the dashboard and images identify synthetic training. Source/license details and
 offline regeneration commands are in [sample-data/README.md](../sample-data/README.md).
@@ -29,11 +29,23 @@ Workout summaries supply distance, active duration and ascent when their units a
 
 Only explicitly referenced, valid routes are attached. Separate GPX route segments remain disconnected. Equipment, equipment timeline, title word cloud, heatmap, media gallery, optional metrics and other views appear only when their required imported data can produce meaningful output. Missing fields are not replaced with invented values.
 
-Apple Health export steps are in [apple-health-export-how-to.html](apple-health-export-how-to.html). Large exports may take several minutes and require a modern browser served over HTTP or HTTPS. Resource or format failures preserve the previous dashboard and can be retried. Raw health files are processed in the active browser session; the app still requests external libraries, public resources and its metadata-only analysis counter.
+Apple Health export steps are in [apple-health-export-how-to.html](apple-health-export-how-to.html). Serve the app over trusted HTTPS or secure local HTTP on localhost/loopback; opening a local file or using insecure remote HTTP produces a specific deployment hint. Required functions are checked in the actual worker context, including secure SHA-256, before the file is sent. Library-loading, missing-export, capability, worker, hash and archive errors have distinct safe codes. Retry is explicit; initial readiness has a 30-second limit, not the processing of large valid exports. Failures preserve the previous dashboard. Local HTTP imports have been verified in Chrome, Edge and the integrated VS Code browser; the complete HTTPS browser matrix remains pending. Raw health files are processed in the active browser session; the app still requests external libraries, public resources and its metadata-only analysis counter.
 
 ## Visualization availability
 
 After each import, the dashboard shows only visualization tabs that can produce meaningful output from the imported activities and associated route or power data. Each provider uses current data-based rules; when a field is missing, only views and controls that require that field are hidden or unavailable. This changes dashboard visibility and selection only: imported files, activity records, and values are not modified or removed.
+
+## Heart-rate minimum and maximum
+
+The Heart rate tab appears only when the current history contains at least one dated Run, Bike, or Swim workout with a usable minimum or maximum in bpm. Daily, Weekly, Monthly and Yearly group by local training day, Monday-to-Sunday week, calendar month and calendar year. The period minimum is the smallest available training minimum; the maximum is the largest available training maximum. Each field is independent, without averages, zero-filled periods or connecting lines. A reversed direct pair is excluded without correcting the source values. Details retain all contributing trainings and tied extreme sources.
+
+- Strava: supported explicit headers include `Min Heart Rate`, `Minimum Heart Rate`, `Minimale Herzfrequenz`, and `Max Heart Rate`, `Maximum Heart Rate`, `Maximale Herzfrequenz`, `Max. Herzfrequenz`. Empty duplicate cells do not invalidate usable values; conflicting or nonempty invalid candidates make only that field unavailable. Optional extrema survive both CSV reducers without shifting existing columns.
+- TrainingPeaks: reliable `min_heart_rate`/`max_heart_rate` session summaries take priority. Only missing fields can use actual integer bpm observations from fully read, integrity-checked FIT records with unambiguous original session boundaries. Timer duration is not a replacement end boundary. Explicit invalid values, including uint8 sentinel 255, are not repaired. Unsupported structures, unknown read evidence, overlaps or ambiguous boundary records block fallback. Direct and recorded values are distinguished in details and local import notes; observed extrema are not a medical completeness guarantee. No minimum sample-coverage heuristic is used.
+- Apple Health: only unambiguous HeartRate `WorkoutStatistics.minimum` / `.maximum` in `count/min` qualify. If statistics declare time boundaries, both must match the workout. Daily measurements, partial statistics, conflicting summaries and ordinary Records are not used to create extrema.
+
+Existing workout fields, averages, identity/deduplication decisions and other visualization calculations remain unchanged. The existing sport/timeframe filters run before period aggregation. Bounded axes show the requested unclamped window using the existing history end anchor; All includes the whole matching history, including trainings without extrema. Filter-empty results keep the tab reachable and clear old chart/export data; replacing the history recomputes availability and removes unsupported views. Import notes distinguish average-only heart-rate data from usable extrema.
+
+Export for Insta / Strava uses the established local PNG preview/download route in square, portrait and story formats. Each new request captures the rendered grouping, period count/labels, sport and requested date range; it never rereads live filters for that snapshot. Published previews retain their requested snapshot through format changes and download; an empty selection or replacement import closes them. Unfinished stale captures are discarded. Imported heart-rate values, safe diagnostics and exported images are not uploaded by this feature; this does not imply the entire app makes no network requests.
 
 ## Strava
 

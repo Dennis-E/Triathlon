@@ -353,6 +353,7 @@ const DASHBOARD_MODULE_FILES = [
   'dashboard-distributions.js',
   'dashboard-workout-time.js',
   'dashboard-scatter.js',
+  'dashboard-heart-rate.js',
   'dashboard-heatmap.js',
   'dashboard-training-calendar.js',
   'dashboard-wordcloud.js',
@@ -400,6 +401,27 @@ describe('index.html inline script syntax', () => {
     const scriptSrcTags = [...html.matchAll(/<script src="\.\/src\/(dashboard-[a-z-]+\.js)"><\/script>/g)]
       .map(m => m[1]);
     expect(scriptSrcTags).toEqual(DASHBOARD_MODULE_FILES);
+  });
+
+  it('loads heart-rate utilities before availability and the renderer before export/navigation', () => {
+    expect(html).toContain('<script src="./src/heart-rate-utils.js"></script>');
+    expect(html).toContain('<script src="./src/dashboard-heart-rate.js"></script>');
+    expect(html.indexOf('./src/heart-rate-utils.js')).toBeLessThan(html.indexOf('./src/visualization-availability.js'));
+    expect(html.indexOf('./src/dashboard-heart-rate.js')).toBeLessThan(html.indexOf('./src/dashboard-export.js'));
+    expect(html).toContain('id="vizTabHeartRate"');
+    expect(html).toContain('id="vizPanelHeartRate" role="tabpanel" aria-labelledby="vizTabHeartRate"');
+  });
+
+  it('uses the existing branded export pattern once in the shared heart-rate control header', () => {
+    const button = html.match(/<button id="heartRateShareBtn"[\s\S]*?<\/button>/)[0];
+    expect(button).toContain('viz-export-button');
+    expect(button).toContain("exportVisualizationTab('heartRate')");
+    expect(button).toMatch(/Strava_Logo\.svg[\s\S]*Export for Insta \/ Strava[\s\S]*Instagram_logo_2016\.svg/);
+    expect(button).toContain('aria-label="Export for Insta / Strava: Heart rate"');
+    expect(html.match(/id="heartRateShareBtn"/g)).toHaveLength(1);
+    const panel = html.slice(html.indexOf('id="vizPanelHeartRate"'),html.indexOf('id="vizPanelPaceMetrics"'));
+    expect(panel.indexOf('id="heartRateFilters"')).toBeLessThan(panel.indexOf('id="heartRateShareBtn"'));
+    expect(panel).toMatch(/id="heartRateFilters"[^>]*basis-full md:basis-auto/);
   });
 
   it('offers the established labeled equipment pace color selector without changing tab or export wiring', () => {
@@ -771,7 +793,7 @@ describe('index.html inline script syntax', () => {
   it('keeps visualization export buttons content-sized across stacked headers', () => {
     const exportButtons = [...html.matchAll(/<button\b(?=[^>]*class="[^"]*\bviz-export-button\b[^"]*")([^>]*)>/g)];
 
-    expect(exportButtons).toHaveLength(13);
+    expect(exportButtons).toHaveLength(require('../src/tab-navigation').TAB_ORDER.length);
     expect(exportButtons.every(([, attributes]) => /\bclass="[^"]*\bviz-export-button\b[^"]*"/.test(attributes))).toBe(true);
     expect(html).toContain('id="mediaGalleryExportButton" type="button" onclick="window.mediaGalleryDashboard?.createCollage?.()"');
     expect(html).toMatch(/\.viz-export-button\s*\{[^}]*width:\s*fit-content;[^}]*max-width:\s*100%;[^}]*flex-shrink:\s*0;/s);

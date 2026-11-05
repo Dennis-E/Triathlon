@@ -11,8 +11,11 @@
   function xmlConsumer(handlers, dependencies) {
     const limits = { ...LIMITS, ...dependencies.limits };
     const sax = dependencies.sax || root.sax;
-    if (!sax || typeof TextDecoder === 'undefined') throw utils.failure('UNSUPPORTED_CAPABILITY');
+    if (!sax) throw utils.runtimeFailure('DEPENDENCY_LOAD_FAILED', { phase: 'dependencies', component: 'sax' });
+    if (typeof sax.parser !== 'function') throw utils.runtimeFailure('DEPENDENCY_INVALID', { phase: 'dependencies', component: 'sax' });
+    if (typeof TextDecoder !== 'function') throw utils.runtimeFailure('MISSING_CAPABILITY', { phase: 'capabilities', component: 'text', missingCapabilities: ['TextDecoder'] });
     const parser = sax.parser(true, { strictEntities: true, position: true, trim: false });
+    if (!parser || typeof parser.write !== 'function' || typeof parser.close !== 'function') throw utils.runtimeFailure('DEPENDENCY_INVALID', { phase: 'dependencies', component: 'sax' });
     const decoder = new TextDecoder('utf-8', { fatal: true });
     const stack = [];
     let workout = null;
@@ -71,7 +74,15 @@
       if (name === 'HealthData') closed = true;
     };
     function guard(callback) {
-      try { return callback(); } catch (error) { throw error && error.code ? error : utils.failure('INVALID_XML'); }
+      try { return callback(); } catch (error) {
+        if (error && error.code && utils.failure(error.code).code === error.code) throw utils.runtimeFailure(error.code,
+          utils.validateRuntimeDiagnostic(error.diagnostic) || { phase: 'parsing', component: 'sax' });
+        throw utils.runtimeFailure('INTERNAL_ERROR', { phase: 'parsing', component: 'sax' });
+      }
+    }
+    function decode(chunk, options) {
+      try { return decoder.decode(chunk, options); }
+      catch (error) { throw utils.failure('UNSUPPORTED_ENCODING'); }
     }
     return {
       write(chunk) {
@@ -79,12 +90,12 @@
         if (bytes > limits.mainBytes) throw utils.failure('RESOURCE_LIMIT');
         guard(() => {
           for (let offset = 0; offset < chunk.length; offset += limits.chunkBytes) {
-            parser.write(decoder.decode(chunk.subarray(offset, offset + limits.chunkBytes), { stream: true }));
+            parser.write(decode(chunk.subarray(offset, offset + limits.chunkBytes), { stream: true }));
           }
         });
       },
       close() {
-        guard(() => { parser.write(decoder.decode()); parser.close(); });
+        guard(() => { parser.write(decode()); parser.close(); });
         if (!closed || roots !== 1 || stack.length) throw utils.failure('INVALID_XML');
       }
     };
@@ -145,7 +156,12 @@
     const limits = { ...LIMITS, ...dependencies.limits };
     if (file.size > limits.fileBytes) throw utils.failure('RESOURCE_LIMIT');
     const zip = dependencies.zip || root.zip;
-    if (!zip || typeof WritableStream === 'undefined') throw utils.failure('UNSUPPORTED_CAPABILITY');
+    if (!zip) throw utils.runtimeFailure('DEPENDENCY_LOAD_FAILED', { phase: 'dependencies', component: 'zip' });
+    if (typeof zip.ZipReader !== 'function' || typeof zip.BlobReader !== 'function') throw utils.runtimeFailure('DEPENDENCY_INVALID', { phase: 'dependencies', component: 'zip' });
+    const missingCapabilities = [['WritableStream', typeof WritableStream], ['ReadableStream', typeof ReadableStream], ['TextEncoder', typeof TextEncoder]]
+      .filter(([, type]) => type !== 'function').map(([name]) => name);
+    if (missingCapabilities.length) throw utils.runtimeFailure('MISSING_CAPABILITY', { phase: 'capabilities',
+      component: missingCapabilities.includes('TextEncoder') ? 'text' : 'stream', missingCapabilities });
     const powerPbUtils = dependencies.powerPbUtils || (typeof module !== 'undefined' && module.exports
       ? require('./power-pb-utils') : root.powerPbUtils);
     const report = utils.diagnostics();
@@ -153,7 +169,23 @@
     const recordTypes = new Set();
     const clock = dependencies.clock || Date.now;
     const yieldWork = dependencies.yield || (() => new Promise(resolve => setTimeout(resolve, 0)));
-    const hash = dependencies.hash || utils.digest;
+    const hash = async value => {
+      try {
+        const result = await (dependencies.hash || utils.digest)(value);
+        if (typeof result !== 'string' || !/^[a-f0-9]{64}$/i.test(result)) throw utils.runtimeFailure('HASH_FAILED', { phase: 'hashing', component: 'crypto' });
+        return result;
+      } catch (error) {
+        if (error && ['HASH_FAILED', 'MISSING_CAPABILITY'].includes(error.code)) throw utils.runtimeFailure(error.code,
+          utils.validateRuntimeDiagnostic(error.diagnostic) || { phase: 'hashing', component: 'crypto' });
+        throw utils.runtimeFailure('HASH_FAILED', { phase: 'hashing', component: 'crypto' });
+      }
+    };
+    const archiveError = error => {
+      if (error && error.code && utils.failure(error.code).code === error.code) return utils.runtimeFailure(error.code,
+        utils.validateRuntimeDiagnostic(error.diagnostic) || { phase: 'parsing', component: 'importer' });
+      const knownInputError = error && Object.keys(zip).some(key => /^ERR_/.test(key) && typeof zip[key] === 'string' && zip[key] === error.message);
+      return utils.runtimeFailure(knownInputError ? 'INVALID_ARCHIVE' : 'INTERNAL_ERROR', { phase: 'parsing', component: knownInputError ? 'zip' : 'importer' });
+    };
     let totalBytes = 0;
     const processedBytes = { workoutXml: 0, enrichmentXml: 0, routeXml: 0 };
     let lastYield = clock();
@@ -175,12 +207,14 @@
       aborted();
       await checkDirectory(file, limits);
       const blobReader = new zip.BlobReader(file);
+      if (!blobReader || typeof blobReader.readUint8Array !== 'function') throw utils.runtimeFailure('DEPENDENCY_INVALID', { phase: 'dependencies', component: 'zip' });
       const originalRead = blobReader.readUint8Array.bind(blobReader);
       blobReader.readUint8Array = (offset, length, ...rest) => {
         if (length > limits.directoryBytes) throw utils.failure('RESOURCE_LIMIT');
         return originalRead(offset, length, ...rest);
       };
       reader = new zip.ZipReader(blobReader, { useWebWorkers: false, chunkSize: limits.chunkBytes });
+      if (!reader || typeof reader.getEntriesGenerator !== 'function' || typeof reader.close !== 'function') throw utils.runtimeFailure('DEPENDENCY_INVALID', { phase: 'dependencies', component: 'zip' });
       const entries = new Map();
       const primary = [];
       for await (const entry of reader.getEntriesGenerator()) {
@@ -213,7 +247,7 @@
               await tick();
             } catch (error) { sinkError = error; throw error; }
           } }), { useWebWorkers: false, checkSignature: true, signal: dependencies.signal });
-        } catch (error) { throw sinkError || utils.failure('INVALID_ARCHIVE'); }
+        } catch (error) { throw sinkError || archiveError(error); }
         consumer.close();
         progress(phase, start + span, true);
       }
@@ -427,9 +461,9 @@
       return { activities, gpsTracksByActivityId, fitBestEffortsByActivityId, diagnostics: report };
     } catch (error) {
       if (dependencies.signal && dependencies.signal.aborted) throw utils.failure('CANCELLED');
-      throw error && error.code ? error : utils.failure('INVALID_ARCHIVE');
+      throw archiveError(error);
     } finally {
-      if (reader) await reader.close().catch(() => {});
+      if (reader && typeof reader.close === 'function') await reader.close().catch(() => {});
     }
   }
 

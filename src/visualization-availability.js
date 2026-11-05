@@ -1,6 +1,7 @@
 (function attachVisualizationAvailability(root) {
 const availabilityUtils = typeof module !== 'undefined' && module.exports
   ? {
+    heartRate: require('./heart-rate-utils'),
     scatter: require('./scatter-utils'),
     equipment: require('./equipment-utils'),
     heatmap: require('./heatmap-utils'),
@@ -12,6 +13,7 @@ const availabilityUtils = typeof module !== 'undefined' && module.exports
     lifetimeStatistics: require('./lifetime-statistics-utils')
   }
   : {
+    heartRate: root.heartRateUtils,
     scatter: root.scatterUtils,
     equipment: root.equipmentUtils,
     heatmap: root.heatmapUtils,
@@ -91,6 +93,7 @@ function getVisualizationAvailability(activities, auxiliaryData = {}) {
   return {
     totalDistance: hasTotalDistanceData(records),
     paceMetrics: hasPaceMetricsData(records, scatter),
+    heartRate: availabilityUtils.heartRate.hasHeartRateData(records),
     equipment: equipment.aggregateEquipmentDistance(records).length > 0,
     equipmentTimeline: records.some(activity => activity && hasValidDate(activity.date) &&
       Number.isFinite(activity.distance) && activity.distance > 0) &&

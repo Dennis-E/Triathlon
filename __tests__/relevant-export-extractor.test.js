@@ -9,6 +9,24 @@ const {
 } = require('../scripts/relevant-export-extractor');
 
 describe('reduceActivitiesRows', () => {
+  it.each([['', '180'], ['180', '180'], ['180', '190'], ['180', 'bad']])(
+    'preserves both observed Strava alias columns verbatim %s / %s', (first, second) => {
+      const base = [['Activity ID', 'Activity Date', 'Activity Name', 'Activity Type', 'Distance', 'Distance'], ['alias', '2026-07-19 14:52:02', 'Synthetic run', 'Run', '10', '10000']];
+      const baseline = reduceActivitiesRows(base);
+      const result = reduceActivitiesRows([[...base[0], 'Max. Herzfrequenz', 'Max. Herzfrequenz'], [...base[1], first, second]]);
+      expect(result[0]).toEqual([...baseline[0], 'Max. Herzfrequenz', 'Max. Herzfrequenz']);
+      expect(result[1]).toEqual([...baseline[1], first, second]);
+    }
+  );
+
+  it('preserves optional heart-rate extrema after all unchanged existing columns', () => {
+    const base = [['Activity ID', 'Activity Date', 'Activity Name', 'Activity Type', 'Distance', 'Distance'], ['1', '2026-07-19 14:52:02', 'Synthetic run', 'Run', '10', '10000']];
+    const baseline = reduceActivitiesRows(base);
+    const reduced = reduceActivitiesRows([ [...base[0], 'Minimale Herzfrequenz', 'Max Heart Rate'], [...base[1], '75', '180'] ]);
+    expect(reduced[0]).toEqual([...baseline[0], 'Minimale Herzfrequenz', 'Max Heart Rate']);
+    expect(reduced[1]).toEqual([...baseline[1], '75', '180']);
+  });
+
   it('keeps elevation gain when it is available in the source export', () => {
     const rows = [
       ['Aktivitäts-ID', 'Aktivitätsdatum', 'Name der Aktivität', 'Aktivitätsart', 'Bewegungszeit', 'Distanz', 'Distanz', 'Höhenmeter'],

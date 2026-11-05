@@ -233,6 +233,10 @@
       return processedActivities.filter(act => act.date >= minDate && act.date <= maxDate);
     }
 
+    function getDashboardFilteredActivities() {
+      return getActivitiesInTimeframe().filter(activity => selectedSportFilter === 'All' || activity.sport === selectedSportFilter);
+    }
+
     function getWeeksInDisplayedHorizon() {
       const { minDate, maxDate } = getTimeframeRange();
       const diffMs = maxDate - minDate;
@@ -439,12 +443,11 @@
         if (act.sport === 'Run') totalRun += act.distance;
         else if (act.sport === 'Bike') totalBike += act.distance;
         else if (act.sport === 'Swim') totalSwim += act.distance;
+      });
 
-        // If filtering by specific sport, check matching
-        if (selectedSportFilter === 'All' || act.sport === selectedSportFilter) {
-          totalKm += act.distance;
-          uniqueTrainingDays.add(formatDateIso(act.date));
-        }
+      getDashboardFilteredActivities().forEach(act => {
+        totalKm += act.distance;
+        uniqueTrainingDays.add(formatDateIso(act.date));
       });
 
       const aggregationLabels = {
@@ -638,6 +641,17 @@
     // ─── End Personal Bests Visualization ────────────────────────────────────────
 
     // UI Interactive helpers for filters
+    function refreshHeartRateDashboard(render = true) {
+      if (!window.heartRateDashboard) return;
+      window.heartRateDashboard.invalidate();
+      if (typeof invalidateHeartRateExport === 'function') {
+        invalidateHeartRateExport(window.heartRateUtils.hasHeartRateData(getDashboardFilteredActivities()));
+      }
+      if (render && typeof selectedVisualizationTab !== 'undefined' && selectedVisualizationTab === 'heartRate') {
+        window.heartRateDashboard.render();
+      }
+    }
+
     function setSportFilter(sport, render = true) {
       if (sport !== selectedSportFilter) window.dashboardTooltips?.invalidate();
       selectedSportFilter = sport;
@@ -652,6 +666,7 @@
       if (activeButton && typeof activeButton.setAttribute === 'function') activeButton.setAttribute('aria-pressed', 'true');
       
       if (render) renderDashboard();
+      refreshHeartRateDashboard(render);
     }
 
     function setTimeframeFilter(timeframeKey) {
@@ -659,6 +674,7 @@
       selectedTimeframeByAggregation[selectedAggregationLevel] = timeframeKey;
       renderTimeframeButtons();
       renderDashboard();
+      refreshHeartRateDashboard();
     }
 
     function renderTimeframeButtons() {
@@ -704,6 +720,7 @@
       renderTimeframeButtons();
 
       if (render) renderDashboard();
+      refreshHeartRateDashboard(render);
     }
 
     function getTotalDistanceKeyboardAdapter() {
@@ -721,6 +738,7 @@
           setAggregationLevel(values.aggregation, false);
           setSportFilter(values.sport, false);
           renderDashboard();
+          refreshHeartRateDashboard();
         }
       );
     }

@@ -12,7 +12,17 @@
     NO_SUPPORTED_WORKOUTS: 'No valid running, cycling or swimming workouts were found.',
     CANCELLED: 'Apple Health import was cancelled.',
     UNSUPPORTED_CAPABILITY: 'Apple Health import requires a modern browser served over HTTP or HTTPS.',
-    DEPENDENCY_LOAD_FAILED: 'Apple Health import dependencies could not load. Check your connection and retry.'
+    DEPENDENCY_LOAD_FAILED: 'Apple Health import dependencies could not load. Check your connection and retry.',
+    UNSUPPORTED_DEPLOYMENT: 'Serve this app over local HTTP or secure HTTPS before importing Apple Health.',
+    INSECURE_CONTEXT: 'Apple Health import needs a secure HTTPS origin or local HTTP on localhost or loopback.',
+    MISSING_CAPABILITY: 'A required Apple Health import function is unavailable in this environment.',
+    DEPENDENCY_INVALID: 'An Apple Health import library is missing required exports. Reload the app and retry.',
+    WORKER_START_FAILED: 'The Apple Health import worker could not start. Retry or report the safe diagnostic.',
+    WORKER_INIT_TIMEOUT: 'The Apple Health importer did not become ready within 30 seconds. Retry.',
+    WORKER_RUNTIME_FAILED: 'The Apple Health import worker stopped unexpectedly. Retry.',
+    WORKER_PROTOCOL_ERROR: 'The Apple Health importer returned an invalid message. Retry or report the safe diagnostic.',
+    HASH_FAILED: 'Secure workout identity generation failed. No replacement identities were created.',
+    INTERNAL_ERROR: 'The Apple Health importer encountered an internal error. Report the safe diagnostic.'
   });
   const UNITS = Object.freeze({
     distance: { km: 1, m: 0.001, mi: 1.609344 },
@@ -24,6 +34,90 @@
   function failure(code) {
     const safeCode = Object.prototype.hasOwnProperty.call(MESSAGES, code) ? code : 'INVALID_ARCHIVE';
     return Object.assign(new Error(MESSAGES[safeCode]), { code: safeCode });
+  }
+
+  const RUNTIME_ENUMS = Object.freeze({
+    phase: ['preflight', 'worker-start', 'dependencies', 'capabilities', 'hashing', 'parsing', 'result', 'commit'],
+    component: ['deployment', 'worker', 'stream', 'text', 'zip', 'sax', 'crypto', 'protocol', 'importer'],
+    scheme: ['http', 'https', 'file', 'other'], hostClass: ['loopback', 'remote', 'none'], realm: ['window', 'worker'],
+    capability: ['Worker', 'ReadableStream', 'WritableStream', 'TextEncoder', 'TextDecoder', 'AbortController', 'crypto.subtle.digest']
+  });
+  const RUNTIME_ACTIONS = Object.freeze({
+    UNSUPPORTED_DEPLOYMENT: 'serve-local', INSECURE_CONTEXT: 'use-secure-origin', MISSING_CAPABILITY: 'use-supported-environment',
+    UNSUPPORTED_CAPABILITY: 'use-supported-environment', DEPENDENCY_LOAD_FAILED: 'retry', DEPENDENCY_INVALID: 'retry',
+    WORKER_START_FAILED: 'retry', WORKER_INIT_TIMEOUT: 'retry', WORKER_RUNTIME_FAILED: 'retry',
+    WORKER_PROTOCOL_ERROR: 'report-safe-diagnostic', HASH_FAILED: 'report-safe-diagnostic', INTERNAL_ERROR: 'report-safe-diagnostic', CANCELLED: 'none'
+  });
+
+  function getRuntimeEnvironment(runtime = root, realm = 'window') {
+    const protocol = runtime.location && runtime.location.protocol;
+    const scheme = { 'http:': 'http', 'https:': 'https', 'file:': 'file' }[protocol] || 'other';
+    const hostname = String(runtime.location && runtime.location.hostname || '').toLowerCase();
+    const ipv4 = /^127(?:\.\d{1,3}){3}$/.test(hostname) && hostname.split('.').every(part => Number(part) <= 255);
+    const loopback = hostname === 'localhost' || hostname === '::1' || hostname === '[::1]' || ipv4;
+    return { scheme, hostClass: loopback ? 'loopback' : hostname ? 'remote' : 'none',
+      secureContext: runtime.isSecureContext === true, realm: RUNTIME_ENUMS.realm.includes(realm) ? realm : 'window' };
+  }
+
+  function createRuntimeDiagnostic(code, context = {}) {
+    const safeCode = Object.prototype.hasOwnProperty.call(MESSAGES, code) ? code : 'INTERNAL_ERROR';
+    const environment = context.environment || getRuntimeEnvironment(root, context.realm);
+    const safeEnvironment = {};
+    for (const key of ['scheme', 'hostClass', 'realm']) {
+      safeEnvironment[key] = RUNTIME_ENUMS[key].includes(environment[key]) ? environment[key] : { scheme: 'other', hostClass: 'none', realm: 'window' }[key];
+    }
+    safeEnvironment.secureContext = environment.secureContext === true;
+    return { v: 1, code: safeCode,
+      phase: RUNTIME_ENUMS.phase.includes(context.phase) ? context.phase : 'preflight',
+      component: RUNTIME_ENUMS.component.includes(context.component) ? context.component : 'importer',
+      generation: Number.isSafeInteger(context.generation) && context.generation >= 0 ? context.generation : 0,
+      environment: safeEnvironment,
+      missingCapabilities: [...new Set((Array.isArray(context.missingCapabilities) ? context.missingCapabilities : [])
+        .filter(capability => RUNTIME_ENUMS.capability.includes(capability)))],
+      action: RUNTIME_ACTIONS[safeCode] || 'select-valid-export' };
+  }
+
+  function validateRuntimeDiagnostic(diagnostic, generation) {
+    try {
+      const fields = ['v', 'code', 'phase', 'component', 'generation', 'environment', 'missingCapabilities', 'action'];
+      if (!diagnostic || typeof diagnostic !== 'object' || Object.keys(diagnostic).length !== fields.length ||
+          Object.keys(diagnostic).some(key => !fields.includes(key)) || diagnostic.v !== 1 ||
+          !Object.prototype.hasOwnProperty.call(MESSAGES, diagnostic.code) || !RUNTIME_ENUMS.phase.includes(diagnostic.phase) ||
+          !RUNTIME_ENUMS.component.includes(diagnostic.component) || !Number.isSafeInteger(diagnostic.generation) || diagnostic.generation < 0 ||
+          (generation !== undefined && diagnostic.generation !== generation)) return null;
+      const environment = diagnostic.environment;
+      if (!environment || Object.keys(environment).length !== 4 || Object.keys(environment).some(key => !['scheme', 'hostClass', 'secureContext', 'realm'].includes(key)) ||
+          !RUNTIME_ENUMS.scheme.includes(environment.scheme) || !RUNTIME_ENUMS.hostClass.includes(environment.hostClass) ||
+          !RUNTIME_ENUMS.realm.includes(environment.realm) || typeof environment.secureContext !== 'boolean') return null;
+      const missing = diagnostic.missingCapabilities;
+      if (!Array.isArray(missing) || missing.length > RUNTIME_ENUMS.capability.length || new Set(missing).size !== missing.length ||
+          missing.some(capability => !RUNTIME_ENUMS.capability.includes(capability)) ||
+          diagnostic.action !== (RUNTIME_ACTIONS[diagnostic.code] || 'select-valid-export')) return null;
+      return createRuntimeDiagnostic(diagnostic.code, diagnostic);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function runtimeFailure(code, context = {}) {
+    const diagnostic = createRuntimeDiagnostic(code, context);
+    const error = failure(diagnostic.code);
+    if (diagnostic.missingCapabilities.length) error.message += ` Missing: ${diagnostic.missingCapabilities.join(', ')}.`;
+    return Object.assign(error, { diagnostic });
+  }
+
+  function inspectRuntimeCapabilities(runtime = root, realm = 'window', generation = 0) {
+    const environment = getRuntimeEnvironment(runtime, realm);
+    const context = { generation, environment, phase: realm === 'worker' ? 'capabilities' : 'preflight', component: 'deployment' };
+    if (!['http', 'https'].includes(environment.scheme)) return createRuntimeDiagnostic('UNSUPPORTED_DEPLOYMENT', context);
+    if (!environment.secureContext || (environment.scheme === 'http' && environment.hostClass !== 'loopback')) return createRuntimeDiagnostic('INSECURE_CONTEXT', context);
+    const required = realm === 'worker' ? ['ReadableStream', 'WritableStream', 'TextEncoder', 'TextDecoder', 'AbortController'] : ['Worker'];
+    const missingCapabilities = required.filter(capability => typeof runtime[capability] !== 'function');
+    if (realm === 'worker' && (!runtime.crypto || !runtime.crypto.subtle || typeof runtime.crypto.subtle.digest !== 'function')) missingCapabilities.push('crypto.subtle.digest');
+    if (!missingCapabilities.length) return null;
+    const component = missingCapabilities.includes('crypto.subtle.digest') ? 'crypto' : missingCapabilities.some(name => /Text/.test(name)) ? 'text'
+      : missingCapabilities.some(name => /Stream/.test(name)) ? 'stream' : realm === 'window' ? 'worker' : 'importer';
+    return createRuntimeDiagnostic('MISSING_CAPABILITY', { ...context, component, missingCapabilities });
   }
 
   function number(value) {
@@ -71,9 +165,17 @@
   }
 
   async function digest(value) {
+    if (typeof TextEncoder !== 'function') throw runtimeFailure('MISSING_CAPABILITY', { phase: 'hashing', component: 'text', missingCapabilities: ['TextEncoder'] });
+    if (!root.crypto || !root.crypto.subtle || typeof root.crypto.subtle.digest !== 'function') {
+      throw runtimeFailure('MISSING_CAPABILITY', { phase: 'hashing', component: 'crypto', missingCapabilities: ['crypto.subtle.digest'] });
+    }
     const bytes = new TextEncoder().encode(value);
-    const hash = await root.crypto.subtle.digest('SHA-256', bytes);
-    return Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('');
+    try {
+      const hash = await root.crypto.subtle.digest('SHA-256', bytes);
+      return Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('');
+    } catch (error) {
+      throw runtimeFailure('HASH_FAILED', { phase: 'hashing', component: 'crypto' });
+    }
   }
 
   function diagnostics() {
@@ -104,6 +206,35 @@
       if (!values.length) return null;
       return values.every(value => value === values[0]) ? values[0] : null;
     }
+    function heartRateExtreme(field) {
+      const candidates = raw.statistics.filter(statistic => statistic.type === 'HKQuantityTypeIdentifierHeartRate' && statistic[field] !== undefined);
+      let invalidReason = null;
+      const values = candidates.map(statistic => {
+        if (statistic.startDate !== undefined || statistic.endDate !== undefined) {
+          const statisticStart = parseTimestamp(statistic.startDate);
+          const statisticEnd = parseTimestamp(statistic.endDate);
+          if (!statisticStart || !statisticEnd || statisticStart.instant.getTime() !== start.instant.getTime() ||
+              statisticEnd.instant.getTime() !== end.instant.getTime()) {
+            invalidReason = 'invalid_boundary';
+            return null;
+          }
+        }
+        if (!Object.prototype.hasOwnProperty.call(UNITS.heartRate, statistic.unit)) {
+          invalidReason = 'unknown_unit';
+          return null;
+        }
+        const value = quantity(statistic[field], statistic.unit, 'heartRate');
+        if (value !== null && value > 0) return value;
+        if (!invalidReason) invalidReason = 'invalid_value';
+        return null;
+      });
+      const value = values.length && values[0] !== null && values.every(candidate => candidate === values[0]) ? values[0] : null;
+      const status = !values.length ? 'missing' : value !== null ? 'valid' : !invalidReason ? 'conflict' :
+        ['invalid_boundary', 'unknown_unit'].includes(invalidReason) ? 'unqualified' : 'invalid';
+      return { value, status, source: values.length ? 'summary' : null,
+        reason: status === 'valid' ? null : status === 'missing' ? 'missing' : invalidReason || 'conflict', sampleCount: null, readComplete: null };
+    }
+    const heartRateProvenance = { minimum: heartRateExtreme('minimum'), maximum: heartRateExtreme('maximum') };
     const distanceType = { Run: 'DistanceWalkingRunning', Bike: 'DistanceCycling', Swim: 'DistanceSwimming' }[sport];
     const hasDistanceSummary = raw.statistics.some(statistic => statistic.type === 'HKQuantityTypeIdentifier' + distanceType);
     const distance = hasDistanceSummary ? summary(distanceType, 'sum', 'distance') : quantity(attributes.totalDistance, attributes.totalDistanceUnit, 'distance');
@@ -115,6 +246,9 @@
       distance: distance === null ? 0 : distance, distanceAvailable: distance !== null,
       duration: duration === null ? 0 : duration, durationAvailable: duration !== null,
       avgHeartRate: positive(summary('HeartRate', 'average', 'heartRate')),
+      minHeartRate: heartRateProvenance.minimum.value,
+      maxHeartRate: heartRateProvenance.maximum.value,
+      heartRateProvenance,
       avgWatts: sport === 'Bike' ? positive(summary('CyclingPower', 'average', 'power')) : null,
       avgCadence: sport === 'Bike' ? positive(summary('CyclingCadence', 'average', 'cadence')) : null,
       totalSteps: sport === 'Run' ? positive(summary('StepCount', 'sum', 'steps')) : null,
@@ -191,7 +325,8 @@
     return { value: requireCoverage ? value : value / weight, ordered, points };
   }
 
-  const api = { failure, number, quantity, parseTimestamp, calendarDates, canonical, digest, diagnostics, count,
+  const api = { failure, runtimeFailure, getRuntimeEnvironment, createRuntimeDiagnostic, validateRuntimeDiagnostic, inspectRuntimeCapabilities,
+    number, quantity, parseTimestamp, calendarDates, canonical, digest, diagnostics, count,
     normalizeWorkout, reduceSamples };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.appleHealthUtils = api;

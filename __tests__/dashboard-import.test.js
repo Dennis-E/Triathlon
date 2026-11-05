@@ -25,7 +25,10 @@ function loadImportOperationRuntime() {
     window: { importExperienceCatalog, appleHealthUtils },
     Papa: { parse: jest.fn() },
     WritableStream,
-    location: { protocol: 'http:' },
+    location: { protocol: 'http:', hostname: '127.0.0.1' },
+    isSecureContext: true,
+    setTimeout: jest.fn(() => 2),
+    clearTimeout: jest.fn(),
     setInterval: jest.fn(() => 1),
     clearInterval: jest.fn(),
     updateStatusBadge: jest.fn(),
@@ -56,6 +59,222 @@ function loadImportOperationRuntime() {
   return context;
 }
 
+function loadAppleControllerRuntime() {
+  const runtime = loadImportOperationRuntime();
+  runtime.testWorkers = [];
+  runtime.Worker = class SyntheticWorker {
+    constructor() {
+      this.terminate = jest.fn();
+      this.postMessage = jest.fn();
+      runtime.testWorkers.push(this);
+    }
+  };
+  return runtime;
+}
+
+function loadAppleWorkerRuntime(overrides = {}) {
+  const runtime = {
+    Date, Float64Array, Uint32Array, TextEncoder, TextDecoder, ReadableStream, WritableStream, AbortController,
+    crypto: require('crypto').webcrypto, isSecureContext: true, location: { protocol: 'http:', hostname: '127.0.0.1' },
+    appleHealthUtils, sax: require('sax'), zip: { ...require('@zip.js/zip.js/index-native.js'), configure: jest.fn() },
+    extractGpxTrackpoints: require('../src/zip-importer').extractGpxTrackpoints,
+    powerPbUtils: require('../src/power-pb-utils'), importScripts: jest.fn(), postMessage: jest.fn(), close: jest.fn(),
+    appleHealthImporter: { importAppleHealthZip: jest.fn().mockResolvedValue({ activities: [], gpsTracksByActivityId: {}, fitBestEffortsByActivityId: {} }) },
+    ...overrides
+  };
+  runtime.self = runtime;
+  vm.createContext(runtime);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/apple-health-worker.js'), 'utf8'), runtime);
+  return runtime;
+}
+
+describe('Apple worker initialization contract', () => {
+  it('initializes the actual worker script before receiving a health file', async () => {
+    const runtime = loadAppleWorkerRuntime();
+    await runtime.onmessage({ data: { v: 1, type: 'init', generation: 3 } });
+    expect(runtime.postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ v: 1, type: 'ready', generation: 3 }));
+    expect(runtime.appleHealthImporter.importAppleHealthZip).not.toHaveBeenCalled();
+    expect(runtime.close).not.toHaveBeenCalled();
+    await runtime.onmessage({ data: { v: 1, type: 'start', generation: 3, file: { name: 'synthetic.zip' } } });
+    expect(runtime.appleHealthImporter.importAppleHealthZip).toHaveBeenCalledTimes(1);
+    expect(runtime.close).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [{ importScripts: () => { throw new Error('private-filename'); } }, 'DEPENDENCY_LOAD_FAILED'],
+    [{ sax: {} }, 'DEPENDENCY_INVALID'], [{ TextDecoder: undefined }, 'MISSING_CAPABILITY'],
+    [{ crypto: { subtle: { digest: async () => { throw new Error('private-message'); } } } }, 'HASH_FAILED'],
+    [{ crypto: { subtle: { digest: async () => new ArrayBuffer(32) } } }, 'HASH_FAILED']
+  ])('reports safe worker initialization errors without processing a file', async (changes, code) => {
+    const runtime = loadAppleWorkerRuntime(changes);
+    await runtime.onmessage({ data: { v: 1, type: 'init', generation: 3 } });
+    expect(runtime.postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'error', v: 1, generation: 3, code,
+      diagnostic: expect.objectContaining({ code, generation: 3, environment: { scheme: 'http', hostClass: 'loopback', secureContext: true, realm: 'worker' } }) }));
+    expect(JSON.stringify(runtime.postMessage.mock.calls)).not.toContain('private');
+    expect(runtime.appleHealthImporter.importAppleHealthZip).not.toHaveBeenCalled();
+    expect(runtime.close).toHaveBeenCalledTimes(1);
+    const component = code === 'HASH_FAILED' ? 'crypto' : code === 'MISSING_CAPABILITY' ? 'text' : code === 'DEPENDENCY_INVALID' ? 'sax' : 'importer';
+    expect(runtime.postMessage.mock.calls.at(-1)[0].diagnostic.component).toBe(component);
+  });
+
+  it.each([
+    ['runtime', 'WORKER_RUNTIME_FAILED'], ['messageerror', 'WORKER_PROTOCOL_ERROR'],
+    ['bad-message', 'WORKER_PROTOCOL_ERROR'], ['timeout', 'WORKER_INIT_TIMEOUT']
+  ])('cleans the window controller exactly once after %s', async (mode, code) => {
+    const runtime = loadAppleControllerRuntime();
+    const operation = runtime.begin('personal');
+    const pending = runtime.runAppleWorker({ name: 'synthetic.zip' }, jest.fn(), operation).catch(error => error);
+    const worker = runtime.testWorkers.at(-1);
+    if (mode === 'runtime') worker.onerror({ message: 'private-error' });
+    if (mode === 'messageerror') worker.onmessageerror?.({});
+    if (mode === 'bad-message') worker.onmessage({ data: { v: 2, generation: operation.generation, type: 'ready' } });
+    if (mode === 'timeout') runtime.setTimeout.mock.calls.find(call => call[1] === 30000)?.[0]();
+    runtime.begin('sample');
+    expect(await pending).toMatchObject({ code });
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+    expect(runtime.clearInterval).toHaveBeenCalledTimes(1);
+    expect(runtime.clearTimeout).toHaveBeenCalledTimes(1);
+    expect(worker.onmessage).toBeNull();
+    expect(worker.onerror).toBeNull();
+    expect(worker.onmessageerror).toBeNull();
+  });
+
+  it('catches constructor and initial clone failures without exposing raw exceptions', async () => {
+    for (const mode of ['constructor', 'clone']) {
+      const runtime = loadAppleControllerRuntime();
+      const terminate = jest.fn();
+      runtime.Worker = class {
+        constructor() { if (mode === 'constructor') throw new Error('private-error'); }
+        terminate = terminate;
+        postMessage() { throw new Error('private-error'); }
+      };
+      const result = await runtime.runAppleWorker({ name: 'synthetic.zip' }, jest.fn(), runtime.begin('personal')).catch(error => error);
+      expect(result.code).toBe(mode === 'constructor' ? 'WORKER_START_FAILED' : 'WORKER_PROTOCOL_ERROR');
+      expect(result.message).not.toContain('private');
+      expect(terminate).toHaveBeenCalledTimes(mode === 'constructor' ? 0 : 1);
+    }
+  });
+
+  it('does not apply an already-cleared initialization watchdog during processing', async () => {
+    const runtime = loadAppleControllerRuntime();
+    const operation = runtime.begin('personal');
+    const outcome = runtime.runAppleWorker({ name: 'synthetic.zip' }, jest.fn(), operation).catch(error => error);
+    const worker = runtime.testWorkers.at(-1);
+    const onmessage = worker.onmessage;
+    const watchdog = runtime.setTimeout.mock.calls.find(call => call[1] === 30000)[0];
+    onmessage({ data: { v: 1, generation: operation.generation, type: 'ready' } });
+    watchdog();
+    onmessage({ data: { v: 1, generation: operation.generation, type: 'complete', result: {
+      activities: [{ id: 'synthetic', sport: 'Run', startTime: Date.parse('2026-07-19T10:00:00Z'), sourceLocalStart: { year: 2026, month: 7, day: 19 } }],
+      gpsTracksByActivityId: {}
+    } } });
+    expect(await outcome).toHaveProperty('activities');
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+    expect(runtime.clearTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['progress-before-ready', 'complete-before-ready', 'duplicate-ready', 'unsafe-diagnostic', 'invalid-result'])(
+    'rejects %s without committing or forwarding unsafe content', async mode => {
+      const runtime = loadAppleControllerRuntime();
+      const operation = runtime.begin('personal');
+      const progress = jest.fn();
+      const outcome = runtime.runAppleWorker({ name: 'synthetic.zip' }, progress, operation).catch(error => error);
+      const worker = runtime.testWorkers.at(-1);
+      if (['duplicate-ready', 'invalid-result'].includes(mode)) worker.onmessage({ data: { v: 1, type: 'ready', generation: operation.generation } });
+      const messages = {
+        'progress-before-ready': { type: 'progress', phase: 'readingWorkouts', percent: 5 },
+        'complete-before-ready': { type: 'complete', result: { activities: [] } },
+        'duplicate-ready': { type: 'ready' },
+        'unsafe-diagnostic': { type: 'error', code: 'INVALID_XML', diagnostic: { filename: 'private-value' } },
+        'invalid-result': { type: 'complete', result: { activities: [{ sport: 'Run', startTime: 0, sourceLocalStart: { year: 2026, month: 13, day: 1 } }] } }
+      };
+      worker.onmessage({ data: { v: 1, generation: operation.generation, ...messages[mode] } });
+      runtime.begin('sample');
+      const result = await outcome;
+      expect(result.code).toBe('WORKER_PROTOCOL_ERROR');
+      expect(JSON.stringify(result.diagnostic)).not.toContain('private');
+      expect(progress).not.toHaveBeenCalled();
+      expect(runtime.applied).toEqual([]);
+      expect(worker.terminate).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it('preserves the previous dashboard on worker failure and commits only a fresh successful retry', async () => {
+    const runtime = loadAppleControllerRuntime();
+    const previous = { activities: [{ id: 'previous' }] };
+    runtime.applied.push(previous);
+    const first = runtime.runAppleHealth({ name: 'synthetic.zip' }).catch(error => error);
+    const oldWorker = runtime.testWorkers.at(-1);
+    const lateHandler = oldWorker.onmessage;
+    oldWorker.onerror({ message: 'private-value' });
+    expect((await first).code).toBe('WORKER_RUNTIME_FAILED');
+    expect(runtime.applied).toEqual([previous]);
+    expect(runtime.recordCompletedAnalysis).not.toHaveBeenCalled();
+    const second = runtime.runAppleHealth({ name: 'synthetic.zip' });
+    const worker = runtime.testWorkers.at(-1);
+    const generation = worker.postMessage.mock.calls[0][0].generation;
+    worker.onmessage({ data: { v: 1, generation: generation + 10, type: 'ready' } });
+    expect(worker.postMessage).toHaveBeenCalledTimes(1);
+    worker.onmessage({ data: { v: 1, generation, type: 'ready' } });
+    lateHandler({ data: { v: 1, generation: generation - 1, type: 'complete', result: { activities: [] } } });
+    worker.onmessage({ data: { v: 1, generation, type: 'complete', result: {
+      activities: [{ id: 'synthetic-retry', sport: 'Run', startTime: Date.parse('2026-07-19T10:00:00Z'), sourceLocalStart: { year: 2026, month: 7, day: 19 } }],
+      gpsTracksByActivityId: {}, diagnostics: {}
+    } } });
+    const dataset = await second;
+    expect(runtime.applied).toEqual([previous, dataset]);
+    expect(runtime.recordCompletedAnalysis).toHaveBeenCalledTimes(1);
+    expect(worker).not.toBe(oldWorker);
+    expect(oldWorker.terminate).toHaveBeenCalledTimes(1);
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([['utilities', 'DEPENDENCY_LOAD_FAILED'], ['file', 'UNSUPPORTED_DEPLOYMENT'], ['remote', 'INSECURE_CONTEXT'], ['Worker', 'MISSING_CAPABILITY']])(
+    'rejects missing or unsupported window prerequisite %s before starting a worker', async (mode, code) => {
+      const runtime = loadAppleControllerRuntime();
+      if (mode === 'utilities') runtime.window.appleHealthUtils = undefined;
+      if (mode === 'file') runtime.location = { protocol: 'file:', hostname: '' };
+      if (mode === 'remote') { runtime.location = { protocol: 'http:', hostname: 'example.invalid' }; runtime.isSecureContext = false; }
+      if (mode === 'Worker') runtime.Worker = undefined;
+      const outcome = await runtime.runAppleHealth({ name: 'synthetic.zip' }).catch(error => error);
+      expect(outcome.code).toBe(code);
+      expect(runtime.testWorkers).toHaveLength(0);
+      expect(runtime.applied).toEqual([]);
+      expect(runtime.recordCompletedAnalysis).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(['cancel', 'clone'])('cleans an already-ready worker after %s without a commit', async mode => {
+    const runtime = loadAppleControllerRuntime();
+    const operation = runtime.begin('personal');
+    const outcome = runtime.runAppleWorker({ name: 'synthetic.zip' }, jest.fn(), operation).catch(error => error);
+    const worker = runtime.testWorkers.at(-1);
+    const lateHandler = worker.onmessage;
+    if (mode === 'clone') worker.postMessage.mockImplementationOnce(() => { throw new Error('private-value'); });
+    lateHandler({ data: { v: 1, generation: operation.generation, type: 'ready' } });
+    if (mode === 'cancel') runtime.begin('sample');
+    lateHandler({ data: { v: 1, generation: operation.generation, type: 'complete', result: { activities: [] } } });
+    expect(await outcome).toMatchObject({ code: mode === 'cancel' ? 'CANCELLED' : 'WORKER_PROTOCOL_ERROR' });
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+    expect(runtime.clearTimeout).toHaveBeenCalledTimes(1);
+    expect(runtime.applied).toEqual([]);
+  });
+
+  it('cancels initialization without emitting late ready or processing a file', async () => {
+    const probe = deferredImport();
+    const runtime = loadAppleWorkerRuntime({ crypto: { subtle: { digest: () => probe.promise } } });
+    const handle = runtime.onmessage;
+    const initializing = handle({ data: { v: 1, type: 'init', generation: 3 } });
+    await handle({ data: { v: 1, type: 'cancel', generation: 3 } });
+    probe.resolve(await require('crypto').webcrypto.subtle.digest('SHA-256', new TextEncoder().encode('abc')));
+    await initializing;
+    expect(runtime.postMessage).toHaveBeenCalledTimes(1);
+    expect(runtime.postMessage.mock.calls[0][0]).toMatchObject({ type: 'error', code: 'CANCELLED' });
+    expect(runtime.appleHealthImporter.importAppleHealthZip).not.toHaveBeenCalled();
+    expect(runtime.close).toHaveBeenCalledTimes(1);
+  });
+});
+
 function prepareStravaOperationRuntime(runtime, archive) {
   let input;
   const node = { textContent: '', classList: { add() {}, remove() {} } };
@@ -72,6 +291,102 @@ function prepareStravaOperationRuntime(runtime, archive) {
 }
 
 describe('shared dashboard import operations', () => {
+  it('sanitizes Apple UI failures and retries explicitly with a new import generation', async () => {
+    const runtime = loadImportOperationRuntime();
+    let input;
+    const nodes = Object.fromEntries(['importProgressError', 'importProgressDetail', 'appleHealthImportStatus', 'appleHealthRetryBtn']
+      .map(id => [id, { textContent: '', classList: { add: jest.fn(), remove: jest.fn() } }]));
+    runtime.document = { createElement: () => (input = { click() {} }), getElementById: id => nodes[id] || null };
+    runtime.showImportProgressModal = jest.fn();
+    runtime.hideImportProgressModal = jest.fn();
+    runtime.setImportModalVisualState = jest.fn();
+    runtime.updateImportProgress = jest.fn();
+    runtime.executeAppleHealthZipImport = jest.fn()
+      .mockRejectedValueOnce(Object.assign(new Error('private-filename-and-message'), { code: 'DEPENDENCY_LOAD_FAILED' }))
+      .mockResolvedValueOnce({ activities: [{ id: 'synthetic-retry' }], diagnostics: {} });
+    runtime.handleAppleHealthIngest();
+    await input.onchange({ target: { files: [{ name: 'synthetic.zip' }] } });
+    expect(nodes.importProgressDetail.textContent).toContain('DEPENDENCY_LOAD_FAILED');
+    expect(nodes.importProgressDetail.textContent).not.toContain('private');
+    expect(nodes.appleHealthRetryBtn.classList.remove).toHaveBeenCalledWith('hidden');
+    expect(runtime.executeAppleHealthZipImport).toHaveBeenCalledTimes(1);
+    await runtime.retryAppleHealthImport();
+    expect(runtime.executeAppleHealthZipImport).toHaveBeenCalledTimes(2);
+    const generations = runtime.executeAppleHealthZipImport.mock.calls.map(([, options]) => options.operation.generation);
+    expect(generations[1]).toBeGreaterThan(generations[0]);
+    expect(runtime.hideImportProgressModal).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps average-only and field-specific heart-rate import notes reachable without the extrema tab', () => {
+    const runtime = loadRuntimeDatasetApplicator();
+    const heartRate = require('../src/heart-rate-utils');
+    const dataset = { rawCsvData: [], activities: [{ id: 'notes', date: new Date(2026, 6, 19), sport: 'Run', avgHeartRate: 145,
+      ...heartRate.resolveHeartRateExtrema(heartRate.inspectCsvHeartRateExtrema([], [])) }] };
+    dataset.heartRateCoverage = heartRate.summarizeHeartRateCoverage(dataset.activities);
+    runtime.applyDataset(dataset);
+    const note = runtime.context.document.getElementById('heartRateImportNote');
+    expect(note.textContent).toMatch(/Average heart rate available/i);
+    expect(note.textContent).toMatch(/no usable minimum\/maximum/i);
+    expect(note.classList.remove).toHaveBeenCalledWith('hidden');
+    runtime.applyDataset({ ...dataset, heartRateCoverage: { average: 1, minimum: { records: 1 }, maximum: { summary: 1 } } });
+    expect(note.textContent).toMatch(/recorded measurements/i);
+    expect(note.textContent).toMatch(/direct/i);
+    runtime.applyDataset({ ...dataset, sourceType: 'sample' });
+    expect(note.textContent).toBe('');
+    expect(note.classList.add).toHaveBeenCalledWith('hidden');
+  });
+
+  it('retains aggregate heart-rate coverage in existing CSV and Apple dataset diagnostics', () => {
+    const runtime = loadImportOperationRuntime();
+    const heartRate = require('../src/heart-rate-utils');
+    runtime.window.heartRateUtils = heartRate;
+    runtime.processData = () => [{ id: 'coverage', date: new Date(2026, 6, 19), sport: 'Run', distance: 5, duration: 1800,
+      avgHeartRate: 145, ...heartRate.resolveHeartRateExtrema(heartRate.inspectCsvHeartRateExtrema(['Max. Herzfrequenz'], ['180'])) }];
+    const csv = runtime.createImportedDataset([], 'Synthetic');
+    expect(csv.heartRateCoverage).toMatchObject({ average: 1, minimum: { missing: 1 }, maximum: { summary: 1 } });
+    const apple = runtime.createAppleHealthImportedDataset({ activities: csv.activities, diagnostics: { importedCount: 1 } }, 'synthetic.zip');
+    expect(apple.diagnostics).toMatchObject({ importedCount: 1, heartRateCoverage: csv.heartRateCoverage });
+  });
+
+  it.each([['', '180', 180], ['180', '', 180], ['180', '180', 180], ['180', '190', null], ['180', 'bad', null]])(
+    'uses actual browser Strava alias normalization %s / %s with CommonJS parity', (first, second, expected) => {
+      const rows = [
+        ['ID', 'Activity Date', 'Activity Type', 'Distance', 'Distance', 'Average Heart Rate', 'Max. Herzfrequenz', 'Max. Herzfrequenz'],
+        ['alias', '19.07.2026, 14:52:02', 'Run', '10', '10000', '145', first, second]
+      ];
+      const browser = processRuntimeData(rows)[0];
+      const common = require('../src/dashboard-utils').processData(rows)[0];
+      expect(browser).toMatchObject({ id: 'alias', distance: 10, avgHeartRate: 145, minHeartRate: null, maxHeartRate: expected });
+      expect([browser.minHeartRate, browser.maxHeartRate]).toEqual([common.minHeartRate, common.maxHeartRate]);
+    }
+  );
+
+  it('keeps actual browser and CommonJS Strava alias provenance equal', () => {
+    const rows = [
+      ['ID', 'Activity Date', 'Activity Type', 'Distance', 'Max. Herzfrequenz', 'Average Heart Rate'],
+      ['alias', '19.07.2026, 14:52:02', 'Run', '10', '180', '145']
+    ];
+    const browser = processRuntimeData(rows)[0];
+    const common = require('../src/dashboard-utils').processData(rows)[0];
+    expect(browser.heartRateProvenance).toMatchObject({ minimum: { status: 'missing' }, maximum: { value: 180, status: 'valid', source: 'summary' } });
+    expect(browser.heartRateProvenance).toEqual(common.heartRateProvenance);
+  });
+
+  it('uses the real browser CSV normalizer for explicit heart-rate extrema with CommonJS parity', () => {
+    const context = vm.createContext({ Date, window: { scatterUtils: require('../src/scatter-utils'), heartRateUtils: require('../src/heart-rate-utils') } });
+    for (const file of ['dashboard-state.js', 'dashboard-core.js', 'dashboard-import.js']) {
+      vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), context);
+    }
+    const rows = [
+      ['ID', 'Activity Date', 'Activity Type', 'Distance', 'Distance', 'Average Heart Rate', 'Min Heart Rate', 'Max Heart Rate'],
+      ['original-id', '19.07.2026, 14:52:02', 'Run', '10', '10000', '145', '75,5', '180']
+    ];
+    const browser = context.processData(rows)[0];
+    const common = require('../src/dashboard-utils').processData(rows)[0];
+    expect(browser).toMatchObject({ id: 'original-id', distance: 10, avgHeartRate: 145, minHeartRate: 75.5, maxHeartRate: 180 });
+    expect([browser.minHeartRate, browser.maxHeartRate]).toEqual([common.minHeartRate, common.maxHeartRate]);
+  });
+
   it('hydrates validated worker activity times and forwards progress through the worker message contract', async () => {
     const runtime = loadImportOperationRuntime();
     class SyntheticWorker {
@@ -85,14 +400,17 @@ describe('shared dashboard import operations', () => {
     const workerResult = runtime.runAppleWorker({ name: 'synthetic.zip' }, progress, operation);
     const worker = SyntheticWorker.latest;
     expect(worker.url).toBe('./src/apple-health-worker.js');
-    expect(worker.message).toMatchObject({ type: 'start', generation: operation.generation, file: { name: 'synthetic.zip' } });
-    worker.onmessage({ data: { type: 'progress', generation: operation.generation, phase: 'readingWorkouts', percent: 45 } });
-    worker.onmessage({ data: { type: 'complete', generation: operation.generation, result: {
+    expect(worker.message).toEqual({ v: 1, type: 'init', generation: operation.generation });
+    worker.onmessage({ data: { v: 1, type: 'ready', generation: operation.generation } });
+    expect(worker.message).toMatchObject({ v: 1, type: 'start', generation: operation.generation, file: { name: 'synthetic.zip' } });
+    worker.onmessage({ data: { v: 1, type: 'progress', generation: operation.generation, phase: 'readingWorkouts', percent: 45 } });
+    worker.onmessage({ data: { v: 1, type: 'complete', generation: operation.generation, result: {
       activities: [{ id: 'ah-worker', sport: 'Run', startTime: Date.parse('2025-03-01T07:00:00Z'),
         sourceLocalStart: { year: 2025, month: 3, day: 1, hour: 8, minute: 0, second: 0, offsetMinutes: 60 } }],
       gpsTracksByActivityId: {}, fitBestEffortsByActivityId: {}, diagnostics: {}
     } } });
     const result = await workerResult;
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
 
     expect(progress).toHaveBeenCalledWith(expect.objectContaining({ percent: 45, stage: 'Reading Apple Health workouts...' }));
     for (const field of ['startTime', 'date', 'monday']) {
@@ -130,6 +448,7 @@ describe('shared dashboard import operations', () => {
       return nodes.get(id);
     } };
     runtime.window.heatmapUtils = { buildActivitySummaryIndex: jest.fn(() => new Map()) };
+    runtime.window.heartRateDashboard = { reset: jest.fn() };
     runtime.setSportFilter = jest.fn();
     runtime.setBtnActive = jest.fn();
     runtime.closeExportPreviewModal = jest.fn();
@@ -161,6 +480,7 @@ describe('shared dashboard import operations', () => {
     expect(runtime.initTrainingCalendarControls).toHaveBeenCalledTimes(2);
     expect(runtime.refreshVisualizationTabs).toHaveBeenCalledTimes(2);
     expect(runtime.closeExportPreviewModal).toHaveBeenCalledTimes(1);
+    expect(runtime.window.heartRateDashboard.reset).toHaveBeenCalledTimes(2);
   });
 
   it('preserves the current export preview when replacement preparation fails before commit', async () => {
@@ -443,6 +763,7 @@ function loadRuntimeProcessData() {
       return new Date(date.getTime());
     },
     window: {
+      heartRateUtils: require('../src/heart-rate-utils'),
       scatterUtils: {
         parseLocalizedNumber: value => Number(value)
       }
@@ -549,8 +870,8 @@ describe('runtime dashboard-import metric availability', () => {
 
 function loadRuntimeDatasetApplicator() {
   const nodes = Object.fromEntries([
-    'previewCardsContainer', 'enterDashboardContainer', 'emptyStateMessage', 'sampleDataStatus'
-  ].map(id => [id, { classList: { add() {}, remove() {} } }]));
+    'previewCardsContainer', 'enterDashboardContainer', 'emptyStateMessage', 'sampleDataStatus', 'heartRateImportNote'
+  ].map(id => [id, { textContent: '', classList: { add: jest.fn(), remove: jest.fn() } }]));
   const context = {
     importedDataset: null,
     rawCsvData: [],

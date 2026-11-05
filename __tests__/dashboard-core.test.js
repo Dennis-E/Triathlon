@@ -96,6 +96,55 @@ const aggregationFixtures = [
   { date: new Date('2026-03-25T12:00:00'), sport: 'Run', distance: 12 }
 ];
 
+describe('shared dashboard activity selection', () => {
+  test('refreshes active heart-rate views and invalidates hidden models through the original filter setters', () => {
+    const { dashboard } = loadDashboardForRendering(aggregationFixtures);
+    const heartRateDashboard = { invalidate: jest.fn(), render: jest.fn() };
+    dashboard.window.heartRateDashboard = heartRateDashboard;
+    vm.runInContext("selectedVisualizationTab = 'heartRate'", dashboard);
+    dashboard.setSportFilter('Bike');
+    expect(heartRateDashboard.invalidate).toHaveBeenCalled();
+    expect(heartRateDashboard.render).toHaveBeenCalledTimes(1);
+    dashboard.setTimeframeFilter('all');
+    expect(heartRateDashboard.render).toHaveBeenCalledTimes(2);
+    dashboard.setAggregationLevel('daily');
+    expect(heartRateDashboard.render).toHaveBeenCalledTimes(3);
+    vm.runInContext("selectedVisualizationTab = 'totalDistance'", dashboard);
+    heartRateDashboard.invalidate.mockClear();
+    dashboard.setSportFilter('Run');
+    expect(heartRateDashboard.invalidate).toHaveBeenCalledTimes(1);
+    expect(heartRateDashboard.render).toHaveBeenCalledTimes(3);
+  });
+
+  test('matches the original time-then-sport selection for every existing option', () => {
+    const { dashboard } = loadDashboardForRendering(aggregationFixtures);
+    const options = vm.runInContext('TIMEFRAME_OPTIONS', dashboard);
+    for (const [mode, timeframes] of Object.entries(options)) {
+      for (const timeframe of timeframes) {
+        for (const sport of ['All', 'Run', 'Bike', 'Swim']) {
+          dashboard.__selection = { mode, timeframe: timeframe.key, sport };
+          vm.runInContext('selectedAggregationLevel = __selection.mode; selectedSportFilter = __selection.sport; selectedTimeframeByAggregation[__selection.mode] = __selection.timeframe;', dashboard);
+          const expected = dashboard.getActivitiesInTimeframe().filter(activity => sport === 'All' || activity.sport === sport);
+          expect(dashboard.getDashboardFilteredActivities()).toEqual(expected);
+        }
+      }
+    }
+  });
+
+  test('keeps inclusive boundaries anchored to the entire dataset rather than selected sport', () => {
+    const minDate = new Date(2026, 9, 28);
+    const records = [
+      { date: new Date(minDate.getTime() - 1), sport: 'Run', distance: 1 },
+      { date: minDate, sport: 'Run', distance: 2 },
+      { date: new Date(2026, 10, 4), sport: 'Bike', distance: 3 }
+    ];
+    const { dashboard } = loadDashboardForRendering(records);
+    vm.runInContext("selectedAggregationLevel = 'daily'; selectedTimeframeByAggregation.daily = '7d'; selectedSportFilter = 'Run';", dashboard);
+    expect(dashboard.getDashboardFilteredActivities().map(activity => activity.distance)).toEqual([2]);
+    expect(dashboard.getTimeframeRange().maxDate).toEqual(records[2].date);
+  });
+});
+
 function loadAdditionalChart(moduleName, canvasId) {
   const runtime = loadDashboardForRendering(aggregationFixtures.map(activity => ({ ...activity, startTime: activity.date, duration: 3600 })));
   const { dashboard, elements } = runtime;

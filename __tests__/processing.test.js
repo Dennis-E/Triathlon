@@ -40,6 +40,59 @@ describe('parseCsvSimple', () => {
 });
 
 describe('processData', () => {
+  it.each([
+    ['', '180', 180], ['180', '', 180], ['180', '180', 180],
+    ['180', '190', null], ['180', '180 bpm', null], ['', '', null]
+  ])('imports observed Strava alias numbers %s / %s without guessing', (first, second, expected) => {
+    const activity = processData([
+      ['ID', 'Activity Date', 'Activity Type', 'Distance', 'Distance', 'Average Heart Rate', 'Max. Herzfrequenz', 'Max. Herzfrequenz'],
+      ['alias', '19.07.2026, 14:52:02', 'Run', '10', '10000', '145', first, second]
+    ])[0];
+    expect(activity).toMatchObject({ id: 'alias', distance: 10, avgHeartRate: 145, minHeartRate: null, maxHeartRate: expected });
+  });
+
+  it.each([['180', '', 'valid'], ['', '', 'missing'], ['180', '190', 'conflict'], ['180', 'bad', 'invalid']])(
+    'records Strava alias provenance %s / %s as %s', (first, second, status) => {
+      const activity = processData([
+        ['ID', 'Activity Date', 'Activity Type', 'Distance', 'Max. Herzfrequenz', 'Max. Herzfrequenz'],
+        ['alias', '19.07.2026, 14:52:02', 'Run', '10', first, second]
+      ])[0];
+      expect(activity.heartRateProvenance).toMatchObject({ minimum: { status: 'missing' }, maximum: { status } });
+      expect(activity.heartRateProvenance.maximum.source).toBe(status === 'missing' ? null : 'summary');
+    }
+  );
+
+  it.each([
+    ['Min Heart Rate', 'Max Heart Rate'],
+    ['Minimum Heart Rate', 'Maximum Heart Rate'],
+    ['Minimale Herzfrequenz', 'Maximale Herzfrequenz']
+  ])('imports explicit heart-rate extrema from %s / %s without changing existing fields', (minimumHeader, maximumHeader) => {
+    const base = [
+      ['ID', 'Activity Date', 'Activity Type', 'Distance', 'Distance', 'Average Heart Rate'],
+      ['a', '19.07.2026, 14:52:02', 'Run', '10', '10000', '145']
+    ];
+    const baseline = processData(base)[0];
+    const activity = processData([ [...base[0], minimumHeader, maximumHeader], [...base[1], '75,5', '180'] ])[0];
+    expect(activity).toMatchObject({ minHeartRate: 75.5, maxHeartRate: 180 });
+    const { minHeartRate, maxHeartRate, heartRateProvenance, ...existing } = activity;
+    const { minHeartRate: oldMin, maxHeartRate: oldMax, heartRateProvenance: oldEvidence, ...oldExisting } = baseline;
+    expect(existing).toEqual(oldExisting);
+  });
+
+  it('keeps valid individual heart-rate extrema without guessing or accepting loose units', () => {
+    const rows = [
+      ['ID', 'Activity Date', 'Activity Type', 'Distance', 'Min Heart Rate', 'Max Heart Rate'],
+      ['a', '19.07.2026, 14:52:02', 'Run', '5', '', '180'],
+      ['b', '19.07.2026, 14:52:02', 'Bike', '5', '75 bpm', '170'],
+      ['c', '19.07.2026, 14:52:02', 'Swim', '5', '70', '0']
+    ];
+    expect(processData(rows).map(activity => [activity.minHeartRate, activity.maxHeartRate])).toEqual([[null, 180], [null, 170], [70, null]]);
+    const conflicting = [ [...rows[0], 'Minimum Heart Rate'], [...rows[1], '90'] ];
+    conflicting[1][4] = '80';
+    expect(processData(conflicting)[0]).toMatchObject({ minHeartRate: null, maxHeartRate: 180 });
+    expect(processData([rows[0].map(header => header === 'Min Heart Rate' ? 'Min Heart Rate (Hz)' : header), rows[3]])[0].minHeartRate).toBeNull();
+  });
+
   it('tracks source availability for positive values, real zeroes, and unusable distance/time values', () => {
     const data = [
       ['Activity Date', 'Activity Type', 'Activity Name', 'Moving Time', 'Distance', 'Distance'],

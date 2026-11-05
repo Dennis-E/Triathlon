@@ -248,6 +248,15 @@ function makeStandaloneSwim({ german = false, compressed = false, start = '1970-
 }
 
 describe('zip importer relevant column extraction', () => {
+  it('preserves optional heart-rate extrema after the unchanged legacy columns', () => {
+    const base = [['Activity ID', 'Activity Date', 'Activity Type', 'Distance', 'Distance'], ['1', '2026-07-19 14:52:02', 'Run', '10', '10000']];
+    const baseline = parseCsvBasic(extractRelevantColumns(base.map(row => row.join(',')).join('\n')));
+    const rows = [ [...base[0], 'Min Heart Rate', 'Maximum Heart Rate'], [...base[1], '75', '180'] ];
+    const reduced = parseCsvBasic(extractRelevantColumns(rows.map(row => row.join(',')).join('\n')));
+    expect(reduced[0]).toEqual([...baseline[0], 'Min Heart Rate', 'Maximum Heart Rate']);
+    expect(reduced[1]).toEqual([...baseline[1], '75', '180']);
+  });
+
   it('keeps Average Watts when present in original ZIP activities.csv headers', () => {
     const csv = [
       ['Activity ID', 'Activity Date', 'Activity Name', 'Activity Type', 'Moving Time', 'Distance', 'Average Heart Rate', 'Average Watts', 'Distance'].join(','),
@@ -920,6 +929,214 @@ function makeTrainingPeaksZipEntry(bytes) {
   return { dir: false, async: jest.fn().mockResolvedValue(new Uint8Array(bytes)) };
 }
 
+function makeHeartRateFit({ sessions, records, corruptHeader = false, corruptFile = false, truncate = 0 } = {}) {
+  const { calculateCRC } = require('fit-file-parser/dist/binary');
+  const start = new Date('2026-07-19T10:00:00Z');
+  const end = new Date('2026-07-19T10:02:00Z');
+  const sourceSessions = sessions || [{ start_time: start, timestamp: end, sport: 1, total_timer_time: 60, total_distance: 400, max_heart_rate: 180 }];
+  const sourceRecords = records || [0, 60, 120].map((seconds, ordinal) => ({
+    timestamp: new Date(start.getTime() + seconds * 1000), heart_rate: [140, 80, 170][ordinal]
+  }));
+  const sessionFields = [
+    [2, 4, 0x86, 'start_time'], [253, 4, 0x86, 'timestamp'], [5, 1, 0, 'sport'],
+    [8, 4, 0x86, 'total_timer_time', 1000], [9, 4, 0x86, 'total_distance', 100],
+    [16, 1, 2, 'avg_heart_rate'], [64, 1, 2, 'min_heart_rate'], [17, 1, 2, 'max_heart_rate']
+  ].filter(field => sourceSessions.some(session => Object.prototype.hasOwnProperty.call(session, field[3])));
+  const recordFields = [[253, 4, 0x86, 'timestamp'], [3, 1, 2, 'heart_rate']];
+  function encodeMessage(localId, globalId, fields, values) {
+    const definition = Buffer.from([0x40 | localId, 0, 0, globalId, 0, fields.length, ...fields.flatMap(field => field.slice(0, 3))]);
+    const messages = values.map(value => {
+      const message = Buffer.alloc(1 + fields.reduce((size, field) => size + field[1], 0), 255);
+      message[0] = localId;
+      let offset = 1;
+      for (const [, size, , key, scale = 1] of fields) {
+        const raw = value[key];
+        const numeric = raw instanceof Date ? raw.getTime() / 1000 - 631065600 : raw;
+        if (Number.isFinite(numeric)) message.writeUIntLE(Math.round(numeric * scale), offset, size);
+        offset += size;
+      }
+      return message;
+    });
+    return [definition, ...messages];
+  }
+  const payload = Buffer.concat([...encodeMessage(0, 18, sessionFields, sourceSessions), ...encodeMessage(1, 20, recordFields, sourceRecords)]);
+  const header = Buffer.alloc(14);
+  header[0] = 14;
+  header[1] = 16;
+  header.writeUInt32LE(payload.length, 4);
+  header.write('.FIT', 8);
+  header.writeUInt16LE(calculateCRC(header, 0, 12), 12);
+  const checksum = Buffer.alloc(2);
+  checksum.writeUInt16LE(calculateCRC(payload, 0, payload.length), 0);
+  if (corruptHeader) header[12] ^= 1;
+  if (corruptFile) checksum[0] ^= 1;
+  const bytes = Buffer.concat([header, payload, checksum]);
+  return truncate ? bytes.subarray(0, bytes.length - truncate) : bytes;
+}
+
+describe('strict FIT decoder evidence probe', () => {
+  const FitParser = require('fit-file-parser').default;
+
+  function probe(bytes, force) {
+    const callback = jest.fn();
+    new FitParser({ force, mode: 'list', elapsedRecordField: false }).parse(bytes, callback);
+    return callback;
+  }
+
+  it('uses the pinned decoder and a known CRC vector, with synchronous complete record delivery', () => {
+    const { calculateCRC } = require('fit-file-parser/dist/binary');
+    expect(require('fit-file-parser/package.json').version).toBe('1.10.0');
+    expect(calculateCRC(Buffer.from('123456789'), 0, 9)).toBe(0xbb3d);
+    const bytes = makeHeartRateFit();
+    expect(bytes.length).toBe(bytes.readUInt32LE(4) + 16);
+    const strict = probe(bytes, false);
+    const tolerant = probe(bytes, true);
+    expect(strict).toHaveBeenCalledTimes(1);
+    expect(strict.mock.calls[0][0]).toBeNull();
+    expect(strict.mock.calls[0][1].records.map(record => record.heart_rate)).toEqual([140, 80, 170]);
+    expect(strict.mock.calls[0][1].sessions[0]).toMatchObject({
+      start_time: new Date('2026-07-19T10:00:00Z'), timestamp: new Date('2026-07-19T10:02:00Z'),
+      total_timer_time: 60, max_heart_rate: 180
+    });
+    expect(strict.mock.calls[0][1].records).toEqual(tolerant.mock.calls[0][1].records);
+  });
+
+  it.each([{ corruptHeader: true }, { corruptFile: true }, { truncate: 1 }, { truncate: 5 }])(
+    'returns without a strict callback for damaged input %o, never a completion proof', damage => {
+      expect(probe(makeHeartRateFit(damage), false)).not.toHaveBeenCalled();
+    }
+  );
+
+  it('shows why a tolerant success alone cannot establish integrity', () => {
+    const tolerant = probe(makeHeartRateFit({ corruptFile: true }), true);
+    expect(tolerant).toHaveBeenCalledTimes(1);
+    expect(tolerant.mock.calls[0][0]).toBeNull();
+    expect(tolerant.mock.calls[0][1].records).toHaveLength(3);
+  });
+});
+
+describe('TrainingPeaks heart-rate evidence', () => {
+  const { readTrainingPeaksFitWithHeartRateEvidence, qualifyFitHeartRateSessions } = require('../src/zip-importer');
+  const FitParser = require('fit-file-parser').default;
+  const completeRead = { readStatus: 'complete', lengthValidated: true, integrityValidated: true,
+    strictParseCompleted: true, recordsComplete: true, resourceLimited: false, unit: 'bpm', reason: null };
+  const start = new Date('2026-07-19T10:00:00Z');
+  const at = seconds => new Date(start.getTime() + seconds * 1000);
+  const session = overrides => ({ start_time: at(0), timestamp: at(120), sport: 1, total_timer_time: 60,
+    total_distance: 400, max_heart_rate: 180, ...overrides });
+  const parserDeps = { ensureFitParserLoaded: async () => FitParser };
+  async function decode(bytes) {
+    let data;
+    new FitParser({ force: true, mode: 'list', elapsedRecordField: false }).parse(bytes, (error, result) => {
+      if (error) throw new Error(String(error));
+      data = result;
+    });
+    return data;
+  }
+  async function importBytes(bytes) {
+    const entry = { ...makeTrainingPeaksZipEntry(bytes), name: 'one.fit' };
+    const result = await importTrainingPeaksZips([{ name: 'synthetic.zip' }], undefined, {
+      ...parserDeps, loadZipArchive: async () => ({ files: { 'one.fit': entry } })
+    });
+    expect(entry.async).toHaveBeenCalledTimes(1);
+    return result;
+  }
+
+  it('read gate: proves complete integrity and reads the entry only once', async () => {
+    const entry = { ...makeTrainingPeaksZipEntry(makeHeartRateFit()), name: 'one.fit' };
+    const result = await readTrainingPeaksFitWithHeartRateEvidence(entry, parserDeps);
+    expect(result.heartRateReadEvidence).toMatchObject(completeRead);
+    expect(result.fitData.records.map(record => record.heart_rate)).toEqual([140, 80, 170]);
+    expect(entry.async).toHaveBeenCalledTimes(1);
+  });
+
+  it('read gate: distinguishes an absent summary field from a discarded uint8 invalid sentinel', async () => {
+    const absentBytes = makeHeartRateFit();
+    const invalidBytes = makeHeartRateFit({ sessions: [session({ min_heart_rate: 255 })] });
+    expect((await decode(absentBytes)).sessions).toEqual((await decode(invalidBytes)).sessions);
+    for (const [bytes, status] of [[absentBytes, 'missing'], [invalidBytes, 'invalid']]) {
+      const result = await readTrainingPeaksFitWithHeartRateEvidence({ ...makeTrainingPeaksZipEntry(bytes), name: 'one.fit' }, parserDeps);
+      expect(result.heartRateReadEvidence.summaryFieldPresence).toEqual([{ minimum: status, maximum: 'valid' }]);
+    }
+  });
+
+  it.each([{ corruptHeader: true }, { corruptFile: true }, { truncate: 1 }])(
+    'read gate: keeps tolerant data but rejects a damaged completion proof %o', async damage => {
+      const entry = { ...makeTrainingPeaksZipEntry(makeHeartRateFit(damage)), name: 'one.fit' };
+      const result = await readTrainingPeaksFitWithHeartRateEvidence(entry, parserDeps);
+      expect(result.fitData.sessions).toHaveLength(1);
+      expect(result.heartRateReadEvidence.readStatus).not.toBe('complete');
+      expect(entry.async).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it('read gate: returns an unknown proof rather than waiting on a missing strict callback', async () => {
+    const data = await decode(makeHeartRateFit());
+    const result = await readTrainingPeaksFitWithHeartRateEvidence({ ...makeTrainingPeaksZipEntry(makeHeartRateFit()), name: 'one.fit' }, {
+      ensureFitParserLoaded: async () => class MissingCallback { parse() {} }, parseFitData: async () => data
+    });
+    expect(result.fitData).toBe(data);
+    expect(result.heartRateReadEvidence).toMatchObject({ readStatus: 'unknown', strictParseCompleted: false });
+  });
+
+  it('ownership gate: uses original inclusive boundaries rather than timer duration', async () => {
+    const data = await decode(makeHeartRateFit());
+    const qualified = qualifyFitHeartRateSessions(data.sessions, data.records, completeRead);
+    expect(qualified[0]).toMatchObject({ qualified: true, readEvidence: completeRead });
+    expect(qualified[0].records.map(record => record.heart_rate)).toEqual([140, 80, 170]);
+  });
+
+  it.each([
+    [[session({ timestamp: at(100) }), session({ start_time: at(60), sport: 3 })], [{ timestamp: at(80), heart_rate: 80 }], 'overlapping_sessions'],
+    [[session({ timestamp: at(60) }), session({ start_time: at(60), sport: 3 })], [{ timestamp: at(60), heart_rate: 80 }], 'ambiguous_boundary_record'],
+    [[session({ timestamp: undefined })], [{ timestamp: at(60), heart_rate: 80 }], 'invalid_boundary'],
+    [[session()], [{ timestamp: null, heart_rate: 80 }], 'invalid_timestamp']
+  ])('ownership gate: rejects unsafe original session ownership', (sessions, records, reason) => {
+    const result = qualifyFitHeartRateSessions(sessions, records, completeRead);
+    expect(result.every(item => !item.qualified && item.reason === reason)).toBe(true);
+  });
+
+  it('ownership gate: ignores outside samples and rejects resource or unit uncertainty', () => {
+    const records = [{ timestamp: at(-1), heart_rate: 1 }, { timestamp: at(60), heart_rate: 80 }, { timestamp: at(121), heart_rate: 254 }];
+    expect(qualifyFitHeartRateSessions([session()], records, completeRead)[0].records).toEqual([records[1]]);
+    for (const changes of [{ resourceLimited: true }, { recordsComplete: false }, { unit: 'Hz' }]) {
+      expect(qualifyFitHeartRateSessions([session()], records, { ...completeRead, ...changes })[0].qualified).toBe(false);
+    }
+  });
+
+  it('result gate: fills only the missing minimum from actual FIT records and preserves identity', async () => {
+    const result = await importBytes(makeHeartRateFit());
+    expect(result.activities[0]).toMatchObject({ minHeartRate: 80, maxHeartRate: 180, duration: 60,
+      heartRateProvenance: { minimum: { source: 'records', sampleCount: 3 }, maximum: { source: 'summary' } } });
+    const baseline = await importBytes(makeHeartRateFit({ records: [] }));
+    const { minHeartRate, maxHeartRate, heartRateProvenance, ...current } = result.activities[0];
+    const { minHeartRate: oldMin, maxHeartRate: oldMax, heartRateProvenance: oldEvidence, ...old } = baseline.activities[0];
+    expect(current).toEqual(old);
+    expect(result.heartRateCoverage.minimum.records).toBe(1);
+  });
+
+  it.each([{ min_heart_rate: 75 }, { min_heart_rate: 255 }, { min_heart_rate: 190 }])(
+    'result gate: retains direct summary semantics %o', async direct => {
+      const result = await importBytes(makeHeartRateFit({ sessions: [session(direct)] }));
+      expect(result.activities[0].minHeartRate).toBe(direct.min_heart_rate === 255 ? null : direct.min_heart_rate);
+      expect(result.activities[0].maxHeartRate).toBe(180);
+      expect(result.activities[0].heartRateProvenance.minimum.source).not.toBe('records');
+    }
+  );
+
+  it('result gate: rejects corrupt records and invalid sentinels without losing direct maxima', async () => {
+    for (const bytes of [makeHeartRateFit({ corruptFile: true }), makeHeartRateFit({ records: [{ timestamp: at(60), heart_rate: 255 }] })]) {
+      expect((await importBytes(bytes)).activities[0]).toMatchObject({ minHeartRate: null, maxHeartRate: 180 });
+    }
+  });
+
+  it('preserves both observed Strava alias columns in the ZIP reducer', () => {
+    const reduced = parseCsvBasic(extractRelevantColumns('Activity ID,Activity Date,Activity Type,Distance,Distance,Max. Herzfrequenz,Max. Herzfrequenz\nalias,2026-07-19,Run,10,10000,,180'));
+    expect(reduced[0].slice(-2)).toEqual(['Max. Herzfrequenz', 'Max. Herzfrequenz']);
+    expect(reduced[1].slice(-2)).toEqual(['', '180']);
+  });
+});
+
 function makeTrainingPeaksFitDeps(archivesByName, dataByMarker) {
   return {
     loadZipArchive: jest.fn(async file => {
@@ -950,6 +1167,33 @@ function makeFitSession({ start, end, sport, distance, duration, heartRate, cade
 }
 
 describe('importTrainingPeaksZips', () => {
+  it('decodes actual FIT session heart-rate extrema and excludes the uint8 invalid sentinel', async () => {
+    const FitParser = require('fit-file-parser').default;
+    async function decode(minimum, maximum) {
+      const payload = Buffer.from([64, 0, 0, 18, 0, 2, 64, 1, 2, 17, 1, 2, 0, minimum, maximum]);
+      const header = Buffer.alloc(14);
+      header[0] = 14;
+      header[1] = 16;
+      header.writeUInt32LE(payload.length, 4);
+      header.write('.FIT', 8);
+      return new Promise((resolve, reject) => new FitParser({ force: true, mode: 'list' }).parse(
+        Buffer.concat([header, payload, Buffer.alloc(2)]), (error, data) => error ? reject(error) : resolve(data.sessions[0])));
+    }
+    expect(await decode(75, 180)).toMatchObject({ min_heart_rate: 75, max_heart_rate: 180 });
+    for (const [minimum, maximum, expected] of [[75, 180, [75, 180]], [255, 180, [null, 180]], [75, 255, [75, null]]]) {
+      const session = { ...makeFitSession({ start: '2026-07-19T10:00:00Z', duration: 1800, distance: 5000, sport: 'running', heartRate: 145 }), ...await decode(minimum, maximum) };
+      const deps = makeTrainingPeaksFitDeps({ 'synthetic.zip': { files: { 'one.fit': makeTrainingPeaksZipEntry([1]) } } }, { 1: { sessions: [session], records: [] } });
+      const result = await importTrainingPeaksZips([{ name: 'synthetic.zip', size: 1 }], undefined, deps);
+      expect([result.activities[0].minHeartRate, result.activities[0].maxHeartRate]).toEqual(expected);
+      const identity = result.activities[0].id;
+      delete session.min_heart_rate;
+      delete session.max_heart_rate;
+      const baseline = await importTrainingPeaksZips([{ name: 'synthetic.zip', size: 1 }], undefined, deps);
+      expect(baseline.activities[0].id).toBe(identity);
+      expect(result.activities[0].avgHeartRate).toBe(baseline.activities[0].avgHeartRate);
+    }
+  });
+
   it('retains a drawable standalone TrainingPeaks Swim route', async () => {
     const records = [0, 60, 120].map((seconds, index) => ({
       timestamp: new Date(Date.parse('2026-07-19T10:00:00Z') + seconds * 1000),

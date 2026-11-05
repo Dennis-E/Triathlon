@@ -1,8 +1,9 @@
-const TAB_ORDER = ['totalDistance', 'paceMetrics', 'equipment', 'equipmentTimeline', 'personalBests', 'heatmap', 'distributions', 'workoutTime', 'trainingCalendar', 'wordcloud', 'pieCharts', 'lifetimeStatistics', 'mediaGallery'];
+const TAB_ORDER = ['totalDistance', 'paceMetrics', 'heartRate', 'equipment', 'equipmentTimeline', 'personalBests', 'heatmap', 'distributions', 'workoutTime', 'trainingCalendar', 'wordcloud', 'pieCharts', 'lifetimeStatistics', 'mediaGallery'];
 
 const TAB_BUTTON_IDS = {
   totalDistance: 'vizTabTotalDistance',
   paceMetrics: 'vizTabPaceMetrics',
+  heartRate: 'vizTabHeartRate',
   equipment: 'vizTabEquipment',
   equipmentTimeline: 'vizTabEquipmentTimeline',
   personalBests: 'vizTabPersonalBests',
@@ -19,6 +20,7 @@ const TAB_BUTTON_IDS = {
 const TAB_PANEL_IDS = {
   totalDistance: 'vizPanelTotalDistance',
   paceMetrics: 'vizPanelPaceMetrics',
+  heartRate: 'vizPanelHeartRate',
   equipment: 'vizPanelEquipment',
   equipmentTimeline: 'vizPanelEquipmentTimeline',
   personalBests: 'vizPanelPersonalBests',
@@ -280,6 +282,7 @@ function setVisualizationTab(tabName, options = {}) {
 
   const totalDistanceBtn = doc.getElementById(TAB_BUTTON_IDS.totalDistance);
   const paceMetricsBtn = doc.getElementById(TAB_BUTTON_IDS.paceMetrics);
+  const heartRateBtn = doc.getElementById(TAB_BUTTON_IDS.heartRate);
   const equipmentBtn = doc.getElementById(TAB_BUTTON_IDS.equipment);
   const equipmentTimelineBtn = doc.getElementById(TAB_BUTTON_IDS.equipmentTimeline);
   const personalBestsBtn = doc.getElementById(TAB_BUTTON_IDS.personalBests);
@@ -293,6 +296,7 @@ function setVisualizationTab(tabName, options = {}) {
   const mediaGalleryBtn = doc.getElementById(TAB_BUTTON_IDS.mediaGallery);
   const totalDistancePanel = doc.getElementById(TAB_PANEL_IDS.totalDistance);
   const paceMetricsPanel = doc.getElementById(TAB_PANEL_IDS.paceMetrics);
+  const heartRatePanel = doc.getElementById(TAB_PANEL_IDS.heartRate);
   const equipmentPanel = doc.getElementById(TAB_PANEL_IDS.equipment);
   const equipmentTimelinePanel = doc.getElementById(TAB_PANEL_IDS.equipmentTimeline);
   const personalBestsPanel = doc.getElementById(TAB_PANEL_IDS.personalBests);
@@ -312,6 +316,7 @@ function setVisualizationTab(tabName, options = {}) {
 
   const isTotalDistance = tabName === 'totalDistance';
   const isPaceMetrics = tabName === 'paceMetrics';
+  const isHeartRate = tabName === 'heartRate';
   const isEquipment = tabName === 'equipment';
   const isEquipmentTimeline = tabName === 'equipmentTimeline';
   const isPersonalBests = tabName === 'personalBests';
@@ -331,6 +336,12 @@ function setVisualizationTab(tabName, options = {}) {
   paceMetricsBtn.setAttribute('aria-selected', isPaceMetrics ? 'true' : 'false');
   paceMetricsBtn.setAttribute('tabindex', isPaceMetrics ? '0' : '-1');
   setVisualizationTabButtonClass(paceMetricsBtn, isPaceMetrics);
+
+  if (heartRateBtn) {
+    heartRateBtn.setAttribute('aria-selected', isHeartRate ? 'true' : 'false');
+    heartRateBtn.setAttribute('tabindex', isHeartRate ? '0' : '-1');
+    setVisualizationTabButtonClass(heartRateBtn, isHeartRate);
+  }
 
   equipmentBtn.setAttribute('aria-selected', isEquipment ? 'true' : 'false');
   equipmentBtn.setAttribute('tabindex', isEquipment ? '0' : '-1');
@@ -374,6 +385,7 @@ function setVisualizationTab(tabName, options = {}) {
 
   totalDistancePanel.classList.toggle('hidden', !isTotalDistance);
   paceMetricsPanel.classList.toggle('hidden', !isPaceMetrics);
+  heartRatePanel?.classList.toggle('hidden', !isHeartRate);
   equipmentPanel.classList.toggle('hidden', !isEquipment);
   equipmentTimelinePanel.classList.toggle('hidden', !isEquipmentTimeline);
   personalBestsPanel.classList.toggle('hidden', !isPersonalBests);
@@ -389,6 +401,7 @@ function setVisualizationTab(tabName, options = {}) {
   if (options.focusTab) {
     (isTotalDistance ? totalDistanceBtn :
     isPaceMetrics ? paceMetricsBtn :
+    isHeartRate ? heartRateBtn :
      isEquipment ? equipmentBtn :
      isEquipmentTimeline ? equipmentTimelineBtn :
      isPersonalBests ? personalBestsBtn :

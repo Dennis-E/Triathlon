@@ -194,6 +194,7 @@ describe('dashboard export target inventory', () => {
   const expectedTargets = {
     totalDistance: 'totalDistanceChartWrapper',
     paceMetrics: 'paceMetricsChartWrapper',
+    heartRate: 'heartRateChartWrapper',
     equipment: 'equipmentChartWrapper',
     equipmentTimeline: 'equipmentTimelineWrapper',
     personalBests: 'pbColumnsContainer',
@@ -222,6 +223,57 @@ describe('dashboard export target inventory', () => {
     expect(runtime.context.__targetForTest('totalDistance')).toBeNull();
     runtime.context.__setAvailableTabs(['totalDistance']);
     expect(runtime.context.__targetForTest('totalDistance')).not.toBeNull();
+  });
+
+  it('exports only a current nonempty heart-rate model through the structured target', () => {
+    const runtime = createDownloadRuntime();
+    runtime.context.chartInstance = null;
+    runtime.context.document.querySelectorAll = () => [];
+    runtime.elements.heartRateChartWrapper = {};
+    runtime.context.__setAvailableTabs(['heartRate']);
+    let data = null;
+    runtime.context.window.heartRateDashboard = { getExportData: () => data, getRevision: () => 1 };
+    expect(runtime.context.__targetForTest('heartRate')).toBeNull();
+    data = { sport: 'All', metric: 'heartRate', unit: 'bpm', period: '2026-10-01 - 2026-11-04',
+      activityCount: 1, points: [{ x: 1, y: 180 }], series: [{ label: 'Maximum', color: '#fb7185' }] };
+    expect(runtime.context.__targetForTest('heartRate')).toMatchObject({ key: 'heartRate', hasData: true, targetElementId: 'heartRateChartWrapper' });
+    expect(runtime.context.__socialPresentation('heartRate', data).headline).toBe('Heart-rate minimum and maximum');
+  });
+
+  it('rejects changed heart-rate capture revisions but keeps already published snapshots valid', () => {
+    const runtime = createDownloadRuntime();
+    let revision = 1;
+    runtime.context.window.heartRateDashboard = { getRevision: () => revision };
+    const pending = { heartRateRevision: 1 };
+    expect(runtime.context.isCurrentExportCapture(pending)).toBe(true);
+    revision = 2;
+    expect(runtime.context.isCurrentExportCapture(pending)).toBe(false);
+    expect(runtime.context.isCurrentExportCapture({ ...pending, heartRateSnapshotPublished: true })).toBe(true);
+  });
+
+  it('preserves heart-rate calendar count, grouping and requested bounds through snapshot copying', () => {
+    const runtime = createDownloadRuntime();
+    runtime.context.snapshotTarget={kind:'tab',key:'heartRate',hasData:true};
+    runtime.context.snapshotData={sport:'Run',aggregation:'weekly',activityCount:12,periodCount:7,periodLabels:['2025-12-29 - 2026-01-04'],
+      periodStart:1,periodEnd:10,viewBounds:{min:1,max:10},points:[{x:5,y:75}],unit:'bpm'};
+    const snapshot=vm.runInContext('captureExportSelection(snapshotTarget,snapshotData)',runtime.context);
+    expect(snapshot.familyData).toMatchObject({periodCount:7,aggregation:'weekly',periodLabels:['2025-12-29 - 2026-01-04'],periodStart:1,periodEnd:10,viewBounds:{min:1,max:10}});
+    const presentation=runtime.context.__socialPresentation('heartRate',runtime.context.snapshotData);
+    expect(presentation.headline).toMatch(/weekly/i);
+  });
+
+  it('invalidates heart-rate preview downloads only for empty filters or unpublished captures', () => {
+    const runtime = createDownloadRuntime();
+    vm.runInContext("lastExportCaptureState = { snapshot: { targetKey: 'heartRate' }, heartRateSnapshotPublished: true };", runtime.context);
+    runtime.context.invalidateHeartRateExport(true);
+    expect(runtime.getImage()).not.toBeNull();
+    runtime.context.invalidateHeartRateExport(false);
+    expect(runtime.getImage()).toBeNull();
+    expect(runtime.elements.exportPreviewModal.classList.contains('hidden')).toBe(true);
+    runtime.setImage({ dataUrl: PNG_DATA_URL, target: 'equipment' });
+    vm.runInContext("lastExportCaptureState = { snapshot: { targetKey: 'equipment' } };", runtime.context);
+    runtime.context.invalidateHeartRateExport(false);
+    expect(runtime.getImage()).not.toBeNull();
   });
 
   it.each([

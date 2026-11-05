@@ -17,6 +17,7 @@
     const EXPORT_CAPTURE_TARGET_IDS = {
       totalDistance: 'totalDistanceChartWrapper',
       paceMetrics: 'paceMetricsChartWrapper',
+      heartRate: 'heartRateChartWrapper',
       equipment: 'equipmentChartWrapper',
       equipmentTimeline: 'equipmentTimelineWrapper',
       personalBests: 'pbColumnsContainer',
@@ -69,7 +70,7 @@
         'includeRoutes', 'eligibleCount', 'displayedCount', 'legend', 'groups', 'words', 'weightDomain',
         'periodStart', 'periodEnd', 'totalCount', 'scaleStart', 'scaleEnd', 'granularity',
         'rawUnit', 'valueDivisor', 'status', 'activityCount', 'excludedCount', 'denominator',
-        'countrySummary', 'preparationVersion', 'definitionKey'
+        'countrySummary', 'preparationVersion', 'definitionKey', 'periodCount'
       ]);
       const forbidden = new Set(['rawActivities', 'rawActivity', 'activity', 'activityName', 'activityTitle',
         'sourceElement', 'element', 'canvas', 'chart', 'document', 'filename', '__proto__', 'constructor', 'prototype']);
@@ -134,7 +135,15 @@
       if (!captureState) return false;
       return (captureState.captureGeneration === undefined || captureState.captureGeneration === exportCaptureGeneration) &&
         (captureState.dashboardDataRevision === null || captureState.dashboardDataRevision === undefined ||
-          captureState.dashboardDataRevision === getExportDashboardDataRevision());
+          captureState.dashboardDataRevision === getExportDashboardDataRevision()) &&
+        (captureState.heartRateRevision === undefined || captureState.heartRateSnapshotPublished === true ||
+          captureState.heartRateRevision === window.heartRateDashboard?.getRevision?.());
+    }
+
+    function invalidateHeartRateExport(hasData) {
+      const state = lastExportCaptureState;
+      if (state?.snapshot?.targetKey !== 'heartRate') return;
+      if (!hasData || !state.heartRateSnapshotPublished) closeExportPreviewModal();
     }
 
     function showExportToast(message) {
@@ -155,6 +164,7 @@
       return {
         totalDistance: !!chartInstance,
         paceMetrics: isEmptyStateHidden('paceMetricsEmptyState'),
+        heartRate: !!window.heartRateDashboard?.getExportData?.(),
         equipment: isEmptyStateHidden('equipmentEmptyState'),
         equipmentTimeline: isEmptyStateHidden('equipmentTimelineEmptyState'),
         personalBests: isEmptyStateHidden('pbEmptyState'),
@@ -206,6 +216,7 @@
       const viewIds = [
         'vizTabTotalDistance',
         'vizTabPaceMetrics',
+        'vizTabHeartRate',
         'vizTabEquipment',
         'vizTabEquipmentTimeline',
         'vizTabPersonalBests',
@@ -228,6 +239,11 @@
         paceMetrics: [
           getControlGroup('Sport', ['paceMetricsSportBtnRun', 'paceMetricsSportBtnBike', 'paceMetricsSportBtnSwim']),
           getControlGroup('Metric', ['paceMetricsMetricBtnheartRate', 'paceMetricsMetricBtncadence', 'paceMetricsMetricBtnelevationGain', 'paceMetricsMetricBtndistance'])
+        ],
+        heartRate: [
+          getSelectControlGroup('Sport', 'heartRateSportFilter'),
+          getSelectControlGroup('Calendar grouping', 'heartRateAggregationFilter'),
+          getSelectControlGroup('Timeframe', 'heartRateTimeframeFilter')
         ],
         equipment: [
           getControlGroup('Metric', ['equipmentMetricDistance', 'equipmentMetricPace', 'equipmentMetricCount', 'equipmentMetricAvgLength']),
@@ -268,7 +284,15 @@
     }
 
     function getExportContext(tabName) {
+      const heartRateData = tabName === 'heartRate' ? window.heartRateDashboard?.getExportData?.() : null;
       const contexts = {
+        heartRate: [
+          { label: 'Sport', value: heartRateData?.sport === 'All' ? 'All sports' : heartRateData?.sport },
+          { label: 'Date range', value: heartRateData?.period },
+          { label: 'Grouping', value: heartRateData?.aggregation ? heartRateData.aggregation[0].toUpperCase() + heartRateData.aggregation.slice(1) : null },
+          { label: 'Metric', value: 'Minimum / maximum heart rate' },
+          { label: 'Unit', value: 'bpm' }
+        ],
         totalDistance: [
           { label: 'Sport', value: getActiveButtonText(['sportBtnAll', 'sportBtnRun', 'sportBtnBike', 'sportBtnSwim']) },
           { label: 'Aggregation', value: getActiveButtonText(['aggBtnDaily', 'aggBtnWeekly', 'aggBtnMonthly', 'aggBtnYearly']) },
@@ -364,6 +388,9 @@
         const measure = metric || 'Heart rate';
         const performance = data.sport === 'Bike' ? 'speed' : 'pace';
         headline = `My ${measure.toLowerCase()} vs ${performance}`;
+      } else if (tabName === 'heartRate') {
+        headline = `${data.aggregation ? data.aggregation[0].toUpperCase() + data.aggregation.slice(1) + ' ' : ''}heart-rate minimum and maximum`;
+        if (!data.aggregation) headline = 'Heart-rate minimum and maximum';
       } else {
         headline = {
           distributions: `${sport && sport !== 'All sports' ? sport + ' ' : ''}${String(metric || 'training').toLowerCase()} distribution`,
@@ -400,6 +427,8 @@
           secondaryLine = 'Apparently, every workout has a chart.';
         } else if (tabName === 'workoutTime') {
           secondaryLine = 'Time flies. Apparently, so does training.';
+        } else if (tabName === 'heartRate') {
+          secondaryLine = 'Some highs and lows, accurately recorded.';
         } else if (tabName === 'trainingCalendar') {
           secondaryLine = 'Apparently, I like showing up.';
         } else if (tabName === 'wordcloud') {
@@ -494,6 +523,7 @@
       const adapters = {
         totalDistance: () => window.totalDistanceDashboard?.getExportData?.(),
         paceMetrics: () => window.paceMetricsDashboard?.getExportPresentationData?.(),
+        heartRate: () => window.heartRateDashboard?.getExportData?.(),
         equipment: () => window.equipmentDashboard?.getExportData?.(),
         equipmentTimeline: () => window.equipmentDashboard?.getTimelineExportData?.(),
         trainingCalendar: () => window.trainingCalendarDashboard?.getExportData?.(),
@@ -609,6 +639,7 @@
       const providers = {
         totalDistance: () => window.totalDistanceDashboard?.getExportData?.(),
         paceMetrics: () => window.paceMetricsDashboard?.getExportData?.(),
+        heartRate: () => window.heartRateDashboard?.getExportData?.(),
         equipment: () => window.equipmentDashboard?.getExportModel?.('ranking'),
         equipmentTimeline: () => window.equipmentDashboard?.getExportModel?.('timeline'),
         personalBests: () => kind === 'pb-tile' ? window.personalBestsDashboard?.getActiveExportData?.()
@@ -660,7 +691,7 @@
           ? importedDataset.sampleProvenance : null,
         filters: getExportContext(tabName),
         availableControls: getAvailableControlContext(tabName),
-        legend: tabName === 'paceMetrics' && window.paceMetricsDashboard
+        legend: tabName === 'heartRate' ? exportData.legend : tabName === 'paceMetrics' && window.paceMetricsDashboard
           ? {
             title: 'Years',
             items: window.paceMetricsDashboard.getExportSeries()
@@ -1370,6 +1401,7 @@
       equipment: renderEquipmentExportPage,
       equipmentTimeline: renderEquipmentExportPage,
       paceMetrics: renderChartExportPage,
+      heartRate: renderChartExportPage,
       distributions: renderChartExportPage,
       workoutTime: renderChartExportPage,
       personalBests: renderPbExportPage,
@@ -1402,7 +1434,15 @@
         for (const entry of row.entries) {
           const x = plan.contentBounds.x + entry.offsetX;
           context.fillStyle = Array.isArray(entry.color) ? entry.color[0] : entry.color;
-          context.fillRect(x, row.y + 8, 24, 24);
+          if (entry.pointStyle === 'triangle') {
+            context.beginPath(); context.moveTo(x + 12, row.y + 6);
+            context.lineTo(x + 25, row.y + 32); context.lineTo(x - 1, row.y + 32);
+            context.closePath(); context.fill();
+          } else if (entry.pointStyle === 'circle') {
+            context.beginPath(); context.arc(x + 12, row.y + 20, 12, 0, Math.PI * 2); context.fill();
+          } else {
+            context.fillRect(x, row.y + 8, 24, 24);
+          }
           context.fillStyle = style.colors.secondary;
           context.font = '500 36px system-ui, sans-serif';
           entry.lines.forEach((line, index) => context.fillText(line, x + 36, row.y + index * 44));
@@ -1565,7 +1605,7 @@
       const key = target.selectionSnapshot.targetKey;
       const resources = {};
       try {
-        if (['paceMetrics', 'distributions', 'workoutTime'].includes(key)) {
+        if (['paceMetrics', 'heartRate', 'distributions', 'workoutTime'].includes(key)) {
           resources.chartAdapter = window.dashboardTooltips?.adapters.get(key);
           if (!resources.chartAdapter?.captureExportInput || !target.structuredChartInput) throw new Error('Selected chart export is not ready');
           resources.chartInput = resources.chartAdapter.captureExportInput(target.structuredChartInput);
@@ -1662,6 +1702,7 @@
         exportRequestState = 'previewing';
         exportCompositionPending = false;
         state.error = null;
+        if (state.snapshot.targetKey === 'heartRate') state.heartRateSnapshotPublished = true;
         showExportPreviewModal(lastExportedImage.dataUrl);
         return true;
       } catch (error) {
@@ -1694,6 +1735,7 @@
       }
       const state = { structured: true, sessionId, target, snapshot: target.selectionSnapshot, resources,
         captureGeneration: ++exportCaptureGeneration, dashboardDataRevision: getExportDashboardDataRevision(),
+        ...(target.key === 'heartRate' ? { heartRateRevision: target.exportData.modelRevision ?? window.heartRateDashboard?.getRevision?.(), heartRateSnapshotPublished: false } : {}),
         pbOpening: target.selectionSnapshot.pbOpening, revision: 0, active: 1, released: false, assets: null, error: null };
       lastExportCaptureState = state;
       exportRequestState = 'capturing';
@@ -2007,7 +2049,7 @@
         if (target.key === 'wordcloud') {
           if (!window.wordcloudDashboard.hasExportableCloud()) throw new Error('The Wordcloud is not ready to export. Wait for the cloud to finish rendering and try again.');
         }
-        const chartCapture = ['totalDistance', 'paceMetrics', 'distributions', 'workoutTime'].includes(tabId)
+        const chartCapture = ['totalDistance', 'paceMetrics', 'heartRate', 'distributions', 'workoutTime'].includes(tabId)
           ? { width: 960, height: 500, minFontSize: 30, ...(tabId === 'workoutTime' ? { axisTextColor: '#f8fafc' } : {}) }
           : undefined;
         snapshot = createExportCaptureSnapshot(targetEl, tabId, { chartCapture, selection: null, target });

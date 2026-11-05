@@ -100,6 +100,7 @@ function createMockDocument() {
   const elements = {
     vizTabTotalDistance: createMockElement(),
     vizTabPaceMetrics: createMockElement(),
+    vizTabHeartRate: createMockElement(),
     vizTabEquipment: createMockElement(),
     vizTabEquipmentTimeline: createMockElement(),
     vizTabPersonalBests: createMockElement(),
@@ -113,6 +114,7 @@ function createMockDocument() {
     vizTabMediaGallery: createMockElement(),
     vizPanelTotalDistance: createMockElement(),
     vizPanelPaceMetrics: createMockElement(),
+    vizPanelHeartRate: createMockElement(),
     vizPanelEquipment: createMockElement(),
     vizPanelEquipmentTimeline: createMockElement(),
     vizPanelPersonalBests: createMockElement(),
@@ -136,6 +138,22 @@ function createMockDocument() {
 }
 
 describe('tab navigation helpers', () => {
+  it('integrates heartRate after paceMetrics and excludes it from navigation when unavailable', () => {
+    expect(TAB_ORDER[TAB_ORDER.indexOf('paceMetrics') + 1]).toBe('heartRate');
+    expect(TAB_BUTTON_IDS.heartRate).toBe('vizTabHeartRate');
+    expect(TAB_PANEL_IDS.heartRate).toBe('vizPanelHeartRate');
+    const doc = createMockDocument();
+    setAvailableVisualizationTabs(['totalDistance', 'heartRate'], { document: doc });
+    setVisualizationTab('heartRate', { document: doc, availableTabs: ['totalDistance', 'heartRate'], focusTab: true });
+    expect(doc.elements.vizTabHeartRate.getAttribute('aria-selected')).toBe('true');
+    expect(doc.elements.vizPanelHeartRate.classList.contains('hidden')).toBe(false);
+    expect(doc.elements.vizPanelPaceMetrics.classList.contains('hidden')).toBe(true);
+    expect(doc.elements.vizTabHeartRate.focused).toBe(true);
+    setAvailableVisualizationTabs(['totalDistance'], { document: doc });
+    expect(doc.elements.vizTabHeartRate.classList.contains('hidden')).toBe(true);
+    expect(getNextVisualizationTab('totalDistance', 1, ['totalDistance'])).toBe('totalDistance');
+  });
+
   it('registers media gallery IDs and shows the tab only when it is available', () => {
     const doc = createMockDocument();
 
@@ -331,7 +349,9 @@ describe('tab navigation helpers', () => {
 
   it('cycles to next and previous tabs', () => {
     expect(getNextVisualizationTab('totalDistance', 1)).toBe('paceMetrics');
-    expect(getNextVisualizationTab('paceMetrics', 1)).toBe('equipment');
+    expect(getNextVisualizationTab('paceMetrics', 1)).toBe('heartRate');
+    expect(getNextVisualizationTab('heartRate', 1)).toBe('equipment');
+    expect(getNextVisualizationTab('equipment', -1)).toBe('heartRate');
     expect(getNextVisualizationTab('equipment', 1)).toBe('equipmentTimeline');
     expect(getNextVisualizationTab('equipmentTimeline', 1)).toBe('personalBests');
     expect(getNextVisualizationTab('personalBests', 1)).toBe('heatmap');

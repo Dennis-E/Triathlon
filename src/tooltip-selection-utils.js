@@ -1,5 +1,5 @@
 (function (root) {
-  const TAB_IDS = ['totalDistance', 'paceMetrics', 'equipment', 'equipmentTimeline', 'personalBests', 'heatmap', 'distributions', 'workoutTime', 'trainingCalendar', 'wordcloud', 'pieCharts', 'lifetimeStatistics', 'mediaGallery'];
+  const TAB_IDS = ['totalDistance', 'paceMetrics', 'heartRate', 'equipment', 'equipmentTimeline', 'personalBests', 'heatmap', 'distributions', 'workoutTime', 'trainingCalendar', 'wordcloud', 'pieCharts', 'lifetimeStatistics', 'mediaGallery'];
   const ANCHOR_KINDS = ['chart-item', 'svg-item', 'calendar-day', 'word', 'map-location', 'statistic', 'media-item'];
 
   function copyPlain(value) {
